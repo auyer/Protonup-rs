@@ -1,0 +1,33 @@
+[package]
+name = "protonup-rs"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+chrono = { version = "0.4", default-features = false }
+dirs = "4.0.0"
+flate2 = "1.0.24"
+futures-util = "0.3.21"
+hex = "0.4.3"
+hex-literal = "0.3.4"
+indicatif = { version = "0.17", features = [
+    "improved_unicode",
+    "unicode-segmentation",
+] }
+octocrab = "0.17"
+reqwest = { version = "0.11.10", features = [
+    "hyper-rustls",
+    "stream",
+    "tokio-rustls",
+    "serde_json",
+    "json",
+    "blocking",
+] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0.81"
+sha2 = "0.10.2"
+structopt = "0.3.26"
+tar = "0.4.38"
+tokio = { version = "1.19.2", features = ["full"] }
