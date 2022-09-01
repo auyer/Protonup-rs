@@ -2,35 +2,23 @@ use indicatif::{ProgressBar, ProgressStyle};
 use reqwest::header::USER_AGENT;
 use sha2::{Digest, Sha512};
 use std::cmp::min;
+use std::fs;
 use std::fs::{create_dir_all, File, OpenOptions};
 use std::io;
+use std::str;
 
+use flate2::read::GzDecoder;
 use std::io::Write;
 use std::path::Path;
+use tar::Archive;
 
 use futures_util::StreamExt;
 
-const GITHUB_ACCOUNT: &str = "GloriousEggroll";
-const GITHUB_REPO: &str = "proton-ge-custom";
 const CONFIG_FILE: &str = "~/.config/protonup/config.ini";
 const DEFAULT_INSTALL_DIR: &str = "~/.steam/root/compatibilitytools.d/";
 const TEMP_DIR: &str = "/tmp/";
 
-pub async fn list_releases() -> Result<Vec<octocrab::models::repos::Release>, octocrab::Error> {
-    let releases = octocrab::instance()
-        .repos(GITHUB_ACCOUNT, GITHUB_REPO)
-        .releases()
-        .list()
-        .per_page(10)
-        .page(1u32)
-        .send()
-        // .get_latest()
-        .await?
-        .take_items();
-    Ok(releases)
-}
-
-extern crate dirs; // 1.0.4
+pub mod github;
 
 use std::path::PathBuf;
 
@@ -66,57 +54,11 @@ fn install_directory() -> Option<PathBuf> {
     expand_tilde(DEFAULT_INSTALL_DIR)
 }
 
-#[derive(Default, Debug, PartialEq)]
-struct Download {
-    version: String,
-    date: String,
-    sha512sum: String,
-    download: String,
-    size: u64,
-}
-// use str::ends_with;
-use flate2::read::GzDecoder;
-use tar::Archive;
-
-async fn fetch_data(tag: &str) -> Result<Download, octocrab::Error> {
-    let mut download = Download::default();
-    let release = match tag {
-        "latest" => {
-            octocrab::instance()
-                .repos(GITHUB_ACCOUNT, GITHUB_REPO)
-                .releases()
-                .get_latest()
-                .await?
-        }
-        _ => {
-            octocrab::instance()
-                .repos(GITHUB_ACCOUNT, GITHUB_REPO)
-                .releases()
-                .get_by_tag(tag)
-                .await?
-        }
-    };
-
-    download.version = release.tag_name;
-    // download.date = release.published_at;
-    for ass in &release.assets {
-        if ass.name.ends_with("sha512sum") {
-            download.sha512sum = ass.browser_download_url.as_str().to_string();
-        }
-        if ass.name.ends_with("tar.gz") {
-            download.download = ass.browser_download_url.as_str().to_string();
-            download.size = ass.size as u64;
-        }
-    }
-    Ok(download)
-}
-use std::fs;
-use std::str;
 pub async fn download_file(tag: &str) -> Result<(), String> {
-    let mut install_dir = install_directory().unwrap();
+    let install_dir = install_directory().unwrap();
     let mut temp_dir = expand_tilde(TEMP_DIR).unwrap();
 
-    let download = fetch_data(tag).await.unwrap();
+    let download = github::fetch_data(tag).await.unwrap();
 
     let mut sha_temp_dir = temp_dir.clone();
     sha_temp_dir.push("proton.sha512sum");
@@ -154,7 +96,7 @@ pub async fn download_file(tag: &str) -> Result<(), String> {
 }
 use std::io::{Error, ErrorKind};
 
-fn decompress(d: Download, path: PathBuf, install_path: PathBuf) -> Result<(), io::Error> {
+fn decompress(d: github::Download, path: PathBuf, install_path: PathBuf) -> Result<(), io::Error> {
     let file = File::open(&path)
         .or_else(|err| {
             Err(format!(
@@ -196,9 +138,6 @@ async fn download_file_progress(
     let total_size_header = res
         .content_length()
         .ok_or(format!("Failed to get content length from '{}'", &url))?;
-    println!("{}", total_size);
-    // let total_size = total_size;
-    println!("{}", total_size);
 
     println!("{}", url);
     // Indicatif setup
