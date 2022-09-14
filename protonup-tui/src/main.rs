@@ -1,10 +1,11 @@
+use indicatif::{ProgressBar, ProgressStyle};
 use inquire::{CustomUserError, MultiSelect, Select, Text};
 use std::fmt;
 use std::fs;
 use std::fs::create_dir_all;
 use structopt::StructOpt;
 
-use protonup_rs::*;
+use libprotonup::{constants, file, github, utils};
 
 #[derive(Debug, StructOpt)]
 struct Opt {
@@ -106,7 +107,7 @@ async fn main() {
             return;
         }
         Menu::ChoseReleases => {
-            let release_list = protonup_rs::github::list_releases().await.unwrap();
+            let release_list = libprotonup::github::list_releases().await.unwrap();
             let tag_list: Vec<String> = release_list
                 .into_iter()
                 .map(|r| (r.tag_name.clone()))
@@ -133,7 +134,7 @@ async fn main() {
                     constants::DEFAULT_INSTALL_DIR.to_string()
                 }
             };
-            let release_list = protonup_rs::github::list_releases().await.unwrap();
+            let release_list = libprotonup::github::list_releases().await.unwrap();
             let tag_list: Vec<String> = release_list
                 .into_iter()
                 .map(|r| (r.tag_name.clone()))
@@ -144,6 +145,19 @@ async fn main() {
             }
             return;
         }
+    }
+}
+
+struct App {
+    pb: ProgressBar,
+}
+
+impl file::Position for App {
+    fn set_position(&self, new: u64) {
+        self.pb.set_position(new);
+    }
+    fn finish_with_message(&self, message: String) {
+        self.pb.finish_with_message(message);
     }
 }
 
@@ -166,7 +180,16 @@ pub async fn download_file(tag: &str, install_path: String) -> Result<(), String
         fs::remove_file(&temp_dir);
     }
 
-    file::download_file_progress(&download.download, download.size, &temp_dir)
+    let pb = ProgressBar::new(download.size);
+    pb.set_style(ProgressStyle::default_bar()
+        .template("{msg}\n{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({bytes_per_sec})").unwrap()
+        .progress_chars("#>-"));
+    pb.set_message(format!(
+        "Downloading {}",
+        &download.download.split('/').last().unwrap()
+    ));
+    let app = App { pb };
+    file::download_file_progress(&download.download, download.size, &temp_dir, &app)
         .await
         .unwrap();
 

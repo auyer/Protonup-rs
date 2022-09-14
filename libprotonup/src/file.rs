@@ -1,15 +1,14 @@
-use super::{constants, utils};
+use super::constants;
 use flate2::read::GzDecoder;
 use futures_util::StreamExt;
-use indicatif::{ProgressBar, ProgressStyle};
 use reqwest::header::USER_AGENT;
 use sha2::{Digest, Sha512};
 use std::cmp::min;
 use std::fs::{File, OpenOptions};
+use std::io;
 use std::io::Write;
 use std::io::{Error, ErrorKind};
 use std::path::PathBuf;
-use std::{io, string};
 use tar::Archive;
 
 pub fn decompress(from_path: PathBuf, destination_path: PathBuf) -> Result<(), io::Error> {
@@ -36,10 +35,16 @@ pub fn decompress(from_path: PathBuf, destination_path: PathBuf) -> Result<(), i
     }
 }
 
-pub async fn download_file_progress(
+pub trait Position {
+    fn set_position(&self, new: u64);
+    fn finish_with_message(&self, message: String);
+}
+
+pub async fn download_file_progress<T: Position>(
     url: &String,
     total_size: u64,
     install_dir: &PathBuf,
+    cursor: &T,
 ) -> Result<(), String> {
     let client = reqwest::Client::new();
     let res = client
@@ -48,12 +53,6 @@ pub async fn download_file_progress(
         .send()
         .await
         .or(Err(format!("Failed to GET from '{}'", &url)))?;
-
-    let pb = ProgressBar::new(total_size);
-    pb.set_style(ProgressStyle::default_bar()
-        .template("{msg}\n{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({bytes_per_sec})").unwrap()
-        .progress_chars("#>-"));
-    pb.set_message(format!("Downloading {}", &url.split('/').last().unwrap()));
 
     let mut file = OpenOptions::new()
         .create_new(true)
@@ -76,10 +75,9 @@ pub async fn download_file_progress(
             .or(Err(format!("Error while writing to file")))?;
         let new = min(downloaded + (chunk.len() as u64), total_size);
         downloaded = new;
-        pb.set_position(new);
+        cursor.set_position(new);
     }
-
-    pb.finish_with_message(format!(
+    cursor.finish_with_message(format!(
         "Downloaded {} to {}",
         url,
         install_dir.to_str().unwrap()
@@ -112,4 +110,14 @@ pub fn hash_check_file(file_dir: String, git_hash: String) -> bool {
         return false;
     }
     return true;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn it_works() {
+        assert_eq!(4, 4);
+    }
 }
