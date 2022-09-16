@@ -1,6 +1,6 @@
 use super::constants;
 
-#[derive(Default, Debug, PartialEq)]
+#[derive(Default, Debug, PartialEq, Clone)]
 pub struct Download {
     pub version: String,
     pub sha512sum: String,

@@ -1,4 +1,5 @@
 use super::constants;
+use crossbeam_channel;
 use flate2::read::GzDecoder;
 use futures_util::StreamExt;
 use reqwest::header::USER_AGENT;
@@ -35,20 +36,16 @@ pub fn decompress(from_path: PathBuf, destination_path: PathBuf) -> Result<(), i
     }
 }
 
-pub trait Position {
-    fn set_position(&self, new: u64);
-    fn finish_with_message(&self, message: String);
-}
-
-pub async fn download_file_progress<T: Position>(
-    url: &String,
+pub async fn download_file_progress(
+    url: String,
     total_size: u64,
-    install_dir: &PathBuf,
-    cursor: &T,
+    install_dir: PathBuf,
+    position_updater: crossbeam_channel::Sender<u64>,
+    message_updater: crossbeam_channel::Sender<String>,
 ) -> Result<(), String> {
     let client = reqwest::Client::new();
     let res = client
-        .get(url)
+        .get(&url)
         .header(USER_AGENT, format!("protonup-rs {}", constants::VERSION))
         .send()
         .await
@@ -75,13 +72,18 @@ pub async fn download_file_progress<T: Position>(
             .or(Err(format!("Error while writing to file")))?;
         let new = min(downloaded + (chunk.len() as u64), total_size);
         downloaded = new;
-        cursor.set_position(new);
+        position_updater.send(new).unwrap();
     }
-    cursor.finish_with_message(format!(
-        "Downloaded {} to {}",
-        url,
-        install_dir.to_str().unwrap()
-    ));
+    drop(position_updater); // drop channel when done sending
+
+    message_updater
+        .send(format!(
+            "Downloaded {} to {}",
+            url,
+            install_dir.to_str().unwrap()
+        ))
+        .unwrap();
+    drop(message_updater);
     return Ok(());
 }
 
@@ -110,14 +112,4 @@ pub fn hash_check_file(file_dir: String, git_hash: String) -> bool {
         return false;
     }
     return true;
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn it_works() {
-        assert_eq!(4, 4);
-    }
 }
