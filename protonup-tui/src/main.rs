@@ -1,8 +1,10 @@
-use indicatif::{ProgressBar, ProgressStyle};
+use crossbeam_channel;
+use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
 use inquire::{CustomUserError, MultiSelect, Select, Text};
 use std::fmt;
 use std::fs;
 use std::fs::create_dir_all;
+use std::thread;
 use structopt::StructOpt;
 
 use libprotonup::{constants, file, github, utils};
@@ -148,19 +150,6 @@ async fn main() {
     }
 }
 
-struct App {
-    pb: ProgressBar,
-}
-
-impl file::Position for App {
-    fn set_position(&self, new: u64) {
-        self.pb.set_position(new);
-    }
-    fn finish_with_message(&self, message: String) {
-        self.pb.finish_with_message(message);
-    }
-}
-
 pub async fn download_file(tag: &str, install_path: String) -> Result<(), String> {
     let install_dir = utils::expand_tilde(install_path).unwrap();
     let mut temp_dir = utils::expand_tilde(constants::TEMP_DIR).unwrap();
@@ -180,18 +169,41 @@ pub async fn download_file(tag: &str, install_path: String) -> Result<(), String
         fs::remove_file(&temp_dir);
     }
 
-    let pb = ProgressBar::new(download.size);
-    pb.set_style(ProgressStyle::default_bar()
+    let (tx_position, rx_position) = crossbeam_channel::unbounded();
+    let (tx_message, rx_message) = crossbeam_channel::unbounded();
+    let url = String::from(&download.download);
+    thread::spawn(move || {
+        let pb = ProgressBar::with_draw_target(
+            Some(download.size),
+            ProgressDrawTarget::stderr_with_hz(24), // like in the movies
+        );
+        // let pb = ProgressBar::new(download.size);
+        pb.set_style(ProgressStyle::default_bar()
         .template("{msg}\n{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({bytes_per_sec})").unwrap()
         .progress_chars("#>-"));
-    pb.set_message(format!(
-        "Downloading {}",
-        &download.download.split('/').last().unwrap()
-    ));
-    let app = App { pb };
-    file::download_file_progress(&download.download, download.size, &temp_dir, &app)
-        .await
-        .unwrap();
+        pb.set_message(format!("Downloading {}", url.split('/').last().unwrap()));
+
+        loop {
+            match rx_position.recv() {
+                Ok(newpos) => pb.set_position(newpos),
+                Err(crossbeam_channel::RecvError) => break,
+            }
+        }
+
+        let message = rx_message.recv().unwrap();
+        pb.set_message(message);
+        pb.abandon(); // closes progress bas without blanking terminal
+    });
+
+    file::download_file_progress(
+        download.download,
+        download.size,
+        temp_dir.clone(),
+        tx_position,
+        tx_message,
+    )
+    .await
+    .unwrap();
 
     if !file::hash_check_file(temp_dir.to_str().unwrap().to_string(), git_hash) {
         return Err("Failed checking file hash".to_string());
