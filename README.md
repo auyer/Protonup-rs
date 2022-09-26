@@ -1,9 +1,9 @@
 # Protonup-rs
 
-CLI program to automate the installation and update of Proton-GE
+Lib, CLI and GUI program to automate the installation and update of Proton-GE
 
 > **NOTE**: This is not nearly as feature complete as the original Protonup.
-> I've create it because the original project had a few issues with its Python dependencies (that most liekly got fixed already). 
+> I've create it because the original project had a few issues with its Python dependencies (that most likely got fixed already). 
 > I wanted to to re-create it in rust, in a way it could be used as a lib and a CLI.
 > If this repo gets to a stable and feature rich state, I will publish it to Cargo and other repositories.
 
@@ -11,7 +11,7 @@ CLI program to automate the installation and update of Proton-GE
 
 ## Usage
 
-The default way is to simply ivoke the cli, and navigate the tui.
+The default way is to simply invoke the cli, and navigate the tui.
 ```bash
 protonup-rs
 ```
@@ -27,6 +27,6 @@ Clone repo
 
 ```bash
 cd protonup-rs
-cargo build --release
-cp ./target/release/protonup-rs "your path"
+cargo build -p protonup-{tui/gui} --release
+cp ./target/release/protonup-rs-{tui/gui} "your path"
 ```
