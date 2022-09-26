@@ -1,10 +1,11 @@
-use crossbeam_channel;
 use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
 use inquire::{CustomUserError, MultiSelect, Select, Text};
 use std::fmt;
 use std::fs;
 use std::fs::create_dir_all;
+use std::sync::atomic::Ordering;
 use std::thread;
+use std::{sync::Arc, time::Duration};
 use structopt::StructOpt;
 
 use libprotonup::{constants, file, github, utils};
@@ -27,7 +28,7 @@ struct Opt {
     // #[structopt(short, long)]
     // dir: Option<String>,
     // /// disable prompts and logs
-    /// Skip Menu and download latest direclty
+    /// Skip Menu and download latest directly
     #[structopt(short, long)]
     quick_download: bool,
     // /// download only
@@ -169,42 +170,45 @@ pub async fn download_file(tag: &str, install_path: String) -> Result<(), String
         fs::remove_file(&temp_dir);
     }
 
-    let (tx_position, rx_position) = crossbeam_channel::unbounded();
-    let (tx_message, rx_message) = crossbeam_channel::unbounded();
+    let (progress, done) = file::create_progress_trackers();
+    let progress_read = Arc::clone(&progress);
+    let done_read = Arc::clone(&done);
     let url = String::from(&download.download);
+    let i_dir = String::from(install_dir.to_str().unwrap());
     thread::spawn(move || {
         let pb = ProgressBar::with_draw_target(
             Some(download.size),
             ProgressDrawTarget::stderr_with_hz(24), // like in the movies
         );
-        // let pb = ProgressBar::new(download.size);
         pb.set_style(ProgressStyle::default_bar()
         .template("{msg}\n{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({bytes_per_sec})").unwrap()
         .progress_chars("#>-"));
         pb.set_message(format!("Downloading {}", url.split('/').last().unwrap()));
-
+        let wait_time = Duration::from_millis(50); // 50ms wait is about 20Hz
         loop {
-            match rx_position.recv() {
-                Ok(newpos) => pb.set_position(newpos),
-                Err(crossbeam_channel::RecvError) => break,
+            let newpos = progress_read.load(Ordering::Relaxed);
+            pb.set_position(newpos as u64);
+            if done_read.load(Ordering::Relaxed) {
+                break;
             }
+            thread::sleep(wait_time);
         }
-
-        let message = rx_message.recv().unwrap();
-        pb.set_message(message);
+        pb.set_message(format!("Downloaded {} to {}", url, i_dir));
         pb.abandon(); // closes progress bas without blanking terminal
+
+        println!("Checking file integrity"); // This is being printed here because the progress bar needs to be closed.
     });
 
     file::download_file_progress(
         download.download,
         download.size,
         temp_dir.clone(),
-        tx_position,
-        tx_message,
+        progress,
+        done,
     )
     .await
     .unwrap();
-
+    // println!("Checking file integrity");
     if !file::hash_check_file(temp_dir.to_str().unwrap().to_string(), git_hash) {
         return Err("Failed checking file hash".to_string());
     }

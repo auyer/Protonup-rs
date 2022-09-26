@@ -1,5 +1,4 @@
 use super::constants;
-use crossbeam_channel;
 use flate2::read::GzDecoder;
 use futures_util::StreamExt;
 use reqwest::header::USER_AGENT;
@@ -10,6 +9,8 @@ use std::io;
 use std::io::Write;
 use std::io::{Error, ErrorKind};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::Arc;
 use tar::Archive;
 
 pub fn decompress(from_path: PathBuf, destination_path: PathBuf) -> Result<(), io::Error> {
@@ -36,12 +37,22 @@ pub fn decompress(from_path: PathBuf, destination_path: PathBuf) -> Result<(), i
     }
 }
 
+/// Creates the progress trackers variable pointers
+pub fn create_progress_trackers() -> (Arc<AtomicUsize>, Arc<AtomicBool>) {
+    return (
+        Arc::new(AtomicUsize::new(0)),
+        Arc::new(AtomicBool::new(false)),
+    );
+}
+
+/// requires pointers to store the progress, and another to store "done" status
+/// Create them with `create_progress_trackers`
 pub async fn download_file_progress(
     url: String,
     total_size: u64,
     install_dir: PathBuf,
-    position_updater: crossbeam_channel::Sender<u64>,
-    message_updater: crossbeam_channel::Sender<String>,
+    progress: Arc<AtomicUsize>,
+    done: Arc<AtomicBool>,
 ) -> Result<(), String> {
     let client = reqwest::Client::new();
     let res = client
@@ -72,18 +83,10 @@ pub async fn download_file_progress(
             .or(Err(format!("Error while writing to file")))?;
         let new = min(downloaded + (chunk.len() as u64), total_size);
         downloaded = new;
-        position_updater.send(new).unwrap();
+        let val = Arc::clone(&progress);
+        val.swap(new as usize, Ordering::SeqCst);
     }
-    drop(position_updater); // drop channel when done sending
-
-    message_updater
-        .send(format!(
-            "Downloaded {} to {}",
-            url,
-            install_dir.to_str().unwrap()
-        ))
-        .unwrap();
-    drop(message_updater);
+    done.swap(true, Ordering::SeqCst);
     return Ok(());
 }
 
