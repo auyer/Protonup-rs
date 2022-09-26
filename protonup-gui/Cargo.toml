@@ -1,0 +1,23 @@
+[package]
+name = "protonup-gui"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+libprotonup = { path = "../libprotonup" }
+relm4 = { git = "https://github.com/Relm4/Relm4.git", features = ["macros"] }
+relm4-components = { git = "https://github.com/Relm4/Relm4.git" }
+#relm4 = { version = "0.5", features = ["macros", "libadwaita"] }
+#relm4-components = { version = "0.5" }
+futures = "0.3.24"
+instant = "0.1.12"
+#gtk = "0.15"
+# tokio = { version = "1.21", features = ["full"] }
+tokio = { version = "1.21", features = [
+  "rt",
+  "macros",
+  "time",
+  "rt-multi-thread",
+] }
