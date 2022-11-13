@@ -1,6 +1,6 @@
 [package]
 name = "protonup-tui"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -8,15 +8,13 @@ edition = "2021"
 [dependencies]
 
 libprotonup = { path = "../libprotonup" }
-inquire = "0.3.0"
+inquire = "0.5"
 indicatif = { version = "0.17", features = [
   "improved_unicode",
   "unicode-segmentation",
 ] }
 structopt = "0.3"
 tokio = { version = "1.21", features = [
-  "rt",
   "macros",
-  "time",
   "rt-multi-thread",
 ] }
