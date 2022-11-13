@@ -1,4 +1,5 @@
 use super::constants;
+use anyhow::Result;
 use flate2::read::GzDecoder;
 use futures_util::StreamExt;
 use reqwest::header::USER_AGENT;

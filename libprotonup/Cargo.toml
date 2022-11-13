@@ -1,33 +1,25 @@
 [package]
 name = "libprotonup"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+anyhow = "1.0"
 dirs = "4.0"
 flate2 = "1.0"
 futures-util = "0.3"
 hex = "0.4"
 hex-literal = "0.3"
-octocrab = "0.17"
-reqwest = { version = "0.11", features = [
-  "hyper-rustls",
+reqwest = { version = "0.11.12", default-features = false, features = [
+  "rustls-tls",
   "stream",
-  "tokio-rustls",
-  "serde_json",
+  "rustls",
   "json",
-  "blocking",
 ] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 sha2 = "0.10"
 structopt = "0.3"
 tar = "0.4"
-tokio = { version = "1.21", features = [
-  "rt",
-  "macros",
-  "time",
-  "rt-multi-thread",
-] }
