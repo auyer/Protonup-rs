@@ -169,7 +169,7 @@ async fn main() {
                 Ok(path) => path,
                 Err(error) => {
                     println!(
-                        "Error chosing custom path. Using the default. Error: {:?}",
+                        "Error choosing custom path. Using the default. Error: {:?}",
                         error
                     );
                     constants::DEFAULT_INSTALL_DIR.to_string()
