@@ -2,6 +2,12 @@
 name = "libprotonup"
 version = "0.2.0"
 edition = "2021"
+authors = ["Rafael 'Auyer' Passos"]
+repository = "github.com/auyer/protonup-rs"
+license = "Apache-2.0"
+license-file = "../LICENSE"
+
+description = "Library for Custom Proton Download and installation"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

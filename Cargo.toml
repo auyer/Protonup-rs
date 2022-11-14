@@ -1,2 +1,2 @@
 [workspace]
-members = ["libprotonup", "protonup-tui", "protonup-gui"]
+members = ["libprotonup", "protonup-rs", "protonup-gui"]
