@@ -3,7 +3,7 @@ name = "protonup-rs"
 version = "0.2.0"
 edition = "2021"
 authors = ["Rafael 'Auyer' Passos"]
-repository = "github.com/auyer/protonup-rs"
+repository = "https://github.com/auyer/protonup-rs"
 license = "Apache-2.0"
 license-file = "../LICENSE"
 
@@ -20,7 +20,4 @@ indicatif = { version = "0.17", features = [
   "unicode-segmentation",
 ] }
 structopt = "0.3"
-tokio = { version = "1.21", features = [
-  "macros",
-  "rt-multi-thread",
-] }
+tokio = { version = "1.21", features = ["macros", "rt-multi-thread"] }
