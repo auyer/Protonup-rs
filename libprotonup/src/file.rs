@@ -1,5 +1,5 @@
 use super::constants;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use flate2::read::GzDecoder;
 use futures_util::StreamExt;
 use reqwest::header::USER_AGENT;
@@ -8,34 +8,36 @@ use std::cmp::min;
 use std::fs::{File, OpenOptions};
 use std::io;
 use std::io::Write;
-use std::io::{Error, ErrorKind};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use tar::Archive;
 
-pub fn decompress(from_path: PathBuf, destination_path: PathBuf) -> Result<(), io::Error> {
-    let file = File::open(&from_path)
-        .or_else(|err| {
-            Err(format!(
-                "Failed to open file '{}'. Error : {:?}",
-                from_path.to_str().unwrap(),
-                err
-            ))
-        })
-        .unwrap();
+fn path_result(path: &PathBuf) -> String {
+    let spath = path.to_str();
+    match spath {
+        Some(p) => return String::from(p),
+        None => return String::from("path missing!"),
+    }
+}
+
+pub fn decompress(from_path: PathBuf, destination_path: PathBuf) -> Result<()> {
+    let file = File::open(&from_path).with_context(|| {
+        format!(
+            "[Decompressing] Failed to open file from Path: {}",
+            path_result(&from_path),
+        )
+    })?;
+
     let mut archive = Archive::new(GzDecoder::new(file));
 
-    let res = archive.unpack(destination_path);
-    match res {
-        Ok(_) => return Ok(()),
-        Err(_) => {
-            return Err(Error::new(
-                ErrorKind::Other,
-                "Failed to unpack file".to_string(),
-            ))
-        }
-    }
+    archive.unpack(&destination_path).with_context(|| {
+        format!(
+            "[Decompressing] Failed to unpack into destination : {}",
+            path_result(&destination_path)
+        )
+    })?;
+    Ok(())
 }
 
 /// Creates the progress trackers variable pointers
@@ -54,34 +56,38 @@ pub async fn download_file_progress(
     install_dir: PathBuf,
     progress: Arc<AtomicUsize>,
     done: Arc<AtomicBool>,
-) -> Result<(), String> {
+) -> Result<()> {
     let client = reqwest::Client::new();
     let res = client
         .get(&url)
         .header(USER_AGENT, format!("protonup-rs {}", constants::VERSION))
         .send()
         .await
-        .or(Err(format!("Failed to GET from '{}'", &url)))?;
+        .with_context(|| format!("[Download] Failed to call remote server on URL : {}", &url))?;
 
     let mut file = OpenOptions::new()
         .create_new(true)
         .write(true)
         .open(&install_dir)
-        .or_else(|err| {
-            Err(format!(
-                "Failed to create file '{}'. Error : {:?}",
-                install_dir.to_str().unwrap(),
-                err
-            ))
+        .with_context(|| {
+            format!(
+                "[Download] Failed creating destination file : {}",
+                path_result(&install_dir)
+            )
         })?;
 
     let mut downloaded: u64 = 0;
     let mut stream = res.bytes_stream();
 
     while let Some(item) = stream.next().await {
-        let chunk = item.or(Err(format!("Error while downloading file")))?;
-        file.write_all(&chunk)
-            .or(Err(format!("Error while writing to file")))?;
+        let chunk = item.context("[Download] Failed reading stream from network")?;
+
+        file.write_all(&chunk).with_context(|| {
+            format!(
+                "[Download] Failed creating destination file : {}",
+                path_result(&install_dir)
+            )
+        })?;
         let new = min(downloaded + (chunk.len() as u64), total_size);
         downloaded = new;
         let val = Arc::clone(&progress);
@@ -91,29 +97,41 @@ pub async fn download_file_progress(
     return Ok(());
 }
 
-pub async fn download_file_into_memory(url: &String) -> Result<String, String> {
+pub async fn download_file_into_memory(url: &String) -> Result<String> {
     let client = reqwest::Client::new();
     let res = client
         .get(url)
         .header(USER_AGENT, format!("protonup-rs {}", constants::VERSION))
         .send()
         .await
-        .or(Err(format!("Failed to GET from '{}'", &url)))?;
+        .with_context(|| {
+            format!(
+                "[Download SHA] Failed to call remote server on URL : {}",
+                &url
+            )
+        })?;
 
-    res.text()
+    Ok(res
+        .text()
         .await
-        .or(Err(format!("Failed to GET from '{}'", &url)))
+        .with_context(|| format!("[Download SHA] Failed to read response from URL : {}", &url))?)
 }
 
-pub fn hash_check_file(file_dir: String, git_hash: String) -> bool {
-    let mut file = File::open(&file_dir).unwrap();
+pub fn hash_check_file(file_dir: String, git_hash: String) -> Result<bool> {
+    let mut file = File::open(&file_dir)
+        .context("[Hash Check] Failed oppening download file for checking. Was the file moved?")?;
     let mut hasher = Sha512::new();
-    io::copy(&mut file, &mut hasher).unwrap();
+    io::copy(&mut file, &mut hasher)
+        .context("[Hash Check] Failed reading download file for checking")?;
+
     let hash = hasher.finalize();
 
-    let (git_hash, _) = git_hash.rsplit_once(" ").unwrap();
+    let (git_hash, _) = git_hash
+        .rsplit_once(" ")
+        .context("[Hash Check] Failed decoding hash file. Is this the right hash ? Plese file an issue to protonup-rs !")?;
+
     if hex::encode(&hash) != git_hash.trim() {
-        return false;
+        return Ok(false);
     }
-    return true;
+    return Ok(true);
 }

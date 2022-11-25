@@ -7,8 +7,8 @@ edition = "2021"
 
 [dependencies]
 libprotonup = { path = "../libprotonup" }
-relm4 = { git = "https://github.com/Relm4/Relm4.git", features = ["macros"] }
-relm4-components = { git = "https://github.com/Relm4/Relm4.git" }
+# relm4 = { git = "https://github.com/Relm4/Relm4.git", features = ["macros"] }
+# relm4-components = { git = "https://github.com/Relm4/Relm4.git" }
 #relm4 = { version = "0.5", features = ["macros", "libadwaita"] }
 #relm4-components = { version = "0.5" }
 futures = "0.3.24"
@@ -21,3 +21,6 @@ tokio = { version = "1.21", features = [
   "time",
   "rt-multi-thread",
 ] }
+# iced = "0.4.2"
+# iced_native = "0.5.1"
+# iced_futures = "0.4.1"
