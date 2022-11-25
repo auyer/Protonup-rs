@@ -2,14 +2,11 @@
 name = "protonup-rs"
 version = "0.2.0"
 edition = "2021"
-authors = ["Rafael 'Auyer' Passos"]
+authors = ["Auyer <auyer@rcpassos.me>"]
 repository = "https://github.com/auyer/protonup-rs"
 license = "Apache-2.0"
-license-file = "../LICENSE"
 
 description = "TUI Program for Custom Proton Download and installation written in rust"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 
@@ -20,4 +17,4 @@ indicatif = { version = "0.17", features = [
   "unicode-segmentation",
 ] }
 structopt = "0.3"
-tokio = { version = "1.21", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1.22", features = ["macros", "rt-multi-thread"] }

@@ -32,7 +32,7 @@ struct Opt {
     /// Skip Menu and download latest directly
     #[structopt(short, long)]
     quick_download: bool,
-    #[structopt(short, long)]
+    #[structopt(short = "f", long)]
     quick_download_flatpak: bool,
     // /// download only
     // #[structopt(long)]
@@ -113,11 +113,15 @@ async fn main() {
     } = Opt::from_args();
 
     if quick_download {
-        download_file("latest", constants::DEFAULT_INSTALL_DIR.to_string()).await;
+        download_file("latest", constants::DEFAULT_INSTALL_DIR.to_string())
+            .await
+            .unwrap();
         return;
     }
     if quick_download_flatpak {
-        download_file("latest", constants::DEFAULT_INSTALL_DIR_FLATPAK.to_string()).await;
+        download_file("latest", constants::DEFAULT_INSTALL_DIR_FLATPAK.to_string())
+            .await
+            .unwrap();
         return;
     }
     let ans: Menu = Select::new("ProtonUp Menu: Chose your action:", Menu::VARIANTS.to_vec())
@@ -126,11 +130,15 @@ async fn main() {
 
     match ans {
         Menu::QuickUpdate => {
-            download_file("latest", constants::DEFAULT_INSTALL_DIR.to_string()).await;
+            download_file("latest", constants::DEFAULT_INSTALL_DIR.to_string())
+                .await
+                .unwrap();
             return;
         }
         Menu::QuickUpdateFlatpak => {
-            download_file("latest", constants::DEFAULT_INSTALL_DIR_FLATPAK.to_string()).await;
+            download_file("latest", constants::DEFAULT_INSTALL_DIR_FLATPAK.to_string())
+                .await
+                .unwrap();
             return;
         }
         Menu::ChoseReleases => {
@@ -141,7 +149,9 @@ async fn main() {
                 .collect();
             let list = tag_menu(tag_list);
             for tag in list.iter() {
-                download_file(tag, constants::DEFAULT_INSTALL_DIR.to_string()).await;
+                download_file(tag, constants::DEFAULT_INSTALL_DIR.to_string())
+                    .await
+                    .unwrap();
             }
             return;
         }
@@ -153,7 +163,9 @@ async fn main() {
                 .collect();
             let list = tag_menu(tag_list);
             for tag in list.iter() {
-                download_file(tag, constants::DEFAULT_INSTALL_DIR_FLATPAK.to_string()).await;
+                download_file(tag, constants::DEFAULT_INSTALL_DIR_FLATPAK.to_string())
+                    .await
+                    .unwrap();
             }
             return;
         }
@@ -182,7 +194,7 @@ async fn main() {
                 .collect();
             let list = tag_menu(tag_list);
             for tag in list.iter() {
-                download_file(tag, chosen_path.clone()).await;
+                download_file(tag, chosen_path.clone()).await.unwrap();
             }
             return;
         }
@@ -205,7 +217,7 @@ pub async fn download_file(tag: &str, install_path: String) -> Result<(), String
         .unwrap();
 
     if temp_dir.exists() {
-        fs::remove_file(&temp_dir);
+        fs::remove_file(&temp_dir).unwrap();
     }
 
     let (progress, done) = file::create_progress_trackers();
@@ -213,10 +225,12 @@ pub async fn download_file(tag: &str, install_path: String) -> Result<(), String
     let done_read = Arc::clone(&done);
     let url = String::from(&download.download);
     let i_dir = String::from(install_dir.to_str().unwrap());
+
+    // start ProgressBar in another thread
     thread::spawn(move || {
         let pb = ProgressBar::with_draw_target(
             Some(download.size),
-            ProgressDrawTarget::stderr_with_hz(24), // like in the movies
+            ProgressDrawTarget::stderr_with_hz(20),
         );
         pb.set_style(ProgressStyle::default_bar()
         .template("{msg}\n{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({bytes_per_sec})").unwrap()
@@ -234,7 +248,7 @@ pub async fn download_file(tag: &str, install_path: String) -> Result<(), String
         pb.set_message(format!("Downloaded {} to {}", url, i_dir));
         pb.abandon(); // closes progress bas without blanking terminal
 
-        println!("Checking file integrity"); // This is being printed here because the progress bar needs to be closed.
+        println!("Checking file integrity"); // This is being printed here because the progress bar needs to be closed before printing.
     });
 
     file::download_file_progress(
@@ -246,7 +260,7 @@ pub async fn download_file(tag: &str, install_path: String) -> Result<(), String
     )
     .await
     .unwrap();
-    if !file::hash_check_file(temp_dir.to_str().unwrap().to_string(), git_hash) {
+    if !file::hash_check_file(temp_dir.to_str().unwrap().to_string(), git_hash).unwrap() {
         return Err("Failed checking file hash".to_string());
     }
     println!("Unpacking files into install location. Please wait");
