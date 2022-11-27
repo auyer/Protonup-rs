@@ -21,15 +21,36 @@ To run a quick update and get the latest GE Proton version, you can use the quic
 protonup-rs -q 
 ```
 
+## Installing:
+
+Get the latest binary:
+[Download link](https://github.com/auyer/Protonup-rs/releases/latest/download/protonup-rs-linux-amd64.zip)
+
+It is a single binary. You can just run it, or add it to your path so you can call it from anywhere.
+
+Quick way to add it to your path:
+```
+cd Downloads
+sudo unzip protonup-rs-linux-amd64.zip -d /usr/bin
+```
+
+
 ## Building from source
 
-Clone repo
+You can install from source using the last released version in Crates.io:
+
+```
+cargo install protonup-rs
+```
+
+Or clone repo:
 
 ```bash
 cd protonup-rs
 cargo build -p protonup-rs --release
 mv ./target/release/protonup-rs "your path"
 ```
+
 
 ## GUI
 
