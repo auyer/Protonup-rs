@@ -1,5 +1,5 @@
 use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
-use inquire::{MultiSelect, Select, Text};
+use inquire::{Confirm, MultiSelect, Select, Text};
 use std::fmt;
 use std::fs;
 use std::fs::create_dir_all;
@@ -84,17 +84,29 @@ impl fmt::Display for Menu {
 }
 
 fn tag_menu(options: Vec<String>) -> Vec<String> {
-    let ans = MultiSelect::new("Select the Versions you want to download :", options)
+    let answer = MultiSelect::new("Select the Versions you want to download :", options)
         .with_default(&vec![0 as usize])
         .prompt();
 
-    match ans {
+    match answer {
         Ok(list) => return list,
 
         Err(_) => {
             println!("The tag list could not be processed");
             return vec![];
         }
+    }
+}
+
+fn confirm_menu(text: String) -> bool {
+    let answer = Confirm::new(&text)
+        .with_default(false)
+        .with_help_message("If you chose yes, we will re install it.")
+        .prompt();
+
+    match answer {
+        Ok(choice) => choice,
+        Err(_) => false,
     }
 }
 
@@ -124,19 +136,47 @@ async fn main() {
             .unwrap();
         return;
     }
-    let ans: Menu = Select::new("ProtonUp Menu: Chose your action:", Menu::VARIANTS.to_vec())
+    let answer: Menu = Select::new("ProtonUp Menu: Chose your action:", Menu::VARIANTS.to_vec())
         .prompt()
         .unwrap();
 
-    match ans {
+    match answer {
         Menu::QuickUpdate => {
+            let tag = github::fetch_data_from_tag("latest").await.unwrap();
+
+            if file::check_if_exists(
+                constants::DEFAULT_INSTALL_DIR.to_owned(),
+                tag.version.clone(),
+            ) {
+                if !confirm_menu(format!(
+                    "Version {} exists in installation path. Overwrite ?",
+                    tag.version
+                )) {
+                    return;
+                }
+            }
+
             download_file("latest", constants::DEFAULT_INSTALL_DIR.to_string())
                 .await
                 .unwrap();
             return;
         }
         Menu::QuickUpdateFlatpak => {
-            download_file("latest", constants::DEFAULT_INSTALL_DIR_FLATPAK.to_string())
+            let tag = github::fetch_data_from_tag("latest").await.unwrap();
+
+            if file::check_if_exists(
+                constants::DEFAULT_INSTALL_DIR_FLATPAK.to_owned(),
+                tag.version.clone(),
+            ) {
+                if !confirm_menu(format!(
+                    "Version {} exists in installation path. Overwrite ?",
+                    tag.version
+                )) {
+                    return;
+                }
+            }
+
+            download_file("latest", constants::DEFAULT_INSTALL_DIR.to_string())
                 .await
                 .unwrap();
             return;
@@ -149,6 +189,15 @@ async fn main() {
                 .collect();
             let list = tag_menu(tag_list);
             for tag in list.iter() {
+                if file::check_if_exists(constants::DEFAULT_INSTALL_DIR.to_owned(), tag.to_owned())
+                {
+                    if !confirm_menu(format!(
+                        "Version {} exists in installation path. Overwrite ?",
+                        tag
+                    )) {
+                        return;
+                    }
+                }
                 download_file(tag, constants::DEFAULT_INSTALL_DIR.to_string())
                     .await
                     .unwrap();
@@ -163,6 +212,17 @@ async fn main() {
                 .collect();
             let list = tag_menu(tag_list);
             for tag in list.iter() {
+                if file::check_if_exists(
+                    constants::DEFAULT_INSTALL_DIR_FLATPAK.to_owned(),
+                    tag.to_owned(),
+                ) {
+                    if !confirm_menu(format!(
+                        "Version {} exists in installation path. Overwrite ?",
+                        tag
+                    )) {
+                        return;
+                    }
+                }
                 download_file(tag, constants::DEFAULT_INSTALL_DIR_FLATPAK.to_string())
                     .await
                     .unwrap();
@@ -172,12 +232,12 @@ async fn main() {
         Menu::ChoseReleasesCustomDir => {
             let current_dir = std::env::current_dir().unwrap();
             let help_message = format!("Current directory: {}", current_dir.to_string_lossy());
-            let ans = Text::new("Installation Path:")
+            let answer = Text::new("Installation Path:")
                 .with_autocomplete(file_path::FilePathCompleter::default())
                 .with_help_message(&help_message)
                 .prompt();
 
-            let chosen_path = match ans {
+            let chosen_path = match answer {
                 Ok(path) => path,
                 Err(error) => {
                     println!(
@@ -194,6 +254,16 @@ async fn main() {
                 .collect();
             let list = tag_menu(tag_list);
             for tag in list.iter() {
+                if file::check_if_exists(constants::DEFAULT_INSTALL_DIR.to_owned(), tag.to_owned())
+                {
+                    if !confirm_menu(format!(
+                        "Version {} exists in installation path. Overwrite ?",
+                        tag
+                    )) {
+                        return;
+                    }
+                }
+
                 download_file(tag, chosen_path.clone()).await.unwrap();
             }
             return;

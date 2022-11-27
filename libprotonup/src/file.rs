@@ -1,4 +1,5 @@
 use super::constants;
+use crate::utils;
 use anyhow::{Context, Result};
 use flate2::read::GzDecoder;
 use futures_util::StreamExt;
@@ -46,6 +47,12 @@ pub fn create_progress_trackers() -> (Arc<AtomicUsize>, Arc<AtomicBool>) {
         Arc::new(AtomicUsize::new(0)),
         Arc::new(AtomicBool::new(false)),
     );
+}
+
+pub fn check_if_exists(path: String, tag: String) -> bool {
+    let f_path = utils::expand_tilde(format!("{}/{}", path, tag)).unwrap();
+    let p = std::path::Path::new(&f_path);
+    p.is_dir()
 }
 
 /// requires pointers to store the progress, and another to store "done" status
@@ -128,7 +135,7 @@ pub fn hash_check_file(file_dir: String, git_hash: String) -> Result<bool> {
 
     let (git_hash, _) = git_hash
         .rsplit_once(" ")
-        .context("[Hash Check] Failed decoding hash file. Is this the right hash ? Plese file an issue to protonup-rs !")?;
+        .context("[Hash Check] Failed decoding hash file. Is this the right hash ? Please file an issue to protonup-rs !")?;
 
     if hex::encode(&hash) != git_hash.trim() {
         return Ok(false);

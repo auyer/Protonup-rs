@@ -1,4 +1,14 @@
 [workspace]
 resolver="2"
 
-members = ["libprotonup", "protonup-rs", "protonup-gui", "download_progress"]
+members = ["libprotonup", "protonup-rs", "protonup-gui"]
+
+[profile.release]
+opt-level = 3
+debug = false
+lto = true
+strip = "debuginfo"
+panic = 'unwind'
+incremental = false
+codegen-units = 1
+rpath = false
