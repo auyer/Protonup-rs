@@ -66,25 +66,25 @@ impl Menu {
 impl fmt::Display for Menu {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            Self::QuickUpdate => write!(f, "Quick Update (Download latest GE Proton)"),
+            Self::QuickUpdate => write!(f, "Quick update (download latest GE Proton)"),
             Self::QuickUpdateFlatpak => write!(
                 f,
-                "Quick Update (Download latest GE Proton) for Flatpak Steam"
+                "Quick update (download latest GE Proton) for Flatpak Steam"
             ),
-            Self::ChoseReleases => write!(f, "Chose GE Proton Releases from list"),
+            Self::ChoseReleases => write!(f, "Choose GE Proton releases from list"),
             Self::ChoseReleasesFlatpak => {
-                write!(f, "Chose GE Proton Releases from list for Flatpak Steam")
+                write!(f, "Choose GE Proton releases from list for Flatpak Steam")
             }
             Self::ChoseReleasesCustomDir => write!(
                 f,
-                "Chose GE Proton Releases and install to custom directory"
+                "Choose GE Proton releases and install to custom directory"
             ),
         }
     }
 }
 
 fn tag_menu(options: Vec<String>) -> Vec<String> {
-    let answer = MultiSelect::new("Select the Versions you want to download :", options)
+    let answer = MultiSelect::new("Select the versions you want to download :", options)
         .with_default(&vec![0 as usize])
         .prompt();
 
@@ -101,7 +101,7 @@ fn tag_menu(options: Vec<String>) -> Vec<String> {
 fn confirm_menu(text: String) -> bool {
     let answer = Confirm::new(&text)
         .with_default(false)
-        .with_help_message("If you chose yes, we will re install it.")
+        .with_help_message("If you choose yes, we will re-install it.")
         .prompt();
 
     match answer {
@@ -149,7 +149,7 @@ async fn main() {
                 tag.version.clone(),
             ) {
                 if !confirm_menu(format!(
-                    "Version {} exists in installation path. Overwrite ?",
+                    "Version {} exists in installation path. Overwrite?",
                     tag.version
                 )) {
                     return;
@@ -169,7 +169,7 @@ async fn main() {
                 tag.version.clone(),
             ) {
                 if !confirm_menu(format!(
-                    "Version {} exists in installation path. Overwrite ?",
+                    "Version {} exists in installation path. Overwrite?",
                     tag.version
                 )) {
                     return;
@@ -192,7 +192,7 @@ async fn main() {
                 if file::check_if_exists(constants::DEFAULT_INSTALL_DIR.to_owned(), tag.to_owned())
                 {
                     if !confirm_menu(format!(
-                        "Version {} exists in installation path. Overwrite ?",
+                        "Version {} exists in installation path. Overwrite?",
                         tag
                     )) {
                         return;
@@ -217,7 +217,7 @@ async fn main() {
                     tag.to_owned(),
                 ) {
                     if !confirm_menu(format!(
-                        "Version {} exists in installation path. Overwrite ?",
+                        "Version {} exists in installation path. Overwrite?",
                         tag
                     )) {
                         return;
@@ -232,7 +232,7 @@ async fn main() {
         Menu::ChoseReleasesCustomDir => {
             let current_dir = std::env::current_dir().unwrap();
             let help_message = format!("Current directory: {}", current_dir.to_string_lossy());
-            let answer = Text::new("Installation Path:")
+            let answer = Text::new("Installation path:")
                 .with_autocomplete(file_path::FilePathCompleter::default())
                 .with_help_message(&help_message)
                 .prompt();
@@ -257,7 +257,7 @@ async fn main() {
                 if file::check_if_exists(constants::DEFAULT_INSTALL_DIR.to_owned(), tag.to_owned())
                 {
                     if !confirm_menu(format!(
-                        "Version {} exists in installation path. Overwrite ?",
+                        "Version {} exists in installation path. Overwrite?",
                         tag
                     )) {
                         return;
