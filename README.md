@@ -1,6 +1,6 @@
 # Protonup-rs
 
-Lib, CLI and GUI program to automate the installation and update of Proton-GE
+Lib, CLI and GUI(wip) program to automate the installation and update of Proton-GE
 
 > **NOTE**: This is not nearly as feature complete as the original Protonup.
 > I've create it because the original project had a few issues with its Python dependencies (that most likely got fixed already). 
@@ -55,3 +55,6 @@ mv ./target/release/protonup-rs "your path"
 ## GUI
 
 Not ready for usage.
+
+The GUI is in its [early stages](https://github.com/auyer/Protonup-rs/tree/feature/gui). My current plan is to develop it in the iced framework, but GUI development is not my forte.
+

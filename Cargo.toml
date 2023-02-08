@@ -1,7 +1,7 @@
 [workspace]
 resolver="2"
 
-members = ["libprotonup", "protonup-rs", "protonup-gui"]
+members = ["libprotonup", "protonup-rs"]
 
 [profile.release]
 opt-level = 3
