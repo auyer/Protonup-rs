@@ -1,3 +1,4 @@
+use clap::Parser;
 use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
 use inquire::{Confirm, MultiSelect, Select, Text};
 use std::fmt;
@@ -6,7 +7,6 @@ use std::fs::create_dir_all;
 use std::sync::atomic::Ordering;
 use std::thread;
 use std::{sync::Arc, time::Duration};
-use clap::Parser;
 mod file_path;
 
 use libprotonup::{constants, file, github, utils};
@@ -138,7 +138,7 @@ async fn main() {
     }
     let answer: Menu = Select::new("ProtonUp Menu: Chose your action:", Menu::VARIANTS.to_vec())
         .prompt()
-        .unwrap();
+        .unwrap_or_else(|_| std::process::exit(0));
 
     match answer {
         Menu::QuickUpdate => {
