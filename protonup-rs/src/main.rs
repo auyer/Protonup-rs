@@ -85,15 +85,15 @@ impl fmt::Display for Menu {
 
 fn tag_menu(options: Vec<String>) -> Vec<String> {
     let answer = MultiSelect::new("Select the versions you want to download :", options)
-        .with_default(&vec![0 as usize])
+        .with_default(&[0_usize])
         .prompt();
 
     match answer {
-        Ok(list) => return list,
+        Ok(list) => list,
 
         Err(_) => {
             println!("The tag list could not be processed");
-            return vec![];
+            vec![]
         }
     }
 }
@@ -104,10 +104,7 @@ fn confirm_menu(text: String) -> bool {
         .with_help_message("If you choose yes, we will re-install it.")
         .prompt();
 
-    match answer {
-        Ok(choice) => choice,
-        Err(_) => false,
-    }
+    answer.unwrap_or(false)
 }
 
 #[tokio::main]
@@ -147,19 +144,16 @@ async fn main() {
             if file::check_if_exists(
                 constants::DEFAULT_INSTALL_DIR.to_owned(),
                 tag.version.clone(),
-            ) {
-                if !confirm_menu(format!(
-                    "Version {} exists in installation path. Overwrite?",
-                    tag.version
-                )) {
-                    return;
-                }
+            ) && !confirm_menu(format!(
+                "Version {} exists in installation path. Overwrite?",
+                tag.version
+            )) {
+                return;
             }
 
             download_file("latest", constants::DEFAULT_INSTALL_DIR.to_string())
                 .await
                 .unwrap();
-            return;
         }
         Menu::QuickUpdateFlatpak => {
             let tag = github::fetch_data_from_tag("latest").await.unwrap();
@@ -167,67 +161,51 @@ async fn main() {
             if file::check_if_exists(
                 constants::DEFAULT_INSTALL_DIR_FLATPAK.to_owned(),
                 tag.version.clone(),
-            ) {
-                if !confirm_menu(format!(
-                    "Version {} exists in installation path. Overwrite?",
-                    tag.version
-                )) {
-                    return;
-                }
+            ) && !confirm_menu(format!(
+                "Version {} exists in installation path. Overwrite?",
+                tag.version
+            )) {
+                return;
             }
 
             download_file("latest", constants::DEFAULT_INSTALL_DIR.to_string())
                 .await
                 .unwrap();
-            return;
         }
         Menu::ChoseReleases => {
             let release_list = libprotonup::github::list_releases().await.unwrap();
-            let tag_list: Vec<String> = release_list
-                .into_iter()
-                .map(|r| (r.tag_name.clone()))
-                .collect();
+            let tag_list: Vec<String> = release_list.into_iter().map(|r| (r.tag_name)).collect();
             let list = tag_menu(tag_list);
             for tag in list.iter() {
                 if file::check_if_exists(constants::DEFAULT_INSTALL_DIR.to_owned(), tag.to_owned())
+                    && !confirm_menu(format!(
+                        "Version {tag} exists in installation path. Overwrite?"
+                    ))
                 {
-                    if !confirm_menu(format!(
-                        "Version {} exists in installation path. Overwrite?",
-                        tag
-                    )) {
-                        return;
-                    }
+                    return;
                 }
                 download_file(tag, constants::DEFAULT_INSTALL_DIR.to_string())
                     .await
                     .unwrap();
             }
-            return;
         }
         Menu::ChoseReleasesFlatpak => {
             let release_list = libprotonup::github::list_releases().await.unwrap();
-            let tag_list: Vec<String> = release_list
-                .into_iter()
-                .map(|r| (r.tag_name.clone()))
-                .collect();
+            let tag_list: Vec<String> = release_list.into_iter().map(|r| (r.tag_name)).collect();
             let list = tag_menu(tag_list);
             for tag in list.iter() {
                 if file::check_if_exists(
                     constants::DEFAULT_INSTALL_DIR_FLATPAK.to_owned(),
                     tag.to_owned(),
-                ) {
-                    if !confirm_menu(format!(
-                        "Version {} exists in installation path. Overwrite?",
-                        tag
-                    )) {
-                        return;
-                    }
+                ) && !confirm_menu(format!(
+                    "Version {tag} exists in installation path. Overwrite?"
+                )) {
+                    return;
                 }
                 download_file(tag, constants::DEFAULT_INSTALL_DIR_FLATPAK.to_string())
                     .await
                     .unwrap();
             }
-            return;
         }
         Menu::ChoseReleasesCustomDir => {
             let current_dir = std::env::current_dir().unwrap();
@@ -240,33 +218,24 @@ async fn main() {
             let chosen_path = match answer {
                 Ok(path) => path,
                 Err(error) => {
-                    println!(
-                        "Error choosing custom path. Using the default. Error: {:?}",
-                        error
-                    );
+                    println!("Error choosing custom path. Using the default. Error: {error:?}");
                     constants::DEFAULT_INSTALL_DIR.to_string()
                 }
             };
             let release_list = libprotonup::github::list_releases().await.unwrap();
-            let tag_list: Vec<String> = release_list
-                .into_iter()
-                .map(|r| (r.tag_name.clone()))
-                .collect();
+            let tag_list: Vec<String> = release_list.into_iter().map(|r| (r.tag_name)).collect();
             let list = tag_menu(tag_list);
             for tag in list.iter() {
                 if file::check_if_exists(constants::DEFAULT_INSTALL_DIR.to_owned(), tag.to_owned())
+                    && !confirm_menu(format!(
+                        "Version {tag} exists in installation path. Overwrite?"
+                    ))
                 {
-                    if !confirm_menu(format!(
-                        "Version {} exists in installation path. Overwrite?",
-                        tag
-                    )) {
-                        return;
-                    }
+                    return;
                 }
 
                 download_file(tag, chosen_path.clone()).await.unwrap();
             }
-            return;
         }
     }
 }
@@ -315,7 +284,7 @@ pub async fn download_file(tag: &str, install_path: String) -> Result<(), String
             }
             thread::sleep(wait_time);
         }
-        pb.set_message(format!("Downloaded {} to {}", url, i_dir));
+        pb.set_message(format!("Downloaded {url} to {i_dir}"));
         pb.abandon(); // closes progress bas without blanking terminal
 
         println!("Checking file integrity"); // This is being printed here because the progress bar needs to be closed before printing.
@@ -324,7 +293,7 @@ pub async fn download_file(tag: &str, install_path: String) -> Result<(), String
     file::download_file_progress(
         download.download,
         download.size,
-        temp_dir.clone(),
+        temp_dir.clone().as_path(),
         progress,
         done,
     )
@@ -334,10 +303,10 @@ pub async fn download_file(tag: &str, install_path: String) -> Result<(), String
         return Err("Failed checking file hash".to_string());
     }
     println!("Unpacking files into install location. Please wait");
-    file::decompress(temp_dir, install_dir.clone()).unwrap();
+    file::decompress(temp_dir.as_path(), install_dir.clone().as_path()).unwrap();
     println!(
         "Done! Restart Steam. Proton GE installed in {}",
         install_dir.to_string_lossy()
     );
-    return Ok(());
+    Ok(())
 }
