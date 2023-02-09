@@ -1,0 +1,30 @@
+name-template: "v$RESOLVED_VERSION"
+tag-template: "v$RESOLVED_VERSION"
+categories:
+  - title: "🚀 Features"
+    labels:
+      - "🚀 Feature"
+  - title: "💅 Improvements"
+    labels:
+      - "💅 Improvement"
+  - title: "🐛 Bug Fix"
+    labels:
+      - "🐛 Bug"
+  - title: "📚 Documentation"
+    labels:
+      - "📚 Docs"
+  - title: "🧪 Tests"
+    labels:
+      - "🧪 Tests"
+  - title: "☁️ CI"
+    labels:
+      - "☁️ CI"
+  - title: "🤖 Dependabot"
+    labels:
+      - "🤖 Dependabot"
+change-template: "- $TITLE @$AUTHOR (#$NUMBER)"
+change-title-escapes: '\<*_&'
+version-resolver:
+  default: patch
+template: |
+  $CHANGES
