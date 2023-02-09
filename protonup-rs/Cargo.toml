@@ -16,7 +16,7 @@ indicatif = { version = "0.17", features = [
   "improved_unicode",
   "unicode-segmentation",
 ] }
-structopt = "0.3"
 tokio = { version = "1.22", features = ["macros", "rt-multi-thread"] }
+clap = { version = "4.1.4", features = ["derive"] }
 
 

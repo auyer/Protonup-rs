@@ -6,12 +6,12 @@ use std::fs::create_dir_all;
 use std::sync::atomic::Ordering;
 use std::thread;
 use std::{sync::Arc, time::Duration};
-use structopt::StructOpt;
+use clap::Parser;
 mod file_path;
 
 use libprotonup::{constants, file, github, utils};
 
-#[derive(Debug, StructOpt)]
+#[derive(Debug, Parser)]
 struct Opt {
     // /// install a specific version
     // #[structopt(short, long)]
@@ -30,9 +30,9 @@ struct Opt {
     // dir: Option<String>,
     // /// disable prompts and logs
     /// Skip Menu and download latest directly
-    #[structopt(short, long)]
+    #[arg(short, long)]
     quick_download: bool,
-    #[structopt(short = "f", long)]
+    #[arg(short = 'f', long)]
     quick_download_flatpak: bool,
     // /// download only
     // #[structopt(long)]
@@ -122,7 +122,7 @@ async fn main() {
         quick_download_flatpak,
         // download,
         // releases,
-    } = Opt::from_args();
+    } = Opt::parse();
 
     if quick_download {
         download_file("latest", constants::DEFAULT_INSTALL_DIR.to_string())
