@@ -50,7 +50,7 @@ pub struct Download {
     pub created_at: String,
 }
 
-pub async fn fetch_data_from_tag(tag: &str) -> Result<Download, reqwest::Error> {
+pub async fn fetch_data_from_tag(tag: &str, lutris: Option<char>) -> Result<Download, reqwest::Error> {
     let agent = format!("{}/v{}", constants::USER_AGENT, constants::VERSION,);
 
     let client = reqwest::Client::builder().user_agent(agent).build()?;
