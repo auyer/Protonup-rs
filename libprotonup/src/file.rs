@@ -2,6 +2,7 @@ use super::constants;
 use crate::utils;
 use anyhow::{Context, Result};
 use flate2::read::GzDecoder;
+use xz2::read::XzDecoder;
 use futures_util::StreamExt;
 use reqwest::header::USER_AGENT;
 use sha2::{Digest, Sha512};
@@ -23,6 +24,17 @@ fn path_result(path: &Path) -> String {
 }
 
 pub fn decompress(from_path: &Path, destination_path: &Path) -> Result<()> {
+    let path_str = from_path.as_os_str().to_string_lossy();
+
+    if path_str.ends_with("tar.gz") { decompress_gz(from_path, destination_path) }
+
+    else if path_str.ends_with("tar.xz") { decompress_xz(from_path, destination_path) }
+
+    else { println!("no decompress\nPath: {:?}", from_path); Ok(()) }
+}
+
+/// Decompress a tar.gz file
+fn decompress_gz(from_path: &Path, destination_path: &Path) -> Result<()> {
     let file = File::open(from_path).with_context(|| {
         format!(
             "[Decompressing] Failed to open file from Path: {}",
@@ -31,6 +43,26 @@ pub fn decompress(from_path: &Path, destination_path: &Path) -> Result<()> {
     })?;
 
     let mut archive = Archive::new(GzDecoder::new(file));
+
+    archive.unpack(destination_path).with_context(|| {
+        format!(
+            "[Decompressing] Failed to unpack into destination : {}",
+            path_result(destination_path)
+        )
+    })?;
+    Ok(())
+}
+
+/// Decompress a tar.xz file
+fn decompress_xz(from_path: &Path, destination_path: &Path) -> Result<()> {
+    let file = File::open(from_path).with_context(|| {
+        format!(
+            "[Decompressing] Failed to open file from Path: {}",
+            path_result(from_path),
+        )
+    })?;
+
+    let mut archive = Archive::new(XzDecoder::new(file));
 
     archive.unpack(destination_path).with_context(|| {
         format!(
