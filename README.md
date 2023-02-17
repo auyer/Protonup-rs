@@ -31,7 +31,7 @@ It is a single binary. You can just run it, or add it to your path so you can ca
 Quick way to add it to your path:
 ```
 cd Downloads
-sudo unzip protonup-rs-linux-amd64.zip -d /usr/bin
+unzip protonup-rs-linux-amd64.zip -d ~/.local/bin
 ```
 
 
