@@ -392,7 +392,7 @@ pub async fn download_file(tag: &str, install_path: String, lutris: bool) -> Res
     temp_dir.push(
         if download.download.ends_with("tar.gz") {format!("{}.tar.gz", &download.version)}
         else if download.download.ends_with("tar.xz") {format!("{}.tar.xz", &download.version)}
-        else {println!("Couldn't read file extension"); format!("{}.tar.gz", &download.version)}
+        else { eprintln!("Downloaded file wasn't of the expected type. (tar.(gz/xz)"); std::process::exit(1)}
     );
 
     // install_dir
