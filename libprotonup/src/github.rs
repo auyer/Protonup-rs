@@ -31,7 +31,11 @@ pub async fn list_releases(lutris: bool) -> Result<ReleaseList, reqwest::Error> 
         "{}/{}/{}/releases",
         constants::GITHUB,
         constants::GITHUB_ACCOUNT,
-        if lutris {constants::LUTRIS_GITHUB_REPO} else {constants::GITHUB_REPO},
+        if lutris {
+            constants::LUTRIS_GITHUB_REPO
+        } else {
+            constants::GITHUB_REPO
+        },
     );
 
     let client = reqwest::Client::builder().user_agent(agent).build()?;
@@ -62,7 +66,11 @@ pub async fn fetch_data_from_tag(tag: &str, lutris: bool) -> Result<Download, re
                 "{}/{}/{}/releases/latest",
                 constants::GITHUB,
                 constants::GITHUB_ACCOUNT,
-                if lutris { constants::LUTRIS_GITHUB_REPO } else { constants::GITHUB_REPO },
+                if lutris {
+                    constants::LUTRIS_GITHUB_REPO
+                } else {
+                    constants::GITHUB_REPO
+                },
             );
             let rel: Release = client.get(url).send().await?.json().await?;
             rel
@@ -72,7 +80,11 @@ pub async fn fetch_data_from_tag(tag: &str, lutris: bool) -> Result<Download, re
                 "{}/{}/{}/releases/tags/{}",
                 constants::GITHUB,
                 constants::GITHUB_ACCOUNT,
-                if lutris { constants::LUTRIS_GITHUB_REPO } else { constants::GITHUB_REPO },
+                if lutris {
+                    constants::LUTRIS_GITHUB_REPO
+                } else {
+                    constants::GITHUB_REPO
+                },
                 &tag
             );
             let rel: Release = client.get(url).send().await?.json().await?;
@@ -99,12 +111,10 @@ pub async fn fetch_data_from_tag(tag: &str, lutris: bool) -> Result<Download, re
     Ok(download)
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    
     #[actix_rt::test]
     async fn test_data_fetch() {
         let lutris = true;
@@ -112,9 +122,11 @@ mod tests {
 
         let result = match fetch_data_from_tag(tag, lutris).await {
             Ok(data) => data,
-            Err(e) => {eprintln!("Error: {}", e); std::process::exit(1)}
+            Err(e) => {
+                eprintln!("Error: {}", e);
+                std::process::exit(1)
+            }
         };
-
 
         println!("Got result: {:?}", result);
     }
@@ -125,21 +137,29 @@ mod tests {
 
         let client = match reqwest::Client::builder().user_agent(agent).build() {
             Ok(client) => client,
-            Err(e) => {eprintln!("Error: {}", e); std::process::exit(1)},
+            Err(e) => {
+                eprintln!("Error: {}", e);
+                std::process::exit(1)
+            }
         };
 
         let url = format!(
             "{}/{}/{}/releases/latest",
             constants::GITHUB,
             constants::GITHUB_ACCOUNT,
-            constants::LUTRIS_GITHUB_REPO ,
+            constants::LUTRIS_GITHUB_REPO,
         );
 
         let rel: Release = match client.get(url).send().await {
             Ok(res) => res,
-            Err(e) => {eprintln!("Error: {}", e); std::process::exit(1)},
+            Err(e) => {
+                eprintln!("Error: {}", e);
+                std::process::exit(1)
+            }
         }
-        .json().await.unwrap(); 
+        .json()
+        .await
+        .unwrap();
 
         println!("Result: {:?}", rel);
     }
