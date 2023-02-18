@@ -1,6 +1,6 @@
 [package]
 name = "protonup-rs"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 authors = ["Auyer <auyer@rcpassos.me>"]
 repository = "https://github.com/auyer/protonup-rs"
@@ -16,7 +16,7 @@ indicatif = { version = "0.17", features = [
   "improved_unicode",
   "unicode-segmentation",
 ] }
-tokio = { version = "1.22", features = ["macros", "rt-multi-thread"] }
-clap = { version = "4.1.4", features = ["derive"] }
+tokio = { version = "1.25", features = ["macros", "rt-multi-thread"] }
+clap = { version = "4.1.6", features = ["derive"] }
 
 
