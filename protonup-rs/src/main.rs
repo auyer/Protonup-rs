@@ -185,6 +185,7 @@ async fn main() {
     }
 
     let answer: Menu = Select::new("ProtonUp Menu: Chose your action:", Menu::VARIANTS.to_vec())
+        .with_page_size(9)
         .prompt()
         .unwrap_or_else(|_| std::process::exit(0));
 

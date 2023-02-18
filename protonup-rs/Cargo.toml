@@ -12,7 +12,7 @@ description = "TUI Program for Custom Proton Download and installation written i
 [dependencies]
 
 libprotonup = { path = "../libprotonup" }
-inquire = "0.5"
+inquire = { version = "0.5", default-features = false, features = ["termion"] }
 indicatif = { version = "0.17", features = [
   "improved_unicode",
   "unicode-segmentation",
