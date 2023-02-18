@@ -34,6 +34,11 @@ struct Opt {
     quick_download: bool,
     #[arg(short = 'f', long)]
     quick_download_flatpak: bool,
+    /// Download latest Wine GE for Lutris
+    #[arg(short, long)]
+    lutris_quick_download: bool,
+    #[arg(short = 'L', long)]
+    lutris_quick_download_flatpak: bool,
     // /// download only
     // #[structopt(long)]
     // download: bool,
@@ -47,9 +52,13 @@ struct Opt {
 enum Menu {
     QuickUpdate,
     QuickUpdateFlatpak,
+    QuickUpdateLutris,
+    QuickUpdateLutrisFlatpak,
     ChoseReleases,
     ChoseReleasesFlatpak,
     ChoseReleasesCustomDir,
+    ChoseReleasesLutris,
+    ChoseReleasesLutrisFlatpak,
 }
 
 impl Menu {
@@ -57,20 +66,26 @@ impl Menu {
     const VARIANTS: &'static [Menu] = &[
         Self::QuickUpdate,
         Self::QuickUpdateFlatpak,
+        Self::QuickUpdateLutris,
+        Self::QuickUpdateLutrisFlatpak,
         Self::ChoseReleases,
         Self::ChoseReleasesFlatpak,
         Self::ChoseReleasesCustomDir,
+        Self::ChoseReleasesLutris,
+        Self::ChoseReleasesLutrisFlatpak,
     ];
 }
 
 impl fmt::Display for Menu {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            Self::QuickUpdate => write!(f, "Quick update (download latest GE Proton)"),
+            Self::QuickUpdate => write!(f, "Quick Update Steam (download latest GE Proton)"),
             Self::QuickUpdateFlatpak => write!(
                 f,
-                "Quick update (download latest GE Proton) for Flatpak Steam"
+                "Quick Update (download latest GE Proton) for Flatpak Steam"
             ),
+            Self::QuickUpdateLutris => write!(f,"Quick Update Lutris (download latest Wine GE)"),
+            Self::QuickUpdateLutrisFlatpak => write!(f, "Quick Update Lutris Flatpak (download latest Wine GE)"),
             Self::ChoseReleases => write!(f, "Choose GE Proton releases from list"),
             Self::ChoseReleasesFlatpak => {
                 write!(f, "Choose GE Proton releases from list for Flatpak Steam")
@@ -79,6 +94,14 @@ impl fmt::Display for Menu {
                 f,
                 "Choose GE Proton releases and install to custom directory"
             ),
+            Self::ChoseReleasesLutris => write!(
+                f,
+                "Choose Wine GE releases for Lutris"
+            ),
+            Self::ChoseReleasesLutrisFlatpak => write!(
+                f,
+                "Choose Wine GE releases for Flatpak Lutris"
+            )
         }
     }
 }
@@ -117,29 +140,50 @@ async fn main() {
         // dir,
         quick_download,
         quick_download_flatpak,
+        lutris_quick_download,
+        lutris_quick_download_flatpak,
         // download,
         // releases,
     } = Opt::parse();
 
     if quick_download {
-        download_file("latest", constants::DEFAULT_INSTALL_DIR.to_string())
+        download_file("latest", constants::DEFAULT_INSTALL_DIR.to_string(), false)
             .await
             .unwrap();
         return;
     }
+
     if quick_download_flatpak {
-        download_file("latest", constants::DEFAULT_INSTALL_DIR_FLATPAK.to_string())
+        download_file("latest", constants::DEFAULT_INSTALL_DIR_FLATPAK.to_string(), false)
             .await
             .unwrap();
         return;
     }
+
+    if lutris_quick_download {
+        download_file("latest", constants::DEFAULT_LUTRIS_INSTALL_DIR.to_string(), true)
+            .await
+            .unwrap();
+        return;
+    }
+
+    if lutris_quick_download_flatpak {
+        download_file("latest", constants::DEFAULT_LUTRIS_INSTALL_DIR_FLATPAK.to_string(), true)
+            .await
+            .unwrap();
+        return;
+    }
+
     let answer: Menu = Select::new("ProtonUp Menu: Chose your action:", Menu::VARIANTS.to_vec())
         .prompt()
         .unwrap_or_else(|_| std::process::exit(0));
 
     match answer {
         Menu::QuickUpdate => {
-            let tag = github::fetch_data_from_tag("latest").await.unwrap();
+            let tag = match github::fetch_data_from_tag("latest", false).await {
+                Ok(data) => data,
+                Err(e) => {eprintln!("Failed to fetch Github data, make sure you're connected to the internet.\nError: {}", e); std::process::exit(1)}
+            };
 
             if file::check_if_exists(
                 constants::DEFAULT_INSTALL_DIR.to_owned(),
@@ -151,12 +195,15 @@ async fn main() {
                 return;
             }
 
-            download_file("latest", constants::DEFAULT_INSTALL_DIR.to_string())
+            download_file("latest", constants::DEFAULT_INSTALL_DIR.to_string(), false)
                 .await
                 .unwrap();
-        }
+        },
         Menu::QuickUpdateFlatpak => {
-            let tag = github::fetch_data_from_tag("latest").await.unwrap();
+            let tag = match github::fetch_data_from_tag("latest", false).await {
+                Ok(data) => data,
+                Err(e) => {eprintln!("Failed to fetch Github data, make sure you're connected to the internet.\nError: {}", e); std::process::exit(1)}
+            };
 
             if file::check_if_exists(
                 constants::DEFAULT_INSTALL_DIR_FLATPAK.to_owned(),
@@ -168,12 +215,59 @@ async fn main() {
                 return;
             }
 
-            download_file("latest", constants::DEFAULT_INSTALL_DIR.to_string())
+            download_file("latest", constants::DEFAULT_INSTALL_DIR.to_string(), false)
                 .await
                 .unwrap();
-        }
+        },
+
+        Menu::QuickUpdateLutris => {
+            let tag = match github::fetch_data_from_tag("latest", true).await {
+                Ok(data) => data,
+                Err(e) => {eprintln!("Failed to fetch Github data, make sure you're connected to the internet.\nError: {}", e); std::process::exit(1)}
+            };
+
+            if file::check_if_exists(
+                constants::DEFAULT_LUTRIS_INSTALL_DIR.to_owned(),
+                tag.version.clone(),
+            ) && !confirm_menu(format!(
+                "Version {} already exists; Overwrite?",
+                tag.version
+            )) {
+                return;
+            }
+
+            match download_file("latest", constants::DEFAULT_LUTRIS_INSTALL_DIR.to_string(), true).await {
+                Ok(_) => {}, 
+                Err(e) => {eprintln!("Error downloading {}, make sure you're connected to the internet\nError: {}", tag.version, e)}
+            }
+        },
+
+        Menu::QuickUpdateLutrisFlatpak => {
+            let tag = match github::fetch_data_from_tag("latest", true).await {
+                Ok(data) => data,
+                Err(e) => {eprintln!("Failed to fetch Github data, make sure you're connected to the internet.\nError: {}", e); std::process::exit(1)}
+            };
+            if file::check_if_exists(
+                constants::DEFAULT_LUTRIS_INSTALL_DIR_FLATPAK.to_owned(),
+                tag.version.clone(),
+            ) && !confirm_menu(format!(
+                "Version {} already exists; Overwrite?",
+                tag.version
+            )) {
+                return;
+            }
+
+            match download_file("latest", constants::DEFAULT_LUTRIS_INSTALL_DIR_FLATPAK.to_string(), true).await {
+                Ok(_) => {}, 
+                Err(e) => {eprintln!("Error downloading {}, make sure you're connected to the internet\nError: {}", tag.version, e)}
+            }
+        },
+
         Menu::ChoseReleases => {
-            let release_list = libprotonup::github::list_releases().await.unwrap();
+            let release_list = match github::list_releases(false).await {
+                Ok(data) => data,
+                Err(e) => {eprintln!("Failed to fetch Github data, make sure you're connected to the internet.\nError: {}", e); std::process::exit(1)}
+            };
             let tag_list: Vec<String> = release_list.into_iter().map(|r| (r.tag_name)).collect();
             let list = tag_menu(tag_list);
             for tag in list.iter() {
@@ -184,13 +278,16 @@ async fn main() {
                 {
                     return;
                 }
-                download_file(tag, constants::DEFAULT_INSTALL_DIR.to_string())
+                download_file(tag, constants::DEFAULT_INSTALL_DIR.to_string(), false)
                     .await
                     .unwrap();
             }
-        }
+        },
         Menu::ChoseReleasesFlatpak => {
-            let release_list = libprotonup::github::list_releases().await.unwrap();
+            let release_list = match github::list_releases(false).await {
+                Ok(data) => data,
+                Err(e) => {eprintln!("Failed to fetch Github data, make sure you're connected to the internet.\nError: {}", e); std::process::exit(1)}
+            };
             let tag_list: Vec<String> = release_list.into_iter().map(|r| (r.tag_name)).collect();
             let list = tag_menu(tag_list);
             for tag in list.iter() {
@@ -202,11 +299,11 @@ async fn main() {
                 )) {
                     return;
                 }
-                download_file(tag, constants::DEFAULT_INSTALL_DIR_FLATPAK.to_string())
+                download_file(tag, constants::DEFAULT_INSTALL_DIR_FLATPAK.to_string(), false)
                     .await
                     .unwrap();
             }
-        }
+        },
         Menu::ChoseReleasesCustomDir => {
             let current_dir = std::env::current_dir().unwrap();
             let help_message = format!("Current directory: {}", current_dir.to_string_lossy());
@@ -222,7 +319,10 @@ async fn main() {
                     constants::DEFAULT_INSTALL_DIR.to_string()
                 }
             };
-            let release_list = libprotonup::github::list_releases().await.unwrap();
+            let release_list = match github::list_releases(false).await {
+                Ok(data) => data,
+                Err(e) => {eprintln!("Failed to fetch Github data, make sure you're connected to the internet.\nError: {}", e); std::process::exit(1)}
+            };
             let tag_list: Vec<String> = release_list.into_iter().map(|r| (r.tag_name)).collect();
             let list = tag_menu(tag_list);
             for tag in list.iter() {
@@ -234,19 +334,66 @@ async fn main() {
                     return;
                 }
 
-                download_file(tag, chosen_path.clone()).await.unwrap();
+                download_file(tag, chosen_path.clone(), false).await.unwrap();
+            }
+        },
+        Menu::ChoseReleasesLutris => {
+            let release_list = match github::list_releases(true).await {
+                Ok(data) => data,
+                Err(e) => {eprintln!("Failed to fetch Github data, make sure you're connected to the internet.\nError: {}", e); std::process::exit(1)}
+            };
+            let tag_list: Vec<String> = release_list.into_iter().map(|r| (r.tag_name)).collect();
+            let list = tag_menu(tag_list);
+            for tag in list.iter() {
+                if file::check_if_exists(constants::DEFAULT_LUTRIS_INSTALL_DIR.to_owned(), tag.to_owned())
+                    && !confirm_menu(format!(
+                        "Version {tag} exists in installation path. Overwrite?"
+                    ))
+                {
+                    return;
+                }
+                download_file(tag, constants::DEFAULT_LUTRIS_INSTALL_DIR.to_string(), true)
+                    .await
+                    .unwrap();
+            }
+        }
+        Menu::ChoseReleasesLutrisFlatpak => {
+            let release_list = match github::list_releases(true).await {
+                Ok(data) => data,
+                Err(e) => {eprintln!("Failed to fetch Github data, make sure you're connected to the internet.\nError: {}", e); std::process::exit(1)}
+            };
+            let tag_list: Vec<String> = release_list.into_iter().map(|r| (r.tag_name)).collect();
+            let list = tag_menu(tag_list);
+            for tag in list.iter() {
+                if file::check_if_exists(constants::DEFAULT_LUTRIS_INSTALL_DIR_FLATPAK.to_owned(), tag.to_owned())
+                    && !confirm_menu(format!(
+                        "Version {tag} exists in installation path. Overwrite?"
+                    ))
+                {
+                    return;
+                }
+                download_file(tag, constants::DEFAULT_LUTRIS_INSTALL_DIR_FLATPAK.to_string(), true)
+                    .await
+                    .unwrap();
             }
         }
     }
 }
 
-pub async fn download_file(tag: &str, install_path: String) -> Result<(), String> {
+pub async fn download_file(tag: &str, install_path: String, lutris: bool) -> Result<(), String> {
     let install_dir = utils::expand_tilde(install_path).unwrap();
     let mut temp_dir = utils::expand_tilde(constants::TEMP_DIR).unwrap();
 
-    let download = github::fetch_data_from_tag(tag).await.unwrap();
+    let download = match github::fetch_data_from_tag(tag, lutris).await {
+        Ok(data) => data,
+        Err(e) => {eprintln!("Failed to fetch GitHub data, make sure you're connected to the internet\nError: {}", e); std::process::exit(1)}
+    };
 
-    temp_dir.push(format!("{}.tar.gz", &download.version));
+    temp_dir.push(
+        if download.download.ends_with("tar.gz") {format!("{}.tar.gz", &download.version)}
+        else if download.download.ends_with("tar.xz") {format!("{}.tar.xz", &download.version)}
+        else { eprintln!("Downloaded file wasn't of the expected type. (tar.(gz/xz)"); std::process::exit(1)}
+    );
 
     // install_dir
     create_dir_all(&install_dir).unwrap();
@@ -263,7 +410,7 @@ pub async fn download_file(tag: &str, install_path: String) -> Result<(), String
     let progress_read = Arc::clone(&progress);
     let done_read = Arc::clone(&done);
     let url = String::from(&download.download);
-    let i_dir = String::from(install_dir.to_str().unwrap());
+    let tmp_dir = String::from(temp_dir.to_str().unwrap());
 
     // start ProgressBar in another thread
     thread::spawn(move || {
@@ -284,7 +431,7 @@ pub async fn download_file(tag: &str, install_path: String) -> Result<(), String
             }
             thread::sleep(wait_time);
         }
-        pb.set_message(format!("Downloaded {url} to {i_dir}"));
+        pb.set_message(format!("Downloaded {url} to {tmp_dir}"));
         pb.abandon(); // closes progress bas without blanking terminal
 
         println!("Checking file integrity"); // This is being printed here because the progress bar needs to be closed before printing.
@@ -305,8 +452,9 @@ pub async fn download_file(tag: &str, install_path: String) -> Result<(), String
     println!("Unpacking files into install location. Please wait");
     file::decompress(temp_dir.as_path(), install_dir.clone().as_path()).unwrap();
     println!(
-        "Done! Restart Steam. Proton GE installed in {}",
-        install_dir.to_string_lossy()
+        "Done! Restart {}. Proton GE installed in {}",
+        if lutris {"Lutris"} else {"Steam"},
+        install_dir.to_string_lossy(),
     );
     Ok(())
 }
