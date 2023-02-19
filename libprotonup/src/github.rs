@@ -24,14 +24,18 @@ pub struct Asset {
     browser_download_url: String,
 }
 
-pub async fn list_releases() -> Result<ReleaseList, reqwest::Error> {
+pub async fn list_releases(lutris: bool) -> Result<ReleaseList, reqwest::Error> {
     let agent = format!("{}/v{}", constants::USER_AGENT, constants::VERSION,);
 
     let url = format!(
         "{}/{}/{}/releases",
         constants::GITHUB,
         constants::GITHUB_ACCOUNT,
-        constants::GITHUB_REPO,
+        if lutris {
+            constants::LUTRIS_GITHUB_REPO
+        } else {
+            constants::GITHUB_REPO
+        },
     );
 
     let client = reqwest::Client::builder().user_agent(agent).build()?;
@@ -50,7 +54,7 @@ pub struct Download {
     pub created_at: String,
 }
 
-pub async fn fetch_data_from_tag(tag: &str) -> Result<Download, reqwest::Error> {
+pub async fn fetch_data_from_tag(tag: &str, lutris: bool) -> Result<Download, reqwest::Error> {
     let agent = format!("{}/v{}", constants::USER_AGENT, constants::VERSION,);
 
     let client = reqwest::Client::builder().user_agent(agent).build()?;
@@ -62,7 +66,11 @@ pub async fn fetch_data_from_tag(tag: &str) -> Result<Download, reqwest::Error> 
                 "{}/{}/{}/releases/latest",
                 constants::GITHUB,
                 constants::GITHUB_ACCOUNT,
-                constants::GITHUB_REPO,
+                if lutris {
+                    constants::LUTRIS_GITHUB_REPO
+                } else {
+                    constants::GITHUB_REPO
+                },
             );
             let rel: Release = client.get(url).send().await?.json().await?;
             rel
@@ -72,7 +80,11 @@ pub async fn fetch_data_from_tag(tag: &str) -> Result<Download, reqwest::Error> 
                 "{}/{}/{}/releases/tags/{}",
                 constants::GITHUB,
                 constants::GITHUB_ACCOUNT,
-                constants::GITHUB_REPO,
+                if lutris {
+                    constants::LUTRIS_GITHUB_REPO
+                } else {
+                    constants::GITHUB_REPO
+                },
                 &tag
             );
             let rel: Release = client.get(url).send().await?.json().await?;
@@ -90,6 +102,65 @@ pub async fn fetch_data_from_tag(tag: &str) -> Result<Download, reqwest::Error> 
             download.download = asset.browser_download_url.as_str().to_string();
             download.size = asset.size as u64;
         }
+        if asset.name.ends_with("tar.xz") {
+            download.created_at = asset.created_at.clone();
+            download.download = asset.browser_download_url.as_str().to_string();
+            download.size = asset.size as u64;
+        }
     }
     Ok(download)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[actix_rt::test]
+    async fn test_data_fetch() {
+        let lutris = true;
+        let tag = "latest";
+
+        let result = match fetch_data_from_tag(tag, lutris).await {
+            Ok(data) => data,
+            Err(e) => {
+                eprintln!("Error: {}", e);
+                std::process::exit(1)
+            }
+        };
+
+        println!("Got result: {:?}", result);
+    }
+
+    #[actix_rt::test]
+    async fn test_releases() {
+        let agent = format!("{}/v{}", constants::USER_AGENT, constants::VERSION,);
+
+        let client = match reqwest::Client::builder().user_agent(agent).build() {
+            Ok(client) => client,
+            Err(e) => {
+                eprintln!("Error: {}", e);
+                std::process::exit(1)
+            }
+        };
+
+        let url = format!(
+            "{}/{}/{}/releases/latest",
+            constants::GITHUB,
+            constants::GITHUB_ACCOUNT,
+            constants::LUTRIS_GITHUB_REPO,
+        );
+
+        let rel: Release = match client.get(url).send().await {
+            Ok(res) => res,
+            Err(e) => {
+                eprintln!("Error: {}", e);
+                std::process::exit(1)
+            }
+        }
+        .json()
+        .await
+        .unwrap();
+
+        println!("Result: {:?}", rel);
+    }
 }

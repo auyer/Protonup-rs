@@ -1,10 +1,11 @@
 [package]
 name = "libprotonup"
-version = "0.3.0"
+version = "0.4.1"
 edition = "2021"
 authors = ["Auyer <auyer@rcpassos.me>"]
 repository = "https://github.com/auyer/protonup-rs"
 license = "Apache-2.0"
+readme = "../README.md"
 
 description = "Library for Custom Proton Download and installation"
 
@@ -26,3 +27,7 @@ serde_json = "1.0"
 sha2 = "0.10"
 structopt = "0.3"
 tar = "0.4"
+xz2 = "0.1"
+
+[dev-dependencies]
+actix-rt = "2"
