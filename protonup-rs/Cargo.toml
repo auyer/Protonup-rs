@@ -1,22 +1,23 @@
 [package]
 name = "protonup-rs"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 authors = ["Auyer <auyer@rcpassos.me>"]
 repository = "https://github.com/auyer/protonup-rs"
 license = "Apache-2.0"
+readme = "../README.md"
 
 description = "TUI Program for Custom Proton Download and installation written in rust"
 
 [dependencies]
 
 libprotonup = { path = "../libprotonup" }
-inquire = "0.5"
+inquire = { version = "0.5", default-features = false, features = ["termion"] }
 indicatif = { version = "0.17", features = [
   "improved_unicode",
   "unicode-segmentation",
 ] }
-tokio = { version = "1.22", features = ["macros", "rt-multi-thread"] }
-clap = { version = "4.1.4", features = ["derive"] }
+tokio = { version = "1.25", features = ["macros", "rt-multi-thread"] }
+clap = { version = "4.1.6", features = ["derive"] }
 
 

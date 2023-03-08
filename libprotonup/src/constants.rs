@@ -4,7 +4,8 @@ pub const DEFAULT_INSTALL_DIR: &str = "~/.steam/steam/compatibilitytools.d/";
 pub const DEFAULT_INSTALL_DIR_FLATPAK: &str =
     "~/.var/app/com.valvesoftware.Steam/data/Steam/compatibilitytools.d/";
 pub const DEFAULT_LUTRIS_INSTALL_DIR: &str = "~/.local/share/lutris/runners/wine/";
-pub const DEFAULT_LUTRIS_INSTALL_DIR_FLATPAK: &str = "~/.var/app/net.lutris.Lutris/data/lutris/runners/wine/";
+pub const DEFAULT_LUTRIS_INSTALL_DIR_FLATPAK: &str =
+    "~/.var/app/net.lutris.Lutris/data/lutris/runners/wine/";
 pub const TEMP_DIR: &str = "/tmp/";
 
 pub const GITHUB: &str = "https://api.github.com/repos";

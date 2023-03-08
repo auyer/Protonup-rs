@@ -2,7 +2,6 @@ use super::constants;
 use crate::utils;
 use anyhow::{Context, Result};
 use flate2::read::GzDecoder;
-use xz2::read::XzDecoder;
 use futures_util::StreamExt;
 use reqwest::header::USER_AGENT;
 use sha2::{Digest, Sha512};
@@ -14,6 +13,7 @@ use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use tar::Archive;
+use xz2::read::XzDecoder;
 
 fn path_result(path: &Path) -> String {
     let spath = path.to_str();
@@ -26,11 +26,14 @@ fn path_result(path: &Path) -> String {
 pub fn decompress(from_path: &Path, destination_path: &Path) -> Result<()> {
     let path_str = from_path.as_os_str().to_string_lossy();
 
-    if path_str.ends_with("tar.gz") { decompress_gz(from_path, destination_path) }
-
-    else if path_str.ends_with("tar.xz") { decompress_xz(from_path, destination_path) }
-
-    else { println!("no decompress\nPath: {:?}", from_path); Ok(()) }
+    if path_str.ends_with("tar.gz") {
+        decompress_gz(from_path, destination_path)
+    } else if path_str.ends_with("tar.xz") {
+        decompress_xz(from_path, destination_path)
+    } else {
+        println!("no decompress\nPath: {:?}", from_path);
+        Ok(())
+    }
 }
 
 /// Decompress a tar.gz file
