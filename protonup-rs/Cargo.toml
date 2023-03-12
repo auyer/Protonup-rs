@@ -1,6 +1,6 @@
 [package]
 name = "protonup-rs"
-version = "0.4.1"
+version = "0.4.2"
 edition = "2021"
 authors = ["Auyer <auyer@rcpassos.me>"]
 repository = "https://github.com/auyer/protonup-rs"
@@ -11,7 +11,10 @@ description = "TUI Program for Custom Proton Download and installation written i
 
 [dependencies]
 
-libprotonup = { path = "../libprotonup" }
+# Use this to use the local changes in libprotonup.
+# libprotonup = { path = "../libprotonup" }
+# This is necessary to publish to crates.io
+libprotonup = {  version = "0.4.2" }
 inquire = { version = "0.6", default-features = false, features = ["termion"] }
 indicatif = { version = "0.17", features = [
   "improved_unicode",
