@@ -232,7 +232,7 @@ async fn main() {
                 return;
             }
 
-            download_file("latest", constants::DEFAULT_INSTALL_DIR.to_string(), false)
+            download_file("latest", constants::DEFAULT_INSTALL_DIR_FLATPAK.to_string(), false)
                 .await
                 .unwrap();
         }
