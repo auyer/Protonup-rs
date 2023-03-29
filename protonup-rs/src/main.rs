@@ -232,7 +232,7 @@ async fn main() {
                 return;
             }
 
-            download_file("latest", constants::DEFAULT_INSTALL_DIR.to_string(), false)
+            download_file("latest", constants::DEFAULT_INSTALL_DIR_FLATPAK.to_string(), false)
                 .await
                 .unwrap();
         }
@@ -524,8 +524,9 @@ pub async fn download_file(tag: &str, install_path: String, lutris: bool) -> Res
     println!("Unpacking files into install location. Please wait");
     file::decompress(temp_dir.as_path(), install_dir.clone().as_path()).unwrap();
     println!(
-        "Done! Restart {}. Proton GE installed in {}",
+        "Done! Restart {}. {} GE installed in {}",
         if lutris { "Lutris" } else { "Steam" },
+        if lutris { "Wine" } else { "Proton" },
         install_dir.to_string_lossy(),
     );
     Ok(())
