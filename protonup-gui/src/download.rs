@@ -1,15 +1,13 @@
 use iced_native::subscription;
 
 use libprotonup::{constants, file, github, utils};
-use std::fmt;
 use std::fs;
 use std::fs::create_dir_all;
 use std::hash::Hash;
 use std::sync::atomic::Ordering;
-use std::thread;
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 
-// Just a little utility function
+/// Just a little utility function
 pub fn file<I: 'static + Hash + Copy + Send + Sync, T: ToString>(
     id: I,
     url: T,
@@ -21,7 +19,7 @@ pub fn file<I: 'static + Hash + Copy + Send + Sync, T: ToString>(
 
 async fn download<I: Copy>(id: I, state: State) -> (Option<(I, Progress)>, State) {
     let install_path = constants::DEFAULT_INSTALL_DIR;
-    let tag = github::fetch_data_from_tag("latest").await.unwrap();
+    let tag = github::fetch_data_from_tag("latest", false).await.unwrap();
 
     if file::check_if_exists(
         constants::DEFAULT_INSTALL_DIR.to_owned(),
@@ -39,7 +37,9 @@ async fn download<I: Copy>(id: I, state: State) -> (Option<(I, Progress)>, State
     let install_dir = utils::expand_tilde(install_path).unwrap();
     let mut temp_dir = utils::expand_tilde(constants::TEMP_DIR).unwrap();
 
-    let download = github::fetch_data_from_tag(&tag.version).await.unwrap();
+    let download = github::fetch_data_from_tag(&tag.version, false)
+        .await
+        .unwrap();
 
     temp_dir.push(format!("{}.tar.gz", &download.version));
 
@@ -68,7 +68,7 @@ async fn download<I: Copy>(id: I, state: State) -> (Option<(I, Progress)>, State
             file::download_file_progress(
                 download.download,
                 download.size,
-                temp_dir.clone(),
+                &temp_dir,
                 progress,
                 done,
             )
