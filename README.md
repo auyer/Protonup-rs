@@ -31,12 +31,10 @@ To run a quick update and get the latest GE Proton version without navigating th
 ### In one line:
 
 ```bash
-wget https://github.com/auyer/Protonup-rs/releases/latest/download/protonup-rs-linux-amd64.tar.gz -O - | tar -xz -C  ~/.local/bin 
+wget https://github.com/auyer/Protonup-rs/releases/latest/download/protonup-rs-linux-amd64.tar.gz -O - | tar -xz && zenity --password | sudo -S mv protonup-rs /usr/bin/
 ```
 
-This assumes `~/.local/bin` is in your path. You may change this to any other location (in your path). 
-In case you dont already have it, create the directory with `mkdir -p .local/bin` and add run `echo 'export PATH="$PATH:${HOME}/.local/bin"' >> ~/.bashrc` to add it to your bashrc (replace it with .zshrc if you use zsh).
-
+This assumes `/usr/bin` is in your path. You may change this to any other location (in your path ```echo $PATH```). 
 
 ### Or manually:
 
@@ -49,7 +47,7 @@ Quick way to add it to your path:
 or dowload the zip from the releases page
 ```
 cd Downloads
-unzip protonup-rs-linux-amd64.zip -d ~/.local/bin
+sudo unzip protonup-rs-linux-amd64.zip -d /usr/bin
 ```
 
 
