@@ -20,7 +20,7 @@ indicatif = { version = "0.17", features = [
   "improved_unicode",
   "unicode-segmentation",
 ] }
-tokio = { version = "1.25", features = ["macros", "rt-multi-thread"] }
-clap = { version = "4.1.6", features = ["derive"] }
+tokio = { version = "1.27", features = ["macros", "rt-multi-thread"] }
+clap = { version = "4.2.1", features = ["derive"] }
 
 

@@ -115,10 +115,7 @@ pub async fn fetch_data_from_tag(tag: &str, lutris: bool) -> Result<Download, re
 mod tests {
     use super::*;
 
-    #[actix_rt::test]
-    async fn test_data_fetch() {
-        let lutris = true;
-        let tag = "latest";
+    #[tokio::test]
 
         let result = match fetch_data_from_tag(tag, lutris).await {
             Ok(data) => data,
@@ -131,7 +128,7 @@ mod tests {
         println!("Got result: {:?}", result);
     }
 
-    #[actix_rt::test]
+    #[tokio::test]
     async fn test_releases() {
         let agent = format!("{}/v{}", constants::USER_AGENT, constants::VERSION,);
 
