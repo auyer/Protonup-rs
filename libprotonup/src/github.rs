@@ -116,6 +116,9 @@ mod tests {
     use super::*;
 
     #[tokio::test]
+    async fn test_data_fetch() {
+        let lutris = true;
+        let tag = "latest";
 
         let result = match fetch_data_from_tag(tag, lutris).await {
             Ok(data) => data,
