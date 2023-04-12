@@ -250,31 +250,11 @@ dependencies = [
 
 [[package]]
 name = "dirs"
-version = "4.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ca3aa72a6f96ea37bbc5aa912f6788242832f75369bdfdadcb0e38423f100059"
-dependencies = [
- "dirs-sys 0.3.7",
-]
-
-[[package]]
-name = "dirs"
 version = "5.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dece029acd3353e3a58ac2e3eb3c8d6c35827a892edc6cc4138ef9c33df46ecd"
 dependencies = [
- "dirs-sys 0.4.0",
-]
-
-[[package]]
-name = "dirs-sys"
-version = "0.3.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1b1d1d91c932ef41c0f2663aa8b0ca0342d444d842c06914aa0a7e352d0bada6"
-dependencies = [
- "libc",
- "redox_users",
- "winapi",
+ "dirs-sys",
 ]
 
 [[package]]
@@ -521,12 +501,6 @@ checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 
 [[package]]
 name = "hex-literal"
-version = "0.3.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7ebdb29d2ea9ed0083cd8cece49bbd968021bd99b0849edb4a9a7ee0fdf6a4e0"
-
-[[package]]
-name = "hex-literal"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6fe2267d4ed49bc07b63801559be28c718ea06c4738b7a03c94df7386d2cde46"
@@ -709,14 +683,14 @@ checksum = "3304a64d199bb964be99741b7a14d26972741915b3649639149b2479bb46f4b5"
 
 [[package]]
 name = "libprotonup"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "anyhow",
- "dirs 5.0.0",
+ "dirs",
  "flate2",
  "futures-util",
  "hex",
- "hex-literal 0.4.1",
+ "hex-literal",
  "reqwest",
  "serde",
  "serde_json",
@@ -724,27 +698,6 @@ dependencies = [
  "structopt",
  "tar",
  "tokio",
- "xz2",
-]
-
-[[package]]
-name = "libprotonup"
-version = "0.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "82a996dbc04e27773a2be79df67cde758da8664a46aee24b11df7dea991f940e"
-dependencies = [
- "anyhow",
- "dirs 4.0.0",
- "flate2",
- "futures-util",
- "hex",
- "hex-literal 0.3.4",
- "reqwest",
- "serde",
- "serde_json",
- "sha2",
- "structopt",
- "tar",
  "xz2",
 ]
 
@@ -909,12 +862,12 @@ dependencies = [
 
 [[package]]
 name = "protonup-rs"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "clap 4.2.1",
  "indicatif",
  "inquire",
- "libprotonup 0.4.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "libprotonup",
  "tokio",
 ]
 
