@@ -44,7 +44,7 @@ Get the latest binary:
 It is a single binary. You can just run it, or add it to your path so you can call it from anywhere.
 
 Quick way to add it to your path:
-or dowload the zip from the releases page
+or download the zip from the releases page
 ```
 cd Downloads
 sudo unzip protonup-rs-linux-amd64.zip -d /usr/bin
