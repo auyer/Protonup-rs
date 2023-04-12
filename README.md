@@ -2,10 +2,12 @@
 
 Lib, CLI and GUI(wip) program to automate the installation and update of Proton-GE
 
-> **NOTE**: This is not nearly as feature complete as the original Protonup.
+> **NOTE**: This has no relations with the original ProtonUp project, and I am glad it was created.
+> ~~This is not nearly as feature complete as the original Protonup~~.
+> 
 > I've create it because the original project had a few issues with its Python dependencies (that most likely got fixed already). 
 > I wanted to to re-create it in rust, in a way it could be used as a lib and a CLI.
-> ~~If this repo gets to a stable and feature rich state, I will publish it to Cargo and other repositories.~~
+> ~~If this repo gets to a stable and feature rich state, I will publish it to Cargo and other repositories.~~ I guess it got there! Thanks!
 
 [![asciicast](https://asciinema.org/a/rEO6Oipjn4rBkTWAtH1IFf3Xe.svg)](https://asciinema.org/a/rEO6Oipjn4rBkTWAtH1IFf3Xe)
 
@@ -16,14 +18,20 @@ The default way is to simply invoke the cli, and navigate the text interface.
 protonup-rs
 ```
 
-To run a quick update and get the latest GE Proton version without navigating the TUI, you can use the quickUpdate flags:
+To run a quick update and get the latest GE Proton version without navigating the TUI, you can use the quick flags:
 ```bash
-  -q, --quick-download                          Download latest directly
-  -f, --quick-download-flatpak              Download latest for Steam FlatPak
-  -l, --lutris-quick-download                 Download latest Wine GE for Lutris
+  -q, --quick-download                  Download latest directly
+  -f, --quick-download-flatpak          Download latest for Steam FlatPak
+  -l, --lutris-quick-download           Download latest Wine GE for Lutris
   -L, --lutris-quick-download-flatpak   Download latest Wine GE for Lutris FlatPak
-  -h, --help                                             Print help
+  -h, --help                            Print help
 ```
+You can also combine them and get all the latest version running:
+
+```bash
+protonup-rs -q -f -l -L
+```
+
 ---
 
 ## Installing:
