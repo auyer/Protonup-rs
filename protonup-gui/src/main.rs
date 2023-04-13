@@ -3,10 +3,11 @@ use iced::widget::{button, column, container, progress_bar, row, text, Column, p
 use iced::{
     window, Alignment, Application, Command, Element, Length, Settings, Subscription, Theme, Color, Background
 };
-use std::{fmt, cmp};
+use std::{cmp, path::PathBuf};
 
 mod download;
 mod utility;
+use utility::{Launcher, LauncherData};
 
 pub fn main() -> iced::Result {
     App::run(Settings {
@@ -20,8 +21,8 @@ pub fn main() -> iced::Result {
 
 #[derive(Debug)]
 struct App {
-    libraries: Vec<Library>, 
-    selected_library: Option<Library>, 
+    libraries: Vec<Launcher>, 
+    selected_library: Option<Launcher>, 
     downloads: Vec<Download>,
     last_id: usize,
 }
@@ -32,7 +33,7 @@ pub enum Message {
     Download(usize),
     DownloadProgressed((usize, download::Progress)),
     QuickUpdate,
-    LibrarySelected(Library),
+    LibrarySelected(Launcher),
 }
 
 impl Application for App {
@@ -44,7 +45,7 @@ impl Application for App {
     fn new(_flags: ()) -> (Self, Command<Message>) {
         (
             Self {
-                libraries: vec![Library::Steam(LibraryData{}), Library::Lutris(LibraryData{})],
+                libraries: vec![Launcher::Steam(LauncherData{path: PathBuf::new(), installs: vec![]}), Launcher::Lutris(LauncherData{path: PathBuf::new(), installs: vec![]})],
                 downloads: vec![Download::new(0)],
                 last_id: 0,
                 selected_library: None,
@@ -54,7 +55,7 @@ impl Application for App {
     }
 
     fn title(&self) -> String {
-        String::from("Download progress - Iced")
+        String::from("Protonup-rs")
     }
 
     fn update(&mut self, message: Message) -> Command<Message> {
@@ -136,31 +137,8 @@ impl Application for App {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
-pub enum Library {
-    Lutris(LibraryData),
-    LutrisFlatpak(LibraryData),
-    Steam(LibraryData),
-    SteamFlatpak(LibraryData),
-}
 
-impl fmt::Display for Library {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", match self {
-            Library::Lutris(_data) => {"Lutris:"},
-            Library::LutrisFlatpak(_data) => {"Lutris Flatpak:"},
-            Library::Steam(_data) => {"Steam:"},
-            Library::SteamFlatpak(_data) => {"Steam Flatpak:"},
-        })
-    }
-}
-
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub struct LibraryData {
-
-}
-
-
+// Pretty sure below is from the iced download progress example
 #[derive(Debug)]
 struct Download {
     id: usize,

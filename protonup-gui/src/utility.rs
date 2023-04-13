@@ -1,18 +1,32 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, fmt};
 
-pub struct Launchers {
-    pub steam: Option<Launcher>,
-    pub steam_flatpak: Option<Launcher>,
-    pub lutris: Option<Launcher>,
-    pub lutris_flatpak: Option<Launcher>,
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub enum Launcher {
+    Lutris(LauncherData),
+    LutrisFlatpak(LauncherData),
+    Steam(LauncherData),
+    SteamFlatpak(LauncherData),
 }
 
-pub struct Launcher {
+impl fmt::Display for Launcher {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", match self {
+            Launcher::Lutris(_data) => {"Lutris:"},
+            Launcher::LutrisFlatpak(_data) => {"Lutris Flatpak:"},
+            Launcher::Steam(_data) => {"Steam:"},
+            Launcher::SteamFlatpak(_data) => {"Steam Flatpak:"},
+        })
+    }
+}
+
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct LauncherData {
     // Location of launcher's runner/wine folder
-    path: PathBuf,
-    installs: Vec<Install>,
+    pub path: PathBuf,
+    pub installs: Vec<Install>,
 }
 
-struct Install {
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Install {
     name: String,
 }

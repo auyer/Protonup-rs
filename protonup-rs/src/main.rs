@@ -463,7 +463,7 @@ pub async fn download_file(tag: &str, install_path: String, lutris: bool) -> Res
     } else if download.download.ends_with("tar.xz") {
         format!("{}.tar.xz", &download.version)
     } else {
-        eprintln!("Downloaded file wasn't of the expected type. (tar.(gz/xz)");
+        eprintln!("Downloaded file wasn't of the expected type. tar.(gz/xz)");
         std::process::exit(1)
     });
 
