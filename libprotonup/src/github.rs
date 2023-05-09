@@ -48,8 +48,8 @@ pub async fn list_releases(lutris: bool) -> Result<ReleaseList, reqwest::Error> 
 #[derive(Default, Debug, PartialEq, Clone)]
 pub struct Download {
     pub version: String,
-    pub sha512sum: String,
-    pub download: String,
+    pub sha512sum_url: String,
+    pub download_url: String,
     pub size: u64,
     pub created_at: String,
 }
@@ -95,16 +95,16 @@ pub async fn fetch_data_from_tag(tag: &str, lutris: bool) -> Result<Download, re
     download.version = release.tag_name;
     for asset in &release.assets {
         if asset.name.ends_with("sha512sum") {
-            download.sha512sum = asset.browser_download_url.as_str().to_string();
+            download.sha512sum_url = asset.browser_download_url.as_str().to_string();
         }
         if asset.name.ends_with("tar.gz") {
             download.created_at = asset.created_at.clone();
-            download.download = asset.browser_download_url.as_str().to_string();
+            download.download_url = asset.browser_download_url.as_str().to_string();
             download.size = asset.size as u64;
         }
         if asset.name.ends_with("tar.xz") {
             download.created_at = asset.created_at.clone();
-            download.download = asset.browser_download_url.as_str().to_string();
+            download.download_url = asset.browser_download_url.as_str().to_string();
             download.size = asset.size as u64;
         }
     }

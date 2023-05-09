@@ -18,11 +18,11 @@ pub fn file<I: 'static + Hash + Copy + Send + Sync, T: ToString>(
 }
 
 async fn download<I: Copy>(id: I, state: State) -> (Option<(I, Progress)>, State) {
-    let install_path = constants::DEFAULT_INSTALL_DIR;
+    let install_path = constants::DEFAULT_STEAM_INSTALL_DIR;
     let tag = github::fetch_data_from_tag("latest", false).await.unwrap();
 
     if file::check_if_exists(
-        constants::DEFAULT_INSTALL_DIR.to_owned(),
+        constants::DEFAULT_STEAM_INSTALL_DIR.to_owned(),
         tag.version.clone(),
     ) {
         // popup confirm overwrite
@@ -46,7 +46,7 @@ async fn download<I: Copy>(id: I, state: State) -> (Option<(I, Progress)>, State
     // install_dir
     create_dir_all(&install_dir).unwrap();
 
-    let git_hash = file::download_file_into_memory(&download.sha512sum)
+    let git_hash = file::download_sha512_into_memory(&download.sha512sum_url)
         .await
         .unwrap();
 
@@ -57,7 +57,7 @@ async fn download<I: Copy>(id: I, state: State) -> (Option<(I, Progress)>, State
     let (progress, done) = file::create_progress_trackers();
     let progress_read = Arc::clone(&progress);
     let done_read = Arc::clone(&done);
-    let url = String::from(&download.download);
+    let url = String::from(&download.download_url);
     let i_dir = String::from(install_dir.to_str().unwrap());
 
     // thread::spawn(move || {
@@ -66,7 +66,7 @@ async fn download<I: Copy>(id: I, state: State) -> (Option<(I, Progress)>, State
             println!(" starting up download");
 
             file::download_file_progress(
-                download.download,
+                download.download_url,
                 download.size,
                 &temp_dir,
                 progress,

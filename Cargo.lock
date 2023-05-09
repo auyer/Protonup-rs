@@ -1568,27 +1568,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "libprotonup"
-version = "0.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "82a996dbc04e27773a2be79df67cde758da8664a46aee24b11df7dea991f940e"
-dependencies = [
- "anyhow",
- "dirs",
- "flate2",
- "futures-util",
- "hex",
- "hex-literal",
- "reqwest",
- "serde",
- "serde_json",
- "sha2",
- "structopt",
- "tar",
- "xz2",
-]
-
-[[package]]
 name = "linked-hash-map"
 version = "0.5.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2202,7 +2181,7 @@ dependencies = [
  "iced",
  "iced_futures",
  "iced_native",
- "libprotonup 0.4.2",
+ "libprotonup",
  "reqwest",
 ]
 
@@ -2213,7 +2192,7 @@ dependencies = [
  "clap 4.1.8",
  "indicatif",
  "inquire",
- "libprotonup 0.4.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "libprotonup",
  "tokio",
 ]
 

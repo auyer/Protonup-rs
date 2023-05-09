@@ -1,9 +1,10 @@
 use iced::executor;
-use iced::widget::{button, column, container, progress_bar, row, text, Column, pick_list};
+use iced::widget::{button, column, container, pick_list, progress_bar, row, text, Column};
 use iced::{
-    window, Alignment, Application, Command, Element, Length, Settings, Subscription, Theme, Color, Background
+    window, Alignment, Application, Command, Element, Length, Settings,
+    Subscription, Theme, // Background, Color
 };
-use std::{cmp, path::PathBuf};
+//use std::{cmp, path::PathBuf};
 
 mod download;
 mod utility;
@@ -21,8 +22,8 @@ pub fn main() -> iced::Result {
 
 #[derive(Debug)]
 struct App {
-    libraries: Vec<Launcher>, 
-    selected_library: Option<Launcher>, 
+    launchers: Vec<Launcher>,
+    selected_launcher: Option<Launcher>,
     downloads: Vec<Download>,
     last_id: usize,
 }
@@ -33,7 +34,7 @@ pub enum Message {
     Download(usize),
     DownloadProgressed((usize, download::Progress)),
     QuickUpdate,
-    LibrarySelected(Launcher),
+    LauncherSelected(Launcher),
 }
 
 impl Application for App {
@@ -45,10 +46,20 @@ impl Application for App {
     fn new(_flags: ()) -> (Self, Command<Message>) {
         (
             Self {
-                libraries: vec![Launcher::Steam(LauncherData{path: PathBuf::new(), installs: vec![]}), Launcher::Lutris(LauncherData{path: PathBuf::new(), installs: vec![]})],
+                // launchers: vec![
+                //     Launcher::Steam(Some(LauncherData {
+                //         path: PathBuf::new(),
+                //         installs: vec![],
+                //     })),
+                //     Launcher::Lutris(Some(LauncherData {
+                //         path: PathBuf::new(),
+                //         installs: vec![],
+                //     })),
+                // ],
+                launchers: utility::find_launchers(),
                 downloads: vec![Download::new(0)],
                 last_id: 0,
-                selected_library: None,
+                selected_launcher: None,
             },
             Command::none(),
         )
@@ -77,9 +88,8 @@ impl Application for App {
                 }
             }
             // TODO
-            Message::QuickUpdate => {},
-            Message::LibrarySelected(library) => {self.selected_library = Some(library)},
-
+            Message::QuickUpdate => {}
+            Message::LauncherSelected(launcher) => self.selected_launcher = Some(launcher),
         };
 
         Command::none()
@@ -100,24 +110,40 @@ impl Application for App {
 
         // TODO: will have a function to check the currently selected launcher based on the dropdown for already installed versions adding them to the list to be viewed
         let list = Element::from(
-            column(vec![
-                text("List of Downloaded Proton/Wine versions").into(),
-                text("Version 1.1").into(),
-                text("Version 1.2").into(),
-            ])
+            column(
+                // vec![text("List of Downloaded Proton/Wine versions").into(), text("Version 1.1").into(), text("Version 1.2").into(),]
+                if let Some(launcher) = &self.selected_launcher {
+                    match launcher {
+                        Launcher::Lutris(data) => LauncherData::get_installs_text_list(data),
+                        Launcher::LutrisFlatpak(data) => LauncherData::get_installs_text_list(data),
+                        Launcher::Steam(data) => LauncherData::get_installs_text_list(data),
+                        Launcher::SteamFlatpak(data) => LauncherData::get_installs_text_list(data),
+                    }
+                } else {
+                    vec![]
+                },
+            )
             .width(Length::FillPortion(4))
             .padding(5),
         );
 
         let content = column(vec![
-            container(pick_list(self.libraries.clone(), self.selected_library.clone(), Message::LibrarySelected))
-                .height(Length::Units(40))
-                // Will figure out how to fix later
-                // .style( container::Style {  
-                //     background: Some(iced::Background::Color( iced::Color {r: 10.0, g: 11.0, b: 32.0, a: 0.0})),
-                //     ..Default::default()
-                // })
-                .into(),
+            container(
+                pick_list(
+                    self.launchers.clone(),
+                    self.selected_launcher.clone(),
+                    Message::LauncherSelected,
+                )
+                .width(Length::Fill),
+            )
+            .height(Length::Units(40))
+            .width(Length::Fill)
+            // Will figure out how to fix later
+            // .style( container::Style {
+            //     background: Some(iced::Background::Color( iced::Color {r: 10.0, g: 11.0, b: 32.0, a: 0.0})),
+            //     ..Default::default()
+            // })
+            .into(),
             container(row(vec![controls, list]))
                 .height(Length::Fill)
                 .into(),
@@ -136,7 +162,6 @@ impl Application for App {
         Theme::Dark
     }
 }
-
 
 // Pretty sure below is from the iced download progress example
 #[derive(Debug)]

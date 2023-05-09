@@ -140,7 +140,8 @@ pub async fn download_file_progress(
     Ok(())
 }
 
-pub async fn download_file_into_memory(url: &String) -> Result<String> {
+/// Downloads sha512 hash returned as Result<String> to verify download integrity
+pub async fn download_sha512_into_memory(url: &String) -> Result<String> {
     let client = reqwest::Client::new();
     let res = client
         .get(url)

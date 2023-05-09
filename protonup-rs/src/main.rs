@@ -145,16 +145,20 @@ async fn main() {
     } = Opt::parse();
 
     if quick_download {
-        download_file("latest", constants::DEFAULT_INSTALL_DIR.to_string(), false)
-            .await
-            .unwrap();
+        download_file(
+            "latest",
+            constants::DEFAULT_STEAM_INSTALL_DIR.to_string(),
+            false,
+        )
+        .await
+        .unwrap();
         return;
     }
 
     if quick_download_flatpak {
         download_file(
             "latest",
-            constants::DEFAULT_INSTALL_DIR_FLATPAK.to_string(),
+            constants::DEFAULT_STEAM_INSTALL_DIR_FLATPAK.to_string(),
             false,
         )
         .await
@@ -200,7 +204,7 @@ async fn main() {
             };
 
             if file::check_if_exists(
-                constants::DEFAULT_INSTALL_DIR.to_owned(),
+                constants::DEFAULT_STEAM_INSTALL_DIR.to_owned(),
                 tag.version.clone(),
             ) && !confirm_menu(format!(
                 "Version {} exists in installation path. Overwrite?",
@@ -209,9 +213,13 @@ async fn main() {
                 return;
             }
 
-            download_file("latest", constants::DEFAULT_INSTALL_DIR.to_string(), false)
-                .await
-                .unwrap();
+            download_file(
+                "latest",
+                constants::DEFAULT_STEAM_INSTALL_DIR.to_string(),
+                false,
+            )
+            .await
+            .unwrap();
         }
         Menu::QuickUpdateFlatpak => {
             let tag = match github::fetch_data_from_tag("latest", false).await {
@@ -223,7 +231,7 @@ async fn main() {
             };
 
             if file::check_if_exists(
-                constants::DEFAULT_INSTALL_DIR_FLATPAK.to_owned(),
+                constants::DEFAULT_STEAM_INSTALL_DIR_FLATPAK.to_owned(),
                 tag.version.clone(),
             ) && !confirm_menu(format!(
                 "Version {} exists in installation path. Overwrite?",
@@ -232,9 +240,13 @@ async fn main() {
                 return;
             }
 
-            download_file("latest", constants::DEFAULT_INSTALL_DIR_FLATPAK.to_string(), false)
-                .await
-                .unwrap();
+            download_file(
+                "latest",
+                constants::DEFAULT_STEAM_INSTALL_DIR_FLATPAK.to_string(),
+                false,
+            )
+            .await
+            .unwrap();
         }
 
         Menu::QuickUpdateLutris => {
@@ -313,14 +325,15 @@ async fn main() {
             let tag_list: Vec<String> = release_list.into_iter().map(|r| (r.tag_name)).collect();
             let list = tag_menu(tag_list);
             for tag in list.iter() {
-                if file::check_if_exists(constants::DEFAULT_INSTALL_DIR.to_owned(), tag.to_owned())
-                    && !confirm_menu(format!(
-                        "Version {tag} exists in installation path. Overwrite?"
-                    ))
-                {
+                if file::check_if_exists(
+                    constants::DEFAULT_STEAM_INSTALL_DIR.to_owned(),
+                    tag.to_owned(),
+                ) && !confirm_menu(format!(
+                    "Version {tag} exists in installation path. Overwrite?"
+                )) {
                     return;
                 }
-                download_file(tag, constants::DEFAULT_INSTALL_DIR.to_string(), false)
+                download_file(tag, constants::DEFAULT_STEAM_INSTALL_DIR.to_string(), false)
                     .await
                     .unwrap();
             }
@@ -337,7 +350,7 @@ async fn main() {
             let list = tag_menu(tag_list);
             for tag in list.iter() {
                 if file::check_if_exists(
-                    constants::DEFAULT_INSTALL_DIR_FLATPAK.to_owned(),
+                    constants::DEFAULT_STEAM_INSTALL_DIR_FLATPAK.to_owned(),
                     tag.to_owned(),
                 ) && !confirm_menu(format!(
                     "Version {tag} exists in installation path. Overwrite?"
@@ -346,7 +359,7 @@ async fn main() {
                 }
                 download_file(
                     tag,
-                    constants::DEFAULT_INSTALL_DIR_FLATPAK.to_string(),
+                    constants::DEFAULT_STEAM_INSTALL_DIR_FLATPAK.to_string(),
                     false,
                 )
                 .await
@@ -365,7 +378,7 @@ async fn main() {
                 Ok(path) => path,
                 Err(error) => {
                     println!("Error choosing custom path. Using the default. Error: {error:?}");
-                    constants::DEFAULT_INSTALL_DIR.to_string()
+                    constants::DEFAULT_STEAM_INSTALL_DIR.to_string()
                 }
             };
             let release_list = match github::list_releases(false).await {
@@ -378,11 +391,12 @@ async fn main() {
             let tag_list: Vec<String> = release_list.into_iter().map(|r| (r.tag_name)).collect();
             let list = tag_menu(tag_list);
             for tag in list.iter() {
-                if file::check_if_exists(constants::DEFAULT_INSTALL_DIR.to_owned(), tag.to_owned())
-                    && !confirm_menu(format!(
-                        "Version {tag} exists in installation path. Overwrite?"
-                    ))
-                {
+                if file::check_if_exists(
+                    constants::DEFAULT_STEAM_INSTALL_DIR.to_owned(),
+                    tag.to_owned(),
+                ) && !confirm_menu(format!(
+                    "Version {tag} exists in installation path. Overwrite?"
+                )) {
                     return;
                 }
 
@@ -458,9 +472,9 @@ pub async fn download_file(tag: &str, install_path: String, lutris: bool) -> Res
         }
     };
 
-    temp_dir.push(if download.download.ends_with("tar.gz") {
+    temp_dir.push(if download.download_url.ends_with("tar.gz") {
         format!("{}.tar.gz", &download.version)
-    } else if download.download.ends_with("tar.xz") {
+    } else if download.download_url.ends_with("tar.xz") {
         format!("{}.tar.xz", &download.version)
     } else {
         eprintln!("Downloaded file wasn't of the expected type. tar.(gz/xz)");
@@ -470,7 +484,7 @@ pub async fn download_file(tag: &str, install_path: String, lutris: bool) -> Res
     // install_dir
     create_dir_all(&install_dir).unwrap();
 
-    let git_hash = file::download_file_into_memory(&download.sha512sum)
+    let git_hash = file::download_sha512_into_memory(&download.sha512sum_url)
         .await
         .unwrap();
 
@@ -481,7 +495,7 @@ pub async fn download_file(tag: &str, install_path: String, lutris: bool) -> Res
     let (progress, done) = file::create_progress_trackers();
     let progress_read = Arc::clone(&progress);
     let done_read = Arc::clone(&done);
-    let url = String::from(&download.download);
+    let url = String::from(&download.download_url);
     let tmp_dir = String::from(temp_dir.to_str().unwrap());
 
     // start ProgressBar in another thread
@@ -510,7 +524,7 @@ pub async fn download_file(tag: &str, install_path: String, lutris: bool) -> Res
     });
 
     file::download_file_progress(
-        download.download,
+        download.download_url,
         download.size,
         temp_dir.clone().as_path(),
         progress,

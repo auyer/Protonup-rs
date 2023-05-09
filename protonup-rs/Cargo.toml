@@ -12,9 +12,9 @@ description = "TUI Program for Custom Proton Download and installation written i
 [dependencies]
 
 # Use this to use the local changes in libprotonup.
-# libprotonup = { path = "../libprotonup" }
+libprotonup = { path = "../libprotonup" }
 # This is necessary to publish to crates.io
-libprotonup = {  version = "0.4.2" }
+# libprotonup = {  version = "0.4.2" }
 inquire = { version = "0.6", default-features = false, features = ["termion"] }
 indicatif = { version = "0.17", features = [
   "improved_unicode",

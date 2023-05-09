@@ -1,7 +1,7 @@
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-pub const DEFAULT_INSTALL_DIR: &str = "~/.steam/steam/compatibilitytools.d/";
-pub const DEFAULT_INSTALL_DIR_FLATPAK: &str =
+pub const DEFAULT_STEAM_INSTALL_DIR: &str = "~/.steam/steam/compatibilitytools.d/";
+pub const DEFAULT_STEAM_INSTALL_DIR_FLATPAK: &str =
     "~/.var/app/com.valvesoftware.Steam/data/Steam/compatibilitytools.d/";
 pub const DEFAULT_LUTRIS_INSTALL_DIR: &str = "~/.local/share/lutris/runners/wine/";
 pub const DEFAULT_LUTRIS_INSTALL_DIR_FLATPAK: &str =
