@@ -9,7 +9,7 @@ use std::thread;
 use std::{sync::Arc, time::Duration};
 mod file_path;
 
-use libprotonup::{constants, file, github, parameters, utils};
+use libprotonup::{apps, constants, files, github, parameters, utils};
 
 #[derive(Debug, Parser)]
 struct Opt {
@@ -115,7 +115,7 @@ async fn main() {
 
     // Default Parameters
     let source: parameters::VariantParameters;
-    let mut install_dir = constants::DEFAULT_INSTALL_DIR.to_string();
+    let mut install_dir = apps::App::Steam.default_install_dir().to_string();
     let mut tags: Vec<String> = vec![String::from("latest")];
 
     let mut should_open_tag_selector = false;
@@ -130,28 +130,28 @@ async fn main() {
     match answer {
         Menu::QuickUpdate => {
             source = parameters::Variant::GEProton.parameters();
-            install_dir = constants::DEFAULT_INSTALL_DIR.to_owned();
+            install_dir = apps::App::Steam.default_install_dir().to_string();
         }
         Menu::QuickUpdateFlatpak => {
             source = parameters::Variant::GEProton.parameters();
-            install_dir = constants::DEFAULT_INSTALL_DIR_FLATPAK.to_owned();
+            install_dir = apps::App::SteamFlatpak.default_install_dir().to_string();
         }
         Menu::QuickUpdateLutris => {
             source = parameters::Variant::WineGE.parameters();
-            install_dir = constants::DEFAULT_LUTRIS_INSTALL_DIR.to_owned();
+            install_dir = apps::App::Lutris.default_install_dir().to_string();
         }
         Menu::QuickUpdateLutrisFlatpak => {
             source = parameters::Variant::WineGE.parameters();
-            install_dir = constants::DEFAULT_LUTRIS_INSTALL_DIR_FLATPAK.to_owned();
+            install_dir = apps::App::LutrisFlatpak.default_install_dir().to_string();
         }
         Menu::ChoseReleases => {
             source = parameters::Variant::GEProton.parameters();
-            install_dir = constants::DEFAULT_INSTALL_DIR.to_owned();
+            install_dir = apps::App::Steam.default_install_dir().to_string();
             should_open_tag_selector = true;
         }
         Menu::ChoseReleasesFlatpak => {
             source = parameters::Variant::GEProton.parameters();
-            install_dir = constants::DEFAULT_INSTALL_DIR_FLATPAK.to_owned();
+            install_dir = apps::App::SteamFlatpak.default_install_dir().to_string();
             should_open_tag_selector = true;
         }
         Menu::ChoseReleasesCustomDir => {
@@ -161,12 +161,12 @@ async fn main() {
         }
         Menu::ChoseReleasesLutris => {
             source = parameters::Variant::WineGE.parameters();
-            install_dir = constants::DEFAULT_LUTRIS_INSTALL_DIR.to_owned();
+            install_dir = apps::App::Lutris.default_install_dir().to_string();
             should_open_tag_selector = true;
         }
         Menu::ChoseReleasesLutrisFlatpak => {
             source = parameters::Variant::WineGE.parameters();
-            install_dir = constants::DEFAULT_LUTRIS_INSTALL_DIR_FLATPAK.to_owned();
+            install_dir = apps::App::LutrisFlatpak.default_install_dir().to_string();
             should_open_tag_selector = true;
         }
     }
@@ -209,7 +209,7 @@ async fn main() {
     tags.retain(|tag_name| {
         // Check if versions exist in disk.
         // If they do, ask the user if it should be overwritten
-        !(file::check_if_exists(&install_dir, &tag_name)
+        !(files::check_if_exists(&install_dir, &tag_name)
             && !confirm_menu(format!(
                 "Version {tag_name} exists in installation path. Overwrite?"
             )))
@@ -265,7 +265,7 @@ pub async fn download_file(
     // install_dir
     create_dir_all(&install_dir).unwrap();
 
-    let git_hash = file::download_file_into_memory(&download.sha512sum)
+    let git_hash = files::download_file_into_memory(&download.sha512sum)
         .await
         .unwrap();
 
@@ -273,7 +273,7 @@ pub async fn download_file(
         fs::remove_file(&temp_dir).unwrap();
     }
 
-    let (progress, done) = file::create_progress_trackers();
+    let (progress, done) = files::create_progress_trackers();
     let progress_read = Arc::clone(&progress);
     let done_read = Arc::clone(&done);
     let url = String::from(&download.download);
@@ -304,7 +304,7 @@ pub async fn download_file(
         println!("Checking file integrity"); // This is being printed here because the progress bar needs to be closed before printing.
     });
 
-    file::download_file_progress(
+    files::download_file_progress(
         download.download,
         download.size,
         temp_dir.clone().as_path(),
@@ -313,11 +313,11 @@ pub async fn download_file(
     )
     .await
     .unwrap();
-    if !file::hash_check_file(temp_dir.to_str().unwrap().to_string(), git_hash).unwrap() {
+    if !files::hash_check_file(temp_dir.to_str().unwrap().to_string(), git_hash).unwrap() {
         return Err("Failed checking file hash".to_string());
     }
     println!("Unpacking files into install location. Please wait");
-    file::decompress(temp_dir.as_path(), install_dir.clone().as_path()).unwrap();
+    files::decompress(temp_dir.as_path(), install_dir.clone().as_path()).unwrap();
     let source_type = source.variant_type();
     println!(
         "Done! Restart {}. {} installed in {}",
@@ -338,7 +338,7 @@ async fn run_quick_downloads() -> bool {
 
     if quick_download {
         let source = parameters::Variant::GEProton;
-        let destination = constants::DEFAULT_INSTALL_DIR.to_string();
+        let destination = apps::App::Steam.default_install_dir().to_string();
         println!(
             "\nQuick Download: {} / {} into -> {}\n",
             source.to_string(),
@@ -352,7 +352,7 @@ async fn run_quick_downloads() -> bool {
 
     if quick_download_flatpak {
         let source = parameters::Variant::GEProton;
-        let destination = constants::DEFAULT_INSTALL_DIR_FLATPAK.to_string();
+        let destination = apps::App::SteamFlatpak.default_install_dir().to_string();
         println!(
             "\nQuick Download: {} / {} into -> {}\n",
             source.to_string(),
@@ -366,7 +366,7 @@ async fn run_quick_downloads() -> bool {
 
     if lutris_quick_download {
         let source = parameters::Variant::WineGE;
-        let destination = constants::DEFAULT_LUTRIS_INSTALL_DIR.to_string();
+        let destination = apps::App::Lutris.default_install_dir().to_string();
         println!(
             "\nQuick Download: {} / {} into -> {}\n",
             source.to_string(),
@@ -380,7 +380,7 @@ async fn run_quick_downloads() -> bool {
 
     if lutris_quick_download_flatpak {
         let source = parameters::Variant::WineGE;
-        let destination = constants::DEFAULT_LUTRIS_INSTALL_DIR_FLATPAK.to_string();
+        let destination = apps::App::LutrisFlatpak.default_install_dir().to_string();
         println!(
             "\nQuick Download: {} / {} into -> {}\n",
             source.to_string(),

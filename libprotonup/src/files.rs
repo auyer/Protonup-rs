@@ -86,8 +86,25 @@ pub fn create_progress_trackers() -> (Arc<AtomicUsize>, Arc<AtomicBool>) {
 
 pub fn check_if_exists(path: &str, tag: &str) -> bool {
     let f_path = utils::expand_tilde(format!("{path}/{tag}")).unwrap();
-    let p = std::path::Path::new(&f_path);
+    let p = f_path.as_path();
     p.is_dir()
+}
+
+pub fn list_folders_in_path(path: &str) -> Result<Vec<String>, anyhow::Error> {
+    let f_path = utils::expand_tilde(path.to_string()).unwrap();
+    let p = f_path.as_path();
+    let paths: Vec<String> = p
+        .read_dir()
+        .with_context(|| format!("Failed to read directory : {}", path_result(p)))?
+        .filter_map(|e| e.ok())
+        .filter(|e| e.path().is_dir())
+        .map(|e| {
+            let path = e.path();
+            let name = path.file_name().unwrap();
+            name.to_str().unwrap().to_string()
+        })
+        .collect();
+    Ok(paths)
 }
 
 /// requires pointers to store the progress, and another to store "done" status
