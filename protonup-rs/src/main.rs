@@ -1,16 +1,16 @@
 use clap::Parser;
 use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
-use inquire::InquireError;
-use inquire::{Confirm, MultiSelect, Select, Text};
-use std::fmt;
-use std::fs;
-use std::fs::create_dir_all;
-use std::sync::atomic::Ordering;
-use std::thread;
-use std::{sync::Arc, time::Duration};
-mod file_path;
+use inquire::{Confirm, InquireError, MultiSelect, Select, Text};
+use std::{fmt, fs};
+use std::{
+    sync::{atomic::Ordering, Arc},
+    thread,
+    time::Duration,
+};
 
 use libprotonup::{apps, constants, files, github, parameters, utils};
+
+mod file_path;
 
 #[derive(Debug, Parser)]
 struct Opt {
@@ -283,11 +283,11 @@ async fn main() {
     tags.retain(|tag_name| {
         // Check if versions exist in disk.
         // If they do, ask the user if it should be overwritten
-        !(files::check_if_exists(&install_dir, &tag_name)
+        !files::check_if_exists(&install_dir, tag_name)
             && !confirm_menu(
                 format!("Version {tag_name} exists in installation path. Overwrite?"),
                 String::from("If you choose yes, you will re-install it."),
-            ))
+            )
     });
 
     // install the versions that are in the tags array
@@ -320,7 +320,7 @@ pub async fn download_file(
     let install_dir = utils::expand_tilde(install_path).unwrap();
     let mut temp_dir = utils::expand_tilde(constants::TEMP_DIR).unwrap();
 
-    let download = match github::fetch_data_from_tag(tag, &source).await {
+    let download = match github::fetch_data_from_tag(tag, source).await {
         Ok(data) => data,
         Err(e) => {
             eprintln!("Failed to fetch GitHub data, make sure you're connected to the internet\nError: {}", e);
@@ -338,7 +338,7 @@ pub async fn download_file(
     });
 
     // install_dir
-    create_dir_all(&install_dir).unwrap();
+    fs::create_dir_all(&install_dir).unwrap();
 
     let git_hash = files::download_file_into_memory(&download.sha512sum)
         .await
@@ -397,7 +397,7 @@ pub async fn download_file(
     println!(
         "Done! Restart {}. {} installed in {}",
         source_type.intended_application(),
-        source_type.to_string(),
+        source_type,
         install_dir.to_string_lossy(),
     );
     Ok(())
@@ -416,7 +416,7 @@ async fn run_quick_downloads() -> bool {
         let destination = apps::App::Steam.default_install_dir().to_string();
         println!(
             "\nQuick Download: {} / {} into -> {}\n",
-            source.to_string(),
+            source,
             source.intended_application(),
             destination
         );
@@ -430,7 +430,7 @@ async fn run_quick_downloads() -> bool {
         let destination = apps::App::SteamFlatpak.default_install_dir().to_string();
         println!(
             "\nQuick Download: {} / {} into -> {}\n",
-            source.to_string(),
+            source,
             source.intended_application(),
             destination
         );
@@ -444,7 +444,7 @@ async fn run_quick_downloads() -> bool {
         let destination = apps::App::Lutris.default_install_dir().to_string();
         println!(
             "\nQuick Download: {} / {} into -> {}\n",
-            source.to_string(),
+            source,
             source.intended_application(),
             destination
         );
@@ -458,7 +458,7 @@ async fn run_quick_downloads() -> bool {
         let destination = apps::App::LutrisFlatpak.default_install_dir().to_string();
         println!(
             "\nQuick Download: {} / {} into -> {}\n",
-            source.to_string(),
+            source,
             source.intended_application(),
             destination
         );
@@ -467,8 +467,8 @@ async fn run_quick_downloads() -> bool {
             .unwrap();
     }
 
-    return quick_download
+    quick_download
         || quick_download_flatpak
         || lutris_quick_download
-        || lutris_quick_download_flatpak;
+        || lutris_quick_download_flatpak
 }

@@ -94,7 +94,7 @@ pub fn check_if_exists(path: &str, tag: &str) -> bool {
 
 // list_folders_in_path returns a vector of strings of the folders in a path
 pub fn list_folders_in_path(path: &str) -> Result<Vec<String>, anyhow::Error> {
-    let f_path = utils::expand_tilde(path.to_string()).unwrap();
+    let f_path = utils::expand_tilde(path).unwrap();
     let p = f_path.as_path();
     let paths: Vec<String> = p
         .read_dir()
@@ -112,7 +112,7 @@ pub fn list_folders_in_path(path: &str) -> Result<Vec<String>, anyhow::Error> {
 
 // removes a directory and all its contents
 pub fn remove_dir_all(path: &str) -> Result<()> {
-    let f_path = utils::expand_tilde(path.to_string()).unwrap();
+    let f_path = utils::expand_tilde(path).unwrap();
     let p = f_path.as_path();
     std::fs::remove_dir_all(p)
         .with_context(|| format!("[Remove] Failed to remove directory : {}", path_result(p)))?;
