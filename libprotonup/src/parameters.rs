@@ -30,7 +30,7 @@ impl VariantParameters {
 
     ///
     pub fn variant_type(&self) -> &Variant {
-        return &self.variant_ref;
+        &self.variant_ref
     }
 }
 

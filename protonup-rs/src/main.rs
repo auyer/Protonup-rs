@@ -1,15 +1,16 @@
 use clap::Parser;
 use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
-use inquire::{Confirm, MultiSelect, Select, Text};
-use std::fmt;
-use std::fs;
-use std::fs::create_dir_all;
-use std::sync::atomic::Ordering;
-use std::thread;
-use std::{sync::Arc, time::Duration};
-mod file_path;
+use inquire::{Confirm, InquireError, MultiSelect, Select, Text};
+use std::{fmt, fs};
+use std::{
+    sync::{atomic::Ordering, Arc},
+    thread,
+    time::Duration,
+};
 
-use libprotonup::{constants, file, github, parameters, utils};
+use libprotonup::{apps, constants, files, github, parameters, utils};
+
+mod file_path;
 
 #[derive(Debug, Parser)]
 struct Opt {
@@ -37,6 +38,7 @@ enum Menu {
     ChoseReleasesCustomDir,
     ChoseReleasesLutris,
     ChoseReleasesLutrisFlatpak,
+    ManageExistingInstallations,
 }
 
 impl Menu {
@@ -51,6 +53,7 @@ impl Menu {
         Self::ChoseReleasesCustomDir,
         Self::ChoseReleasesLutris,
         Self::ChoseReleasesLutrisFlatpak,
+        Self::ManageExistingInstallations,
     ];
 }
 
@@ -78,12 +81,19 @@ impl fmt::Display for Menu {
             Self::ChoseReleasesLutrisFlatpak => {
                 write!(f, "Choose Wine GE releases for Flatpak Lutris")
             }
+            Self::ManageExistingInstallations => write!(f, "Manage Existing Proton Installations"),
         }
     }
 }
 
-fn tag_menu(options: Vec<String>) -> Vec<String> {
-    let answer = MultiSelect::new("Select the versions you want to download :", options)
+fn tag_menu(message: &str, options: Vec<String>) -> Result<Vec<String>, InquireError> {
+    MultiSelect::new(message, options)
+        .with_default(&[0_usize])
+        .prompt()
+}
+
+fn modes_menu(options: Vec<apps::App>) -> Vec<apps::App> {
+    let answer = MultiSelect::new("Select the Applications you want to manage :", options)
         .with_default(&[0_usize])
         .prompt();
 
@@ -97,10 +107,10 @@ fn tag_menu(options: Vec<String>) -> Vec<String> {
     }
 }
 
-fn confirm_menu(text: String) -> bool {
+fn confirm_menu(text: String, help_text: String) -> bool {
     let answer = Confirm::new(&text)
         .with_default(false)
-        .with_help_message("If you choose yes, we will re-install it.")
+        .with_help_message(&help_text)
         .prompt();
 
     answer.unwrap_or(false)
@@ -114,15 +124,16 @@ async fn main() {
     }
 
     // Default Parameters
-    let source: parameters::VariantParameters;
-    let mut install_dir = constants::DEFAULT_INSTALL_DIR.to_string();
+    let mut source: parameters::VariantParameters = parameters::Variant::GEProton.parameters();
+    let mut install_dir = apps::App::Steam.default_install_dir().to_string();
     let mut tags: Vec<String> = vec![String::from("latest")];
 
     let mut should_open_tag_selector = false;
     let mut should_open_dir_selector = false;
+    let mut manage_existing_versions = false;
 
     let answer: Menu = Select::new("ProtonUp Menu: Chose your action:", Menu::VARIANTS.to_vec())
-        .with_page_size(9)
+        .with_page_size(10)
         .prompt()
         .unwrap_or_else(|_| std::process::exit(0));
 
@@ -130,28 +141,28 @@ async fn main() {
     match answer {
         Menu::QuickUpdate => {
             source = parameters::Variant::GEProton.parameters();
-            install_dir = constants::DEFAULT_INSTALL_DIR.to_owned();
+            install_dir = apps::App::Steam.default_install_dir().to_string();
         }
         Menu::QuickUpdateFlatpak => {
             source = parameters::Variant::GEProton.parameters();
-            install_dir = constants::DEFAULT_INSTALL_DIR_FLATPAK.to_owned();
+            install_dir = apps::App::SteamFlatpak.default_install_dir().to_string();
         }
         Menu::QuickUpdateLutris => {
             source = parameters::Variant::WineGE.parameters();
-            install_dir = constants::DEFAULT_LUTRIS_INSTALL_DIR.to_owned();
+            install_dir = apps::App::Lutris.default_install_dir().to_string();
         }
         Menu::QuickUpdateLutrisFlatpak => {
             source = parameters::Variant::WineGE.parameters();
-            install_dir = constants::DEFAULT_LUTRIS_INSTALL_DIR_FLATPAK.to_owned();
+            install_dir = apps::App::LutrisFlatpak.default_install_dir().to_string();
         }
         Menu::ChoseReleases => {
             source = parameters::Variant::GEProton.parameters();
-            install_dir = constants::DEFAULT_INSTALL_DIR.to_owned();
+            install_dir = apps::App::Steam.default_install_dir().to_string();
             should_open_tag_selector = true;
         }
         Menu::ChoseReleasesFlatpak => {
             source = parameters::Variant::GEProton.parameters();
-            install_dir = constants::DEFAULT_INSTALL_DIR_FLATPAK.to_owned();
+            install_dir = apps::App::SteamFlatpak.default_install_dir().to_string();
             should_open_tag_selector = true;
         }
         Menu::ChoseReleasesCustomDir => {
@@ -161,18 +172,75 @@ async fn main() {
         }
         Menu::ChoseReleasesLutris => {
             source = parameters::Variant::WineGE.parameters();
-            install_dir = constants::DEFAULT_LUTRIS_INSTALL_DIR.to_owned();
+            install_dir = apps::App::Lutris.default_install_dir().to_string();
             should_open_tag_selector = true;
         }
         Menu::ChoseReleasesLutrisFlatpak => {
             source = parameters::Variant::WineGE.parameters();
-            install_dir = constants::DEFAULT_LUTRIS_INSTALL_DIR_FLATPAK.to_owned();
+            install_dir = apps::App::LutrisFlatpak.default_install_dir().to_string();
             should_open_tag_selector = true;
         }
+        Menu::ManageExistingInstallations => manage_existing_versions = true,
     }
 
     // This is where the execution happens
 
+    // If the user wants to manage existing installations, we skip the rest of the menu
+    if manage_existing_versions {
+        let mut choices = modes_menu(apps::APP_VARIANTS_WITH_DETECT.to_vec());
+        if choices.contains(&apps::App::DetectAll) {
+            choices = apps::APP_VARIANTS.to_vec();
+        }
+        for choice in choices {
+            let versions = choice.list_installed_versions().unwrap();
+            if versions.is_empty() {
+                println!("No versions found for {}, skipping... ", choice);
+                continue;
+            }
+            let delete_versions = match tag_menu(
+                &format!("Select the versions you want to DELETE from {}", choice),
+                versions,
+            ) {
+                Ok(versions) => versions,
+                Err(_) => {
+                    vec![]
+                }
+            };
+
+            if delete_versions.is_empty() {
+                println!("Zero versions selected for {}, skipping...\n", choice);
+                continue;
+            }
+            if confirm_menu(
+                format!("Are you sure you want to delete {:?} ?", delete_versions),
+                format!("If you choose yes, you will them from {}", choice),
+            ) {
+                for version in delete_versions {
+                    files::remove_dir_all(&format!(
+                        "{}{}",
+                        &choice.default_install_dir(),
+                        &version
+                    ))
+                    .map_or_else(
+                        |e| {
+                            eprintln!(
+                                "Error deleting {}{}: {}",
+                                &choice.default_install_dir(),
+                                &version,
+                                e
+                            )
+                        },
+                        |_| {
+                            println!("{} {} deleted successfully", &choice, &version);
+                        },
+                    );
+                }
+            }
+        }
+        return;
+    }
+
+    // the rest of th execution is for updating/installing new versions
     if should_open_dir_selector {
         let current_dir = std::env::current_dir().unwrap();
         let help_message = format!("Current directory: {}", current_dir.to_string_lossy());
@@ -199,7 +267,13 @@ async fn main() {
             }
         };
         let tag_list: Vec<String> = release_list.into_iter().map(|r| (r.tag_name)).collect();
-        let list = tag_menu(tag_list);
+        let list = match tag_menu("Select the versions you want to download :", tag_list) {
+            Ok(tags) => tags,
+            Err(e) => {
+                eprintln!("The tag list could not be processed.\nError: {}", e);
+                vec![]
+            }
+        };
         for tag_iter in list.iter() {
             let tag = String::from(tag_iter);
             tags.push(tag);
@@ -209,10 +283,11 @@ async fn main() {
     tags.retain(|tag_name| {
         // Check if versions exist in disk.
         // If they do, ask the user if it should be overwritten
-        !(file::check_if_exists(&install_dir, &tag_name)
-            && !confirm_menu(format!(
-                "Version {tag_name} exists in installation path. Overwrite?"
-            )))
+        !files::check_if_exists(&install_dir, tag_name)
+            && !confirm_menu(
+                format!("Version {tag_name} exists in installation path. Overwrite?"),
+                String::from("If you choose yes, you will re-install it."),
+            )
     });
 
     // install the versions that are in the tags array
@@ -245,7 +320,7 @@ pub async fn download_file(
     let install_dir = utils::expand_tilde(install_path).unwrap();
     let mut temp_dir = utils::expand_tilde(constants::TEMP_DIR).unwrap();
 
-    let download = match github::fetch_data_from_tag(tag, &source).await {
+    let download = match github::fetch_data_from_tag(tag, source).await {
         Ok(data) => data,
         Err(e) => {
             eprintln!("Failed to fetch GitHub data, make sure you're connected to the internet\nError: {}", e);
@@ -263,9 +338,9 @@ pub async fn download_file(
     });
 
     // install_dir
-    create_dir_all(&install_dir).unwrap();
+    fs::create_dir_all(&install_dir).unwrap();
 
-    let git_hash = file::download_file_into_memory(&download.sha512sum)
+    let git_hash = files::download_file_into_memory(&download.sha512sum)
         .await
         .unwrap();
 
@@ -273,7 +348,7 @@ pub async fn download_file(
         fs::remove_file(&temp_dir).unwrap();
     }
 
-    let (progress, done) = file::create_progress_trackers();
+    let (progress, done) = files::create_progress_trackers();
     let progress_read = Arc::clone(&progress);
     let done_read = Arc::clone(&done);
     let url = String::from(&download.download);
@@ -304,7 +379,7 @@ pub async fn download_file(
         println!("Checking file integrity"); // This is being printed here because the progress bar needs to be closed before printing.
     });
 
-    file::download_file_progress(
+    files::download_file_progress(
         download.download,
         download.size,
         temp_dir.clone().as_path(),
@@ -313,16 +388,16 @@ pub async fn download_file(
     )
     .await
     .unwrap();
-    if !file::hash_check_file(temp_dir.to_str().unwrap().to_string(), git_hash).unwrap() {
+    if !files::hash_check_file(temp_dir.to_str().unwrap().to_string(), git_hash).unwrap() {
         return Err("Failed checking file hash".to_string());
     }
     println!("Unpacking files into install location. Please wait");
-    file::decompress(temp_dir.as_path(), install_dir.clone().as_path()).unwrap();
+    files::decompress(temp_dir.as_path(), install_dir.clone().as_path()).unwrap();
     let source_type = source.variant_type();
     println!(
         "Done! Restart {}. {} installed in {}",
         source_type.intended_application(),
-        source_type.to_string(),
+        source_type,
         install_dir.to_string_lossy(),
     );
     Ok(())
@@ -338,10 +413,10 @@ async fn run_quick_downloads() -> bool {
 
     if quick_download {
         let source = parameters::Variant::GEProton;
-        let destination = constants::DEFAULT_INSTALL_DIR.to_string();
+        let destination = apps::App::Steam.default_install_dir().to_string();
         println!(
             "\nQuick Download: {} / {} into -> {}\n",
-            source.to_string(),
+            source,
             source.intended_application(),
             destination
         );
@@ -352,10 +427,10 @@ async fn run_quick_downloads() -> bool {
 
     if quick_download_flatpak {
         let source = parameters::Variant::GEProton;
-        let destination = constants::DEFAULT_INSTALL_DIR_FLATPAK.to_string();
+        let destination = apps::App::SteamFlatpak.default_install_dir().to_string();
         println!(
             "\nQuick Download: {} / {} into -> {}\n",
-            source.to_string(),
+            source,
             source.intended_application(),
             destination
         );
@@ -366,10 +441,10 @@ async fn run_quick_downloads() -> bool {
 
     if lutris_quick_download {
         let source = parameters::Variant::WineGE;
-        let destination = constants::DEFAULT_LUTRIS_INSTALL_DIR.to_string();
+        let destination = apps::App::Lutris.default_install_dir().to_string();
         println!(
             "\nQuick Download: {} / {} into -> {}\n",
-            source.to_string(),
+            source,
             source.intended_application(),
             destination
         );
@@ -380,10 +455,10 @@ async fn run_quick_downloads() -> bool {
 
     if lutris_quick_download_flatpak {
         let source = parameters::Variant::WineGE;
-        let destination = constants::DEFAULT_LUTRIS_INSTALL_DIR_FLATPAK.to_string();
+        let destination = apps::App::LutrisFlatpak.default_install_dir().to_string();
         println!(
             "\nQuick Download: {} / {} into -> {}\n",
-            source.to_string(),
+            source,
             source.intended_application(),
             destination
         );
@@ -392,8 +467,8 @@ async fn run_quick_downloads() -> bool {
             .unwrap();
     }
 
-    return quick_download
+    quick_download
         || quick_download_flatpak
         || lutris_quick_download
-        || lutris_quick_download_flatpak;
+        || lutris_quick_download_flatpak
 }
