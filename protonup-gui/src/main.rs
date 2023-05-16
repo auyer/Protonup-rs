@@ -216,10 +216,10 @@ impl Download {
 
     pub fn subscription(&self) -> Subscription<Message> {
         match self.state {
-            State::Downloading { .. } => {
-                download::file(self.id, "https://speed.hetzner.de/100MB.bin?")
-                    .map(Message::DownloadProgressed)
-            }
+//            State::Downloading { .. } => {
+//                download::file(self.id, "https://speed.hetzner.de/100MB.bin?")
+//                    .map(Message::DownloadProgressed)
+//            }
             _ => Subscription::none(),
         }
     }

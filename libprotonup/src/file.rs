@@ -84,8 +84,9 @@ pub fn create_progress_trackers() -> (Arc<AtomicUsize>, Arc<AtomicBool>) {
     )
 }
 
+
 /// Check if the Proton/Wine version (tag) exists at path
-pub fn check_if_exists(path: String, tag: String) -> bool {
+pub fn check_if_exists(path: &str, tag: &str) -> bool {
     let f_path = utils::expand_tilde(format!("{path}/{tag}")).unwrap();
     let p = std::path::Path::new(&f_path);
     p.is_dir()

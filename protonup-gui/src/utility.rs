@@ -45,6 +45,7 @@ impl fmt::Display for Launcher {
 }
 
 impl Launcher {
+    /// Returns a bool, true if the Launcher has Some LauncheData, false otherwise
     fn has_data(&self) -> bool {
         match self {
             Launcher::Steam(data) => data.is_some(),
@@ -170,7 +171,7 @@ fn modify_launcher_data(pathbuf: PathBuf, data: &mut Option<LauncherData>) {
     // If the read_dir returned an error, we'll set the LauncherData to None, otherwise continue
     if dir_iter.is_err() {
         eprintln!(
-            "Couldn't read passed in dir: {:?} \n {:?}",
+            "Couldn't read passed in dir: {:?}\n{:?}",
             pathbuf, dir_iter
         );
         *data = None
