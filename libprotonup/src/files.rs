@@ -87,7 +87,7 @@ pub fn create_progress_trackers() -> (Arc<AtomicUsize>, Arc<AtomicBool>) {
 
 // check_if_exists checks if a folder exists in a path
 pub fn check_if_exists(path: &str, tag: &str) -> bool {
-    let f_path = utils::expand_tilde(format!("{path}/{tag}")).unwrap();
+    let f_path = utils::expand_tilde(format!("{path}{tag}/")).unwrap();
     let p = f_path.as_path();
     p.is_dir()
 }
