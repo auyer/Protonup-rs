@@ -126,7 +126,7 @@ async fn main() {
     // Default Parameters
     let mut source: parameters::VariantParameters = parameters::Variant::GEProton.parameters();
     let mut install_dir = apps::App::Steam.default_install_dir().to_string();
-    let mut tags: Vec<String> = vec![String::from("latest")];
+    let mut tags: Vec<String> = vec![];
 
     let mut should_open_tag_selector = false;
     let mut should_open_dir_selector = false;
@@ -278,13 +278,22 @@ async fn main() {
             let tag = String::from(tag_iter);
             tags.push(tag);
         }
+    } else {
+        let tag = match github::fetch_data_from_tag(&"latest", &source).await {
+            Ok(data) => data,
+            Err(e) => {
+                eprintln!("Failed to fetch Github data, make sure you're connected to the internet.\nError: {}", e);
+                std::process::exit(1)
+            }
+        };
+        tags.push(tag.version)
     }
 
     tags.retain(|tag_name| {
         // Check if versions exist in disk.
         // If they do, ask the user if it should be overwritten
-        !files::check_if_exists(&install_dir, tag_name)
-            && !confirm_menu(
+        files::check_if_exists(&install_dir, tag_name)
+            && confirm_menu(
                 format!("Version {tag_name} exists in installation path. Overwrite?"),
                 String::from("If you choose yes, you will re-install it."),
             )
