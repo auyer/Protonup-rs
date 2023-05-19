@@ -1,6 +1,8 @@
 use super::constants::*;
 use std::{fmt, str::FromStr};
-// VariantParameters stores the parameters for a variant of Proton
+
+/// Struct used to build GitHub api request URLs.
+/// Contains the GitHub URL, username for GE, the repository name for either Wine GE or Proton GE, and a Variant Enum for identifying the parameters type
 pub struct VariantParameters {
     /// this is a link back to the enum variant
     variant_ref: Variant,
@@ -28,9 +30,9 @@ impl VariantParameters {
         }
     }
 
-    ///
+    /// Returns the VariantParameters' Variant enum
     pub fn variant_type(&self) -> &Variant {
-        return &self.variant_ref;
+        &self.variant_ref
     }
 }
 

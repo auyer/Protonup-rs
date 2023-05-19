@@ -129,58 +129,58 @@ async fn main() {
     // Set parameters based on users choice
     match answer {
         Menu::QuickUpdate => {
-//            let tag = match github::fetch_data_from_tag("latest", false).await {
-//                Ok(data) => data,
-//                Err(e) => {
-//                    eprintln!("Failed to fetch Github data, make sure you're connected to the internet.\nError: {}", e);
-//                    std::process::exit(1)
-//                }
-//            };
-//
-//            if file::check_if_exists(
-//                constants::DEFAULT_STEAM_INSTALL_DIR.to_owned(),
-//                tag.version.clone(),
-//            ) && !confirm_menu(format!(
-//                "Version {} exists in installation path. Overwrite?",
-//                tag.version
-//            )) {
-//                return;
-//            }
-//
-//            download_file(
-//                "latest",
-//                constants::DEFAULT_STEAM_INSTALL_DIR.to_string(),
-//                false,
-//            )
-//            .await
-//            .unwrap();
-//        }
-//        Menu::QuickUpdateFlatpak => {
-//            let tag = match github::fetch_data_from_tag("latest", false).await {
-//                Ok(data) => data,
-//                Err(e) => {
-//                    eprintln!("Failed to fetch Github data, make sure you're connected to the internet.\nError: {}", e);
-//                    std::process::exit(1)
-//                }
-//            };
-//
-//            if file::check_if_exists(
-//                constants::DEFAULT_STEAM_INSTALL_DIR_FLATPAK.to_owned(),
-//                tag.version.clone(),
-//            ) && !confirm_menu(format!(
-//                "Version {} exists in installation path. Overwrite?",
-//                tag.version
-//            )) {
-//                return;
-//            }
-//
-//            download_file(
-//                "latest",
-//                constants::DEFAULT_STEAM_INSTALL_DIR_FLATPAK.to_string(),
-//                false,
-//            )
-//            .await
-//            .unwrap();
+            //            let tag = match github::fetch_data_from_tag("latest", false).await {
+            //                Ok(data) => data,
+            //                Err(e) => {
+            //                    eprintln!("Failed to fetch Github data, make sure you're connected to the internet.\nError: {}", e);
+            //                    std::process::exit(1)
+            //                }
+            //            };
+            //
+            //            if file::check_if_exists(
+            //                constants::DEFAULT_STEAM_INSTALL_DIR.to_owned(),
+            //                tag.version.clone(),
+            //            ) && !confirm_menu(format!(
+            //                "Version {} exists in installation path. Overwrite?",
+            //                tag.version
+            //            )) {
+            //                return;
+            //            }
+            //
+            //            download_file(
+            //                "latest",
+            //                constants::DEFAULT_STEAM_INSTALL_DIR.to_string(),
+            //                false,
+            //            )
+            //            .await
+            //            .unwrap();
+            //        }
+            //        Menu::QuickUpdateFlatpak => {
+            //            let tag = match github::fetch_data_from_tag("latest", false).await {
+            //                Ok(data) => data,
+            //                Err(e) => {
+            //                    eprintln!("Failed to fetch Github data, make sure you're connected to the internet.\nError: {}", e);
+            //                    std::process::exit(1)
+            //                }
+            //            };
+            //
+            //            if file::check_if_exists(
+            //                constants::DEFAULT_STEAM_INSTALL_DIR_FLATPAK.to_owned(),
+            //                tag.version.clone(),
+            //            ) && !confirm_menu(format!(
+            //                "Version {} exists in installation path. Overwrite?",
+            //                tag.version
+            //            )) {
+            //                return;
+            //            }
+            //
+            //            download_file(
+            //                "latest",
+            //                constants::DEFAULT_STEAM_INSTALL_DIR_FLATPAK.to_string(),
+            //                false,
+            //            )
+            //            .await
+            //            .unwrap();
             source = parameters::Variant::GEProton.parameters();
             install_dir = constants::DEFAULT_STEAM_INSTALL_DIR.to_owned();
         }
@@ -197,95 +197,95 @@ async fn main() {
             install_dir = constants::DEFAULT_LUTRIS_INSTALL_DIR_FLATPAK.to_owned();
         }
         Menu::ChoseReleases => {
-//            let release_list = match github::list_releases(false).await {
-//                Ok(data) => data,
-//                Err(e) => {
-//                    eprintln!("Failed to fetch Github data, make sure you're connected to the internet.\nError: {}", e);
-//                    std::process::exit(1)
-//                }
-//            };
-//            let tag_list: Vec<String> = release_list.into_iter().map(|r| (r.tag_name)).collect();
-//            let list = tag_menu(tag_list);
-//            for tag in list.iter() {
-//                if file::check_if_exists(
-//                    constants::DEFAULT_STEAM_INSTALL_DIR.to_owned(),
-//                    tag.to_owned(),
-//                ) && !confirm_menu(format!(
-//                    "Version {tag} exists in installation path. Overwrite?"
-//                )) {
-//                    return;
-//                }
-//                download_file(tag, constants::DEFAULT_STEAM_INSTALL_DIR.to_string(), false)
-//                    .await
-//                    .unwrap();
-//            }
-//        }
-//        Menu::ChoseReleasesFlatpak => {
-//            let release_list = match github::list_releases(false).await {
-//                Ok(data) => data,
-//                Err(e) => {
-//                    eprintln!("Failed to fetch Github data, make sure you're connected to the internet.\nError: {}", e);
-//                    std::process::exit(1)
-//                }
-//            };
-//            let tag_list: Vec<String> = release_list.into_iter().map(|r| (r.tag_name)).collect();
-//            let list = tag_menu(tag_list);
-//            for tag in list.iter() {
-//                if file::check_if_exists(
-//                    constants::DEFAULT_STEAM_INSTALL_DIR_FLATPAK.to_owned(),
-//                    tag.to_owned(),
-//                ) && !confirm_menu(format!(
-//                    "Version {tag} exists in installation path. Overwrite?"
-//                )) {
-//                    return;
-//                }
-//                download_file(
-//                    tag,
-//                    constants::DEFAULT_STEAM_INSTALL_DIR_FLATPAK.to_string(),
-//                    false,
-//                )
-//                .await
-//                .unwrap();
-//            }
-//        }
-//        Menu::ChoseReleasesCustomDir => {
-//            let current_dir = std::env::current_dir().unwrap();
-//            let help_message = format!("Current directory: {}", current_dir.to_string_lossy());
-//            let answer = Text::new("Installation path:")
-//                .with_autocomplete(file_path::FilePathCompleter::default())
-//                .with_help_message(&help_message)
-//                .prompt();
-//
-//            let chosen_path = match answer {
-//                Ok(path) => path,
-//                Err(error) => {
-//                    println!("Error choosing custom path. Using the default. Error: {error:?}");
-//                    constants::DEFAULT_STEAM_INSTALL_DIR.to_string()
-//                }
-//            };
-//            let release_list = match github::list_releases(false).await {
-//                Ok(data) => data,
-//                Err(e) => {
-//                    eprintln!("Failed to fetch Github data, make sure you're connected to the internet.\nError: {}", e);
-//                    std::process::exit(1)
-//                }
-//            };
-//            let tag_list: Vec<String> = release_list.into_iter().map(|r| (r.tag_name)).collect();
-//            let list = tag_menu(tag_list);
-//            for tag in list.iter() {
-//                if file::check_if_exists(
-//                    constants::DEFAULT_STEAM_INSTALL_DIR.to_owned(),
-//                    tag.to_owned(),
-//                ) && !confirm_menu(format!(
-//                    "Version {tag} exists in installation path. Overwrite?"
-//                )) {
-//                    return;
-//                }
-//
-//                download_file(tag, chosen_path.clone(), false)
-//                    .await
-//                    .unwrap();
-//            }
+            //            let release_list = match github::list_releases(false).await {
+            //                Ok(data) => data,
+            //                Err(e) => {
+            //                    eprintln!("Failed to fetch Github data, make sure you're connected to the internet.\nError: {}", e);
+            //                    std::process::exit(1)
+            //                }
+            //            };
+            //            let tag_list: Vec<String> = release_list.into_iter().map(|r| (r.tag_name)).collect();
+            //            let list = tag_menu(tag_list);
+            //            for tag in list.iter() {
+            //                if file::check_if_exists(
+            //                    constants::DEFAULT_STEAM_INSTALL_DIR.to_owned(),
+            //                    tag.to_owned(),
+            //                ) && !confirm_menu(format!(
+            //                    "Version {tag} exists in installation path. Overwrite?"
+            //                )) {
+            //                    return;
+            //                }
+            //                download_file(tag, constants::DEFAULT_STEAM_INSTALL_DIR.to_string(), false)
+            //                    .await
+            //                    .unwrap();
+            //            }
+            //        }
+            //        Menu::ChoseReleasesFlatpak => {
+            //            let release_list = match github::list_releases(false).await {
+            //                Ok(data) => data,
+            //                Err(e) => {
+            //                    eprintln!("Failed to fetch Github data, make sure you're connected to the internet.\nError: {}", e);
+            //                    std::process::exit(1)
+            //                }
+            //            };
+            //            let tag_list: Vec<String> = release_list.into_iter().map(|r| (r.tag_name)).collect();
+            //            let list = tag_menu(tag_list);
+            //            for tag in list.iter() {
+            //                if file::check_if_exists(
+            //                    constants::DEFAULT_STEAM_INSTALL_DIR_FLATPAK.to_owned(),
+            //                    tag.to_owned(),
+            //                ) && !confirm_menu(format!(
+            //                    "Version {tag} exists in installation path. Overwrite?"
+            //                )) {
+            //                    return;
+            //                }
+            //                download_file(
+            //                    tag,
+            //                    constants::DEFAULT_STEAM_INSTALL_DIR_FLATPAK.to_string(),
+            //                    false,
+            //                )
+            //                .await
+            //                .unwrap();
+            //            }
+            //        }
+            //        Menu::ChoseReleasesCustomDir => {
+            //            let current_dir = std::env::current_dir().unwrap();
+            //            let help_message = format!("Current directory: {}", current_dir.to_string_lossy());
+            //            let answer = Text::new("Installation path:")
+            //                .with_autocomplete(file_path::FilePathCompleter::default())
+            //                .with_help_message(&help_message)
+            //                .prompt();
+            //
+            //            let chosen_path = match answer {
+            //                Ok(path) => path,
+            //                Err(error) => {
+            //                    println!("Error choosing custom path. Using the default. Error: {error:?}");
+            //                    constants::DEFAULT_STEAM_INSTALL_DIR.to_string()
+            //                }
+            //            };
+            //            let release_list = match github::list_releases(false).await {
+            //                Ok(data) => data,
+            //                Err(e) => {
+            //                    eprintln!("Failed to fetch Github data, make sure you're connected to the internet.\nError: {}", e);
+            //                    std::process::exit(1)
+            //                }
+            //            };
+            //            let tag_list: Vec<String> = release_list.into_iter().map(|r| (r.tag_name)).collect();
+            //            let list = tag_menu(tag_list);
+            //            for tag in list.iter() {
+            //                if file::check_if_exists(
+            //                    constants::DEFAULT_STEAM_INSTALL_DIR.to_owned(),
+            //                    tag.to_owned(),
+            //                ) && !confirm_menu(format!(
+            //                    "Version {tag} exists in installation path. Overwrite?"
+            //                )) {
+            //                    return;
+            //                }
+            //
+            //                download_file(tag, chosen_path.clone(), false)
+            //                    .await
+            //                    .unwrap();
+            //            }
             source = parameters::Variant::GEProton.parameters();
             install_dir = constants::DEFAULT_STEAM_INSTALL_DIR.to_owned();
             should_open_tag_selector = true;

@@ -7,24 +7,34 @@ pub type ReleaseList = Vec<Release>;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Release {
+    /// API URL of the Release
     url: String,
+    /// Tag name of the Release, examples "8.7-GE-1-Lol" "GE-Proton8-5"
     pub tag_name: String,
+    /// Release post name, examples "Wine-GE-Proton8-5 Released" " Lutris-GE-8.7-1-LoL"
     name: String,
     published_at: String,
+    /// Asset list for each Release, usually the tar.gz/tar.xz file and a sha512sum file for integrity checking
     assets: Vec<Asset>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Asset {
+    /// API URL of the Asset
     url: String,
+    /// API ID of the Asset
     id: i64,
+    /// File name of the Asset
     name: String,
+    /// Size in Bytes, divide by 1_000_000 for MB
     size: i64,
     created_at: String,
     updated_at: String,
+    /// Direct download URL
     browser_download_url: String,
 }
 
+/// Returns a Vec of Releases from a GitHub repository, the URL used for the request is built from the passed in VariantParameters
 pub async fn list_releases(source: &VariantParameters) -> Result<ReleaseList, reqwest::Error> {
     let agent = format!("{}/v{}", constants::USER_AGENT, constants::VERSION,);
 
@@ -42,13 +52,18 @@ pub async fn list_releases(source: &VariantParameters) -> Result<ReleaseList, re
 
 #[derive(Default, Debug, PartialEq, Clone)]
 pub struct Download {
+    /// Proton or Wine GE version, based off tag
     pub version: String,
+    /// URL to download the sha512sum for this Download
     pub sha512sum_url: String,
+    /// URL to download the Wine or Proton archive
     pub download_url: String,
+    /// Size of Wine or Proton archive in Bytes
     pub size: u64,
     pub created_at: String,
 }
 
+/// Returns a Download struct from the passed in VariantParameters and version tag.
 pub async fn fetch_data_from_tag(
     tag: &str,
     source: &VariantParameters,
@@ -58,36 +73,18 @@ pub async fn fetch_data_from_tag(
     let client = reqwest::Client::builder().user_agent(agent).build()?;
 
     let mut download = Download::default();
-    let release = match tag {
-        "latest" => {
-            let url = format!(
-                "{}/{}/{}/releases/latest",
-                source.repository_url, source.repository_account, source.repository_name,
-            );
-            let rel: Release = client.get(url).send().await?.json().await?;
-            rel
-        }
-        _ => {
-            let url = format!(
-                "{}/{}/{}/releases/tags/{}",
-                source.repository_url, source.repository_account, source.repository_name, &tag
-            );
-            let rel: Release = client.get(url).send().await?.json().await?;
-            rel
-        }
-    };
+    let url = format!(
+        "{}/{}/{}/releases/{}",
+        source.repository_url, source.repository_account, source.repository_name, tag
+    );
+    let release: Release = client.get(url).send().await?.json().await?;
 
     download.version = release.tag_name;
     for asset in &release.assets {
         if asset.name.ends_with("sha512sum") {
             download.sha512sum_url = asset.browser_download_url.as_str().to_string();
         }
-        if asset.name.ends_with("tar.gz") {
-            download.created_at = asset.created_at.clone();
-            download.download_url = asset.browser_download_url.as_str().to_string();
-            download.size = asset.size as u64;
-        }
-        if asset.name.ends_with("tar.xz") {
+        if asset.name.ends_with("tar.gz") || asset.name.ends_with("tar.xz") {
             download.created_at = asset.created_at.clone();
             download.download_url = asset.browser_download_url.as_str().to_string();
             download.size = asset.size as u64;
@@ -95,6 +92,7 @@ pub async fn fetch_data_from_tag(
     }
     Ok(download)
 }
+
 #[cfg(test)]
 mod tests {
     use crate::parameters;
@@ -167,6 +165,8 @@ mod tests {
 
             let result = result.unwrap();
 
+            println!("Got result: {result:?}");
+
             assert!(
                 result.len() > 1,
                 "case : '{}' test: test_list_releases returned an empty list",
@@ -209,7 +209,7 @@ mod tests {
             .await;
 
             println!("Got result: {rel:?}");
-            
+
             assert!(
                 rel.is_ok(),
                 "case : '{}' test: test_get_release wrong",

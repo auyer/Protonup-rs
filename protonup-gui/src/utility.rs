@@ -1,4 +1,4 @@
-use crate::Message;
+use crate::app::Message;
 use iced::{widget::text, Element};
 use std::{fmt, path::PathBuf};
 
@@ -170,10 +170,7 @@ fn modify_launcher_data(pathbuf: PathBuf, data: &mut Option<LauncherData>) {
     let dir_iter = pathbuf.read_dir();
     // If the read_dir returned an error, we'll set the LauncherData to None, otherwise continue
     if dir_iter.is_err() {
-        eprintln!(
-            "Couldn't read passed in dir: {:?}\n{:?}",
-            pathbuf, dir_iter
-        );
+        eprintln!("Couldn't read passed in dir: {:?}\n{:?}", pathbuf, dir_iter);
         *data = None
     } else {
         // Create a list to hold all the Strings of different Proton/Wine versions
