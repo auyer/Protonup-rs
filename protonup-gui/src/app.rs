@@ -108,7 +108,7 @@ impl Application for App {
                 )
                 .width(Length::Fill),
             )
-            .height(Length::Units(40))
+            .height(Length::Fixed(40.0))
             .width(Length::Fill)
             // Will figure out how to fix later
             // .style(container::Style {
