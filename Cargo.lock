@@ -694,7 +694,7 @@ checksum = "f92be4933c13fd498862a9e02a3055f8a8d9c039ce33db97306fd5a6caa7f29b"
 
 [[package]]
 name = "libprotonup"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "anyhow",
  "dirs",
@@ -875,7 +875,7 @@ dependencies = [
 
 [[package]]
 name = "protonup-rs"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap 4.3.4",
  "indicatif",
