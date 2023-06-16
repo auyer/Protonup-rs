@@ -713,6 +713,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "libprotonup"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e75df1174d04f06ae3aac1c9f9cf034b1a0763a4d6d9f135fef68747aebf60be"
+dependencies = [
+ "anyhow",
+ "dirs",
+ "flate2",
+ "futures-util",
+ "hex",
+ "hex-literal",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2",
+ "structopt",
+ "tar",
+ "xz2",
+]
+
+[[package]]
 name = "linux-raw-sys"
 version = "0.3.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -880,7 +901,7 @@ dependencies = [
  "clap 4.3.4",
  "indicatif",
  "inquire",
- "libprotonup",
+ "libprotonup 0.6.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "tokio",
 ]
 
