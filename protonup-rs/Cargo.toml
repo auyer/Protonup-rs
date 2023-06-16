@@ -21,4 +21,4 @@ indicatif = { version = "0.17", features = [
   "unicode-segmentation",
 ] }
 tokio = { version = "1.28", features = ["macros", "rt-multi-thread"] }
-clap = { version = "4.2.1", features = ["derive"] }
+clap = { version = "4.3", features = ["derive"] }
