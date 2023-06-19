@@ -136,28 +136,28 @@ fn get_launcher_data(launcher: &mut Launcher) {
     match launcher {
         Launcher::Steam(data) => {
             let pathbuf = libprotonup::utils::expand_tilde(PathBuf::from(
-                libprotonup::constants::DEFAULT_STEAM_INSTALL_DIR,
+                libprotonup::apps::AppInstallations::Steam.default_install_dir(),
             ))
             .unwrap();
             modify_launcher_data(pathbuf, data);
         }
         Launcher::SteamFlatpak(data) => {
             let pathbuf = libprotonup::utils::expand_tilde(PathBuf::from(
-                libprotonup::constants::DEFAULT_STEAM_INSTALL_DIR_FLATPAK,
+                libprotonup::apps::AppInstallations::SteamFlatpak.default_install_dir(),
             ))
             .unwrap();
             modify_launcher_data(pathbuf, data);
         }
         Launcher::Lutris(data) => {
             let pathbuf = libprotonup::utils::expand_tilde(PathBuf::from(
-                libprotonup::constants::DEFAULT_LUTRIS_INSTALL_DIR,
+                libprotonup::apps::AppInstallations::Lutris.default_install_dir(),
             ))
             .unwrap();
             modify_launcher_data(pathbuf, data);
         }
         Launcher::LutrisFlatpak(data) => {
             let pathbuf = libprotonup::utils::expand_tilde(PathBuf::from(
-                libprotonup::constants::DEFAULT_LUTRIS_INSTALL_DIR_FLATPAK,
+                libprotonup::apps::AppInstallations::LutrisFlatpak.default_install_dir(),
             ))
             .unwrap();
             modify_launcher_data(pathbuf, data);
@@ -198,7 +198,7 @@ mod tests {
     fn test_modify_launcher_data() {
         let mut launcher_data: Option<LauncherData> = None;
         let pathbuf = libprotonup::utils::expand_tilde(PathBuf::from(
-            libprotonup::constants::DEFAULT_STEAM_INSTALL_DIR,
+            libprotonup::apps::AppInstallations::Steam.default_install_dir(),
         ))
         .unwrap();
 
