@@ -37,6 +37,7 @@ impl VariantParameters {
 }
 
 /// Variant is an enum with all supported "Proton" versions
+#[derive(Debug, Clone)]
 pub enum Variant {
     GEProton,
     WineGE,
@@ -91,3 +92,6 @@ impl Variant {
         }
     }
 }
+
+// ALL_VARIANTS is a shorthand to all app variants
+pub static ALL_VARIANTS: &[Variant] = &[Variant::GEProton, Variant::WineGE];

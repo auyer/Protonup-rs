@@ -1,5 +1,5 @@
 use crate::constants;
-use crate::parameters::VariantParameters;
+use crate::variants::VariantParameters;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
@@ -95,7 +95,7 @@ pub async fn fetch_data_from_tag(
 
 #[cfg(test)]
 mod tests {
-    use crate::parameters;
+    use crate::variants;
 
     use super::*;
 
@@ -103,12 +103,12 @@ mod tests {
     async fn test_fetch_data_from_tag() {
         let conditions = &[
             (
-                parameters::Variant::WineGE.parameters(),
+                variants::Variant::WineGE.parameters(),
                 "latest",
                 "Get Steam",
             ),
             (
-                parameters::Variant::GEProton.parameters(),
+                variants::Variant::GEProton.parameters(),
                 "latest",
                 "Download Lutris",
             ),
@@ -150,8 +150,8 @@ mod tests {
     #[tokio::test]
     async fn test_list_releases() {
         let conditions = &[
-            (parameters::Variant::WineGE.parameters(), "List WineGE"),
-            (parameters::Variant::GEProton.parameters(), "List GEProton"),
+            (variants::Variant::WineGE.parameters(), "List WineGE"),
+            (variants::Variant::GEProton.parameters(), "List GEProton"),
         ];
 
         for (source_parameters, desc) in conditions {
@@ -188,8 +188,8 @@ mod tests {
         };
 
         let conditions = &[
-            (parameters::Variant::WineGE.parameters(), "Get WineGE"),
-            (parameters::Variant::GEProton.parameters(), "Get GEProton"),
+            (variants::Variant::WineGE.parameters(), "Get WineGE"),
+            (variants::Variant::GEProton.parameters(), "Get GEProton"),
         ];
         for (source_parameters, desc) in conditions {
             let url = format!(
