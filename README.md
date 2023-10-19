@@ -39,7 +39,9 @@ Options:
 wget https://github.com/auyer/Protonup-rs/releases/latest/download/protonup-rs-linux-amd64.tar.gz -O - | tar -xz && zenity --password | sudo -S mv protonup-rs /usr/bin/
 ```
 
-This assumes `/usr/bin` is in your path. You may change this to any other location (in your path `echo $PATH`).
+
+This assumes `/usr/bin` is in your path. You may change this to any other location (in your path ```echo $PATH```). 
+
 
 ### Or manually:
 
