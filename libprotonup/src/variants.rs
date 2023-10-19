@@ -1,7 +1,9 @@
 use super::constants::*;
 use std::{fmt, str::FromStr};
-// VariantParameters stores the parameters for a variant of Proton
-pub struct VariantParameters {
+
+/// Struct used to build GitHub api request URLs.
+/// Contains the GitHub URL, username for GE, the repository name for either Wine GE or Proton GE, and a Variant Enum for identifying the parameters type
+pub struct VariantGithubParameters {
     /// this is a link back to the enum variant
     variant_ref: Variant,
     /// URL of the repository server (GitHub compatible URL only at the moment)
@@ -12,15 +14,15 @@ pub struct VariantParameters {
     pub repository_name: String,
 }
 
-impl VariantParameters {
+impl VariantGithubParameters {
     /// new_custom is a generator for custom VariantParameters
     pub fn new_custom(
         variant: Variant,
         repository_url: String,
         repository_account: String,
         repository_name: String,
-    ) -> VariantParameters {
-        VariantParameters {
+    ) -> VariantGithubParameters {
+        VariantGithubParameters {
             variant_ref: variant,
             repository_url,
             repository_account,
@@ -71,16 +73,16 @@ impl Variant {
         }
     }
 
-    /// returns the default parameters for this Variant.
-    pub fn parameters(&self) -> VariantParameters {
+    /// Returns the default parameters for this Variant, used to build the GitHub URL
+    pub fn get_github_parameters(&self) -> VariantGithubParameters {
         match self {
-            Variant::GEProton => VariantParameters {
+            Variant::GEProton => VariantGithubParameters {
                 variant_ref: Variant::GEProton,
                 repository_url: GITHUB_URL.to_owned(),
                 repository_name: GEPROTON_GITHUB_REPO.to_owned(),
                 repository_account: GE_GITHUB_ACCOUNT.to_owned(),
             },
-            Variant::WineGE => VariantParameters {
+            Variant::WineGE => VariantGithubParameters {
                 variant_ref: Variant::WineGE,
                 repository_url: GITHUB_URL.to_owned(),
                 repository_name: WINEGE_GITHUB_REPO.to_owned(),
