@@ -1,4 +1,5 @@
-use super::constants;
+use crate::constants;
+use crate::variants::VariantGithubParameters;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
@@ -6,36 +7,64 @@ pub type ReleaseList = Vec<Release>;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Release {
-    url: String,
+    /// API URL of the Release
+    url: Option<String>,
+    /// Tag name of the Release, examples "8.7-GE-1-Lol" "GE-Proton8-5"
     pub tag_name: String,
+    /// Release post name, examples "Wine-GE-Proton8-5 Released" " Lutris-GE-8.7-1-LoL"
     name: String,
-    published_at: String,
+    /// Asset list for each Release, usually the tar.gz/tar.xz file and a sha512sum file for integrity checking
     assets: Vec<Asset>,
+}
+
+impl std::fmt::Display for Release {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        write!(f, "{}", self.tag_name)
+    }
+}
+
+impl Release {
+    /// Returns a Download struct corresponding to the Release
+    pub fn get_download_info(&self) -> Download {
+        let mut download: Download = Download::default();
+        download.version = self.tag_name.clone();
+        for asset in &self.assets {
+            if asset.name.ends_with("sha512sum") {
+                download.sha512sum_url = asset.browser_download_url.clone();
+            } else if asset.name.ends_with("tar.gz") || asset.name.ends_with("tar.xz") {
+                download.download_url = asset.browser_download_url.clone();
+                download.size = asset.size as u64;
+            }
+        }
+
+        download
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Asset {
+    /// API URL of the Asset
     url: String,
+    /// API ID of the Asset
     id: i64,
+    /// File name of the Asset
     name: String,
+    /// Size in Bytes, divide by 1_000_000 for MB
     size: i64,
-    created_at: String,
     updated_at: String,
+    /// Direct download URL
     browser_download_url: String,
 }
 
-pub async fn list_releases(lutris: bool) -> Result<ReleaseList, reqwest::Error> {
+/// Returns a Vec of Releases from a GitHub repository, the URL used for the request is built from the passed in VariantParameters
+pub async fn list_releases(
+    source: &VariantGithubParameters,
+) -> Result<ReleaseList, reqwest::Error> {
     let agent = format!("{}/v{}", constants::USER_AGENT, constants::VERSION,);
 
     let url = format!(
         "{}/{}/{}/releases",
-        constants::GITHUB,
-        constants::GITHUB_ACCOUNT,
-        if lutris {
-            constants::LUTRIS_GITHUB_REPO
-        } else {
-            constants::GITHUB_REPO
-        },
+        source.repository_url, source.repository_account, source.repository_name,
     );
 
     let client = reqwest::Client::builder().user_agent(agent).build()?;
@@ -47,92 +76,58 @@ pub async fn list_releases(lutris: bool) -> Result<ReleaseList, reqwest::Error> 
 
 #[derive(Default, Debug, PartialEq, Clone)]
 pub struct Download {
+    /// Proton or Wine GE version, based off tag
     pub version: String,
-    pub sha512sum: String,
-    pub download: String,
+    /// URL to download the sha512sum for this Download
+    pub sha512sum_url: String,
+    /// URL to download the Wine or Proton archive
+    pub download_url: String,
+    /// Size of Wine or Proton archive in Bytes
     pub size: u64,
-    pub created_at: String,
-}
-
-pub async fn fetch_data_from_tag(tag: &str, lutris: bool) -> Result<Download, reqwest::Error> {
-    let agent = format!("{}/v{}", constants::USER_AGENT, constants::VERSION,);
-
-    let client = reqwest::Client::builder().user_agent(agent).build()?;
-
-    let mut download = Download::default();
-    let release = match tag {
-        "latest" => {
-            let url = format!(
-                "{}/{}/{}/releases/latest",
-                constants::GITHUB,
-                constants::GITHUB_ACCOUNT,
-                if lutris {
-                    constants::LUTRIS_GITHUB_REPO
-                } else {
-                    constants::GITHUB_REPO
-                },
-            );
-            let rel: Release = client.get(url).send().await?.json().await?;
-            rel
-        }
-        _ => {
-            let url = format!(
-                "{}/{}/{}/releases/tags/{}",
-                constants::GITHUB,
-                constants::GITHUB_ACCOUNT,
-                if lutris {
-                    constants::LUTRIS_GITHUB_REPO
-                } else {
-                    constants::GITHUB_REPO
-                },
-                &tag
-            );
-            let rel: Release = client.get(url).send().await?.json().await?;
-            rel
-        }
-    };
-
-    download.version = release.tag_name;
-    for asset in &release.assets {
-        if asset.name.ends_with("sha512sum") {
-            download.sha512sum = asset.browser_download_url.as_str().to_string();
-        }
-        if asset.name.ends_with("tar.gz") {
-            download.created_at = asset.created_at.clone();
-            download.download = asset.browser_download_url.as_str().to_string();
-            download.size = asset.size as u64;
-        }
-        if asset.name.ends_with("tar.xz") {
-            download.created_at = asset.created_at.clone();
-            download.download = asset.browser_download_url.as_str().to_string();
-            download.size = asset.size as u64;
-        }
-    }
-    Ok(download)
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::variants;
+
     use super::*;
 
-    #[actix_rt::test]
-    async fn test_data_fetch() {
-        let lutris = true;
-        let tag = "latest";
+    #[tokio::test]
+    async fn test_list_releases() {
+        let conditions = &[
+            (
+                variants::Variant::WineGE.get_github_parameters(),
+                "List WineGE",
+            ),
+            (
+                variants::Variant::GEProton.get_github_parameters(),
+                "List GEProton",
+            ),
+        ];
 
-        let result = match fetch_data_from_tag(tag, lutris).await {
-            Ok(data) => data,
-            Err(e) => {
-                eprintln!("Error: {}", e);
-                std::process::exit(1)
-            }
-        };
+        for (source_parameters, desc) in conditions {
+            let result = list_releases(source_parameters).await;
 
-        println!("Got result: {:?}", result);
+            assert!(
+                result.is_ok(),
+                "case : '{}' test: list_releases returned error",
+                desc
+            );
+
+            let result = result.unwrap();
+
+            println!("Got result: {result:?}");
+
+            assert!(
+                result.len() > 1,
+                "case : '{}' test: test_list_releases returned an empty list",
+                desc
+            );
+        }
     }
 
-    #[actix_rt::test]
-    async fn test_releases() {
+    #[tokio::test]
+    async fn test_get_release() {
         let agent = format!("{}/v{}", constants::USER_AGENT, constants::VERSION,);
 
         let client = match reqwest::Client::builder().user_agent(agent).build() {
@@ -143,24 +138,40 @@ mod tests {
             }
         };
 
-        let url = format!(
-            "{}/{}/{}/releases/latest",
-            constants::GITHUB,
-            constants::GITHUB_ACCOUNT,
-            constants::LUTRIS_GITHUB_REPO,
-        );
+        let conditions = &[
+            (
+                variants::Variant::WineGE.get_github_parameters(),
+                "Get WineGE",
+            ),
+            (
+                variants::Variant::GEProton.get_github_parameters(),
+                "Get GEProton",
+            ),
+        ];
+        for (source_parameters, desc) in conditions {
+            let url = format!(
+                "{}/{}/{}/releases/latest",
+                source_parameters.repository_url,
+                source_parameters.repository_account,
+                source_parameters.repository_name
+            );
 
-        let rel: Release = match client.get(url).send().await {
-            Ok(res) => res,
-            Err(e) => {
-                eprintln!("Error: {}", e);
-                std::process::exit(1)
+            let rel = match client.get(url).send().await {
+                Ok(res) => res,
+                Err(e) => {
+                    panic!("Error: {}", e);
+                }
             }
-        }
-        .json()
-        .await
-        .unwrap();
+            .json::<Release>()
+            .await;
 
-        println!("Result: {:?}", rel);
+            println!("Got result: {rel:?}");
+
+            assert!(
+                rel.is_ok(),
+                "case : '{}' test: test_get_release wrong",
+                desc
+            );
+        }
     }
 }

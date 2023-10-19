@@ -23,6 +23,7 @@ fn path_result(path: &Path) -> String {
     }
 }
 
+// decompress will detect the extension and decompress the file with the appropriate function
 pub fn decompress(from_path: &Path, destination_path: &Path) -> Result<()> {
     let path_str = from_path.as_os_str().to_string_lossy();
 
@@ -84,10 +85,38 @@ pub fn create_progress_trackers() -> (Arc<AtomicUsize>, Arc<AtomicBool>) {
     )
 }
 
-pub fn check_if_exists(path: String, tag: String) -> bool {
-    let f_path = utils::expand_tilde(format!("{path}/{tag}")).unwrap();
-    let p = std::path::Path::new(&f_path);
+// check_if_exists checks if a folder exists in a path
+pub fn check_if_exists(path: &str, tag: &str) -> bool {
+    let f_path = utils::expand_tilde(format!("{path}{tag}/")).unwrap();
+    let p = f_path.as_path();
     p.is_dir()
+}
+
+// list_folders_in_path returns a vector of strings of the folders in a path
+pub fn list_folders_in_path(path: &str) -> Result<Vec<String>, anyhow::Error> {
+    let f_path = utils::expand_tilde(path).unwrap();
+    let p = f_path.as_path();
+    let paths: Vec<String> = p
+        .read_dir()
+        .with_context(|| format!("Failed to read directory : {}", path_result(p)))?
+        .filter_map(|e| e.ok())
+        .filter(|e| e.path().is_dir())
+        .map(|e| {
+            let path = e.path();
+            let name = path.file_name().unwrap();
+            name.to_str().unwrap().to_string()
+        })
+        .collect();
+    Ok(paths)
+}
+
+// removes a directory and all its contents
+pub fn remove_dir_all(path: &str) -> Result<()> {
+    let f_path = utils::expand_tilde(path).unwrap();
+    let p = f_path.as_path();
+    std::fs::remove_dir_all(p)
+        .with_context(|| format!("[Remove] Failed to remove directory : {}", path_result(p)))?;
+    Ok(())
 }
 
 /// requires pointers to store the progress, and another to store "done" status

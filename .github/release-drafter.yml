@@ -16,12 +16,15 @@ categories:
   - title: "🧪 Tests"
     labels:
       - "🧪 Tests"
+  - title: "🚨 Security"
+    labels:
+      - "🚨 Security"
   - title: "☁️ CI"
     labels:
       - "☁️ CI"
-  - title: "🤖 Dependabot"
+  - title: "🤖 Dependencies"
     labels:
-      - "🤖 Dependabot"
+      - "🤖 Dependencies"
 change-template: "- $TITLE @$AUTHOR (#$NUMBER)"
 change-title-escapes: '\<*_&'
 version-resolver:
