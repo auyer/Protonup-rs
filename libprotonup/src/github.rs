@@ -1,5 +1,5 @@
 use crate::constants;
-use crate::variants::VariantParameters;
+use crate::variants::VariantGithubParameters;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
@@ -8,14 +8,37 @@ pub type ReleaseList = Vec<Release>;
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Release {
     /// API URL of the Release
-    url: String,
+    url: Option<String>,
     /// Tag name of the Release, examples "8.7-GE-1-Lol" "GE-Proton8-5"
     pub tag_name: String,
     /// Release post name, examples "Wine-GE-Proton8-5 Released" " Lutris-GE-8.7-1-LoL"
     name: String,
-    published_at: String,
     /// Asset list for each Release, usually the tar.gz/tar.xz file and a sha512sum file for integrity checking
     assets: Vec<Asset>,
+}
+
+impl std::fmt::Display for Release {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        write!(f, "{}", self.tag_name)
+    }
+}
+
+impl Release {
+    /// Returns a Download struct corresponding to the Release
+    pub fn get_download_info(&self) -> Download {
+        let mut download: Download = Download::default();
+        download.version = self.tag_name.clone();
+        for asset in &self.assets {
+            if asset.name.ends_with("sha512sum") {
+                download.sha512sum_url = asset.browser_download_url.clone();
+            } else if asset.name.ends_with("tar.gz") || asset.name.ends_with("tar.xz") {
+                download.download_url = asset.browser_download_url.clone();
+                download.size = asset.size as u64;
+            }
+        }
+
+        download
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -28,14 +51,15 @@ pub struct Asset {
     name: String,
     /// Size in Bytes, divide by 1_000_000 for MB
     size: i64,
-    created_at: String,
     updated_at: String,
     /// Direct download URL
     browser_download_url: String,
 }
 
 /// Returns a Vec of Releases from a GitHub repository, the URL used for the request is built from the passed in VariantParameters
-pub async fn list_releases(source: &VariantParameters) -> Result<ReleaseList, reqwest::Error> {
+pub async fn list_releases(
+    source: &VariantGithubParameters,
+) -> Result<ReleaseList, reqwest::Error> {
     let agent = format!("{}/v{}", constants::USER_AGENT, constants::VERSION,);
 
     let url = format!(
@@ -60,37 +84,6 @@ pub struct Download {
     pub download_url: String,
     /// Size of Wine or Proton archive in Bytes
     pub size: u64,
-    pub created_at: String,
-}
-
-/// Returns a Download struct from the passed in VariantParameters and version tag.
-pub async fn fetch_data_from_tag(
-    tag: &str,
-    source: &VariantParameters,
-) -> Result<Download, reqwest::Error> {
-    let agent = format!("{}/v{}", constants::USER_AGENT, constants::VERSION,);
-
-    let client = reqwest::Client::builder().user_agent(agent).build()?;
-
-    let mut download = Download::default();
-    let url = format!(
-        "{}/{}/{}/releases/{}",
-        source.repository_url, source.repository_account, source.repository_name, tag
-    );
-    let release: Release = client.get(url).send().await?.json().await?;
-
-    download.version = release.tag_name;
-    for asset in &release.assets {
-        if asset.name.ends_with("sha512sum") {
-            download.sha512sum_url = asset.browser_download_url.as_str().to_string();
-        }
-        if asset.name.ends_with("tar.gz") || asset.name.ends_with("tar.xz") {
-            download.created_at = asset.created_at.clone();
-            download.download_url = asset.browser_download_url.as_str().to_string();
-            download.size = asset.size as u64;
-        }
-    }
-    Ok(download)
 }
 
 #[cfg(test)]
@@ -100,58 +93,16 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn test_fetch_data_from_tag() {
-        let conditions = &[
-            (
-                variants::Variant::WineGE.parameters(),
-                "latest",
-                "Get Steam",
-            ),
-            (
-                variants::Variant::GEProton.parameters(),
-                "latest",
-                "Download Lutris",
-            ),
-        ];
-        for (source_parameters, tag, desc) in conditions {
-            let result = fetch_data_from_tag(tag, source_parameters).await;
-
-            assert!(
-                result.is_ok(),
-                "case :{} test: fetch_data_from_tag returned error",
-                desc
-            );
-
-            let result = result.unwrap();
-
-            assert!(
-                result.download_url.len() > 5,
-                "case : '{}' test: fetch_data_from_tag returned an wrong download link",
-                desc
-            );
-            assert!(
-                result.sha512sum_url.len() > 5,
-                "case : '{}' test: fetch_data_from_tag returned an wrong sha512sum",
-                desc
-            );
-            assert!(
-                result.size > 100,
-                "case : '{}' test: fetch_data_from_tag returned an wrong sha512sum",
-                desc
-            );
-            assert!(
-                result.version.len() > 2,
-                "case : '{}' test: fetch_data_from_tag returned an wrong version",
-                desc
-            );
-        }
-    }
-
-    #[tokio::test]
     async fn test_list_releases() {
         let conditions = &[
-            (variants::Variant::WineGE.parameters(), "List WineGE"),
-            (variants::Variant::GEProton.parameters(), "List GEProton"),
+            (
+                variants::Variant::WineGE.get_github_parameters(),
+                "List WineGE",
+            ),
+            (
+                variants::Variant::GEProton.get_github_parameters(),
+                "List GEProton",
+            ),
         ];
 
         for (source_parameters, desc) in conditions {
@@ -159,7 +110,7 @@ mod tests {
 
             assert!(
                 result.is_ok(),
-                "case : '{}' test: fetch_data_from_tag returned error",
+                "case : '{}' test: list_releases returned error",
                 desc
             );
 
@@ -188,8 +139,14 @@ mod tests {
         };
 
         let conditions = &[
-            (variants::Variant::WineGE.parameters(), "Get WineGE"),
-            (variants::Variant::GEProton.parameters(), "Get GEProton"),
+            (
+                variants::Variant::WineGE.get_github_parameters(),
+                "Get WineGE",
+            ),
+            (
+                variants::Variant::GEProton.get_github_parameters(),
+                "Get GEProton",
+            ),
         ];
         for (source_parameters, desc) in conditions {
             let url = format!(

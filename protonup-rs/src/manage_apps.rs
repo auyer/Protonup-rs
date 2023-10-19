@@ -2,7 +2,7 @@ use inquire::MultiSelect;
 use libprotonup::{apps, files};
 use std::fmt;
 
-use super::helper_menus::{confirm_menu, tag_menu};
+use super::helper_menus::{confirm_menu, multiple_select_menu};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub(crate) enum ManageAppsMenuOptions {
@@ -66,7 +66,7 @@ pub(crate) fn manage_apps_routine() {
             println!("No versions found for {}, skipping... ", app);
             continue;
         }
-        let delete_versions = match tag_menu(
+        let delete_versions = match multiple_select_menu(
             &format!("Select the versions you want to DELETE from {}", app),
             versions,
         ) {

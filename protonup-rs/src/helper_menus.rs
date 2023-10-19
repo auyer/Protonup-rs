@@ -1,18 +1,15 @@
 use inquire::{Confirm, InquireError, MultiSelect};
-use libprotonup::apps::AppInstallations;
 
-pub(crate) fn tag_menu(message: &str, options: Vec<String>) -> Result<Vec<String>, InquireError> {
-    MultiSelect::new(message, options)
-        .with_default(&[0_usize])
-        .prompt()
-}
-
-pub(crate) fn variants_menu(
+/// Creates a inquire::MultiSelect menu with the first option selected
+pub(crate) fn multiple_select_menu<T>(
     message: &str,
-    options: Vec<AppInstallations>,
-) -> Result<Vec<AppInstallations>, InquireError> {
+    options: Vec<T>,
+) -> Result<Vec<T>, InquireError>
+where
+    T: std::fmt::Display,
+{
     MultiSelect::new(message, options)
-        .with_default(&[0_usize])
+        .with_default(&[0])
         .prompt()
 }
 
