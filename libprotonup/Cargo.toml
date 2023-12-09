@@ -30,4 +30,4 @@ tar = "0.4"
 xz2 = "0.1"
 
 [dev-dependencies]
-tokio = { version = "1.28", features = ["macros", "rt"] }
+tokio = { version = "1.35", features = ["macros", "rt"] }
