@@ -176,6 +176,12 @@ pub async fn download_to_selected_app(app: Option<apps::App>) {
     let install_dir: String = match app {
         // If the user selected an app (Steam/Lutris)...
         Some(app) => match app.detect_installation_method() {
+            installed_apps if installed_apps.len() == 0 => {
+                println!("Install location for selected app(s) not found. Exiting.");
+                std::process::exit(0);
+            }
+
+
             // Figure out which versions of the App the user has (Native/Flatpak)
             installed_apps if installed_apps.len() == 1 => {
                 println!(
