@@ -24,14 +24,7 @@ impl fmt::Display for App {
 }
 
 impl App {
-    pub fn app_available_variants(&self) -> Vec<Variant> {
-        match *self {
-            Self::Steam => vec![Variant::GEProton],
-            Self::Lutris => vec![Variant::WineGE, Variant::GEProton],
-        }
-    }
-
-    pub fn app_default_variant(&self) -> Variant {
+    pub fn app_wine_version(&self) -> Variant {
         match *self {
             Self::Steam => Variant::GEProton,
             Self::Lutris => Variant::WineGE,

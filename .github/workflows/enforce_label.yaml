@@ -11,4 +11,4 @@ jobs:
       - uses: yogevbd/enforce-label-action@2.2.2
         with:
           REQUIRED_LABELS_ANY: "🚀 Feature,💅 Improvement,🐛 Bug,📚 Docs,🧪 Tests,☁️ CI,🚨 Security,🤖 Dependencies"
-          REQUIRED_LABELS_ANY_DESCRIPTION: "It is necessary to add a label to your PR. This will help to categorize it and add a note on the release. Chose one of [🚀 Feature,💅 Improvement,🐛 Bug,📚 Docs,🧪 Tests,☁️ CI,🚨 Security,🤖 Dependencies]"
+          REQUIRED_LABELS_ANY_DESCRIPTION: "It is necessary to add a label to your PR. This will help to categorize it and add a note on the release. Choose one of [🚀 Feature,💅 Improvement,🐛 Bug,📚 Docs,🧪 Tests,☁️ CI,🚨 Security,🤖 Dependencies]"
