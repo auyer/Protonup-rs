@@ -1,5 +1,5 @@
 use crate::constants;
-use crate::variants::VariantGithubParameters;
+use crate::variants::{Variant, VariantGithubParameters};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
@@ -75,6 +75,16 @@ pub struct Download {
     pub download_url: String,
     pub size: u64,
 }
+
+impl Download {
+    pub fn output_dir(&self, variant: &Variant) -> &str {
+        match variant {
+            Variant::GEProton => &self.version,
+            Variant::WineGE => &self.download_url.rsplit_once("/wine-").unwrap().1.rsplit_once(".tar.xz").unwrap().0
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::variants;
