@@ -76,10 +76,11 @@ impl FilePathCompleter {
         let mut ret: String = String::new();
 
         let mut sorted = self.paths.clone();
-        sorted.sort();
         if sorted.is_empty() {
             return ret;
         }
+        sorted.sort();
+        
 
         let mut first_word = sorted.first().unwrap().chars();
         let mut last_word = sorted.last().unwrap().chars();

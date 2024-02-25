@@ -73,9 +73,15 @@ async fn main() {
         // Set parameters based on users choice
         match answer {
             InitialMenu::QuickUpdate => download::run_quick_downloads().await,
-            InitialMenu::DownloadForSteam => download::download_to_selected_app(Some(App::Steam)).await,
-            InitialMenu::DownloadForLutris => download::download_to_selected_app(Some(App::Lutris)).await,
-            InitialMenu::DownloadIntoCustomLocation => download::download_to_selected_app(None).await,
+            InitialMenu::DownloadForSteam => {
+                download::download_to_selected_app(Some(App::Steam)).await
+            }
+            InitialMenu::DownloadForLutris => {
+                download::download_to_selected_app(Some(App::Lutris)).await
+            }
+            InitialMenu::DownloadIntoCustomLocation => {
+                download::download_to_selected_app(None).await
+            }
             InitialMenu::ManageExistingInstallations => manage_apps_routine(),
         }
     }
