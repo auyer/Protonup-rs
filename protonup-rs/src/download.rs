@@ -142,7 +142,7 @@ pub async fn run_quick_downloads(force: bool) {
             }
         };
 
-        if files::check_if_exists(app_inst.default_install_dir(), download.output_dir(&app_inst.into_app().app_wine_version())) && !force {
+        if files::check_if_exists(app_inst.default_install_dir(), download.output_dir(&wine_version)) && !force {
             continue;
         }
 

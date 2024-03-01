@@ -19,7 +19,7 @@ struct Opt {
     #[arg(short, long)]
     quick_download: bool,
 
-    /// Force install for existing apps during quick downloada
+    /// Force install for existing apps during quick downloads
     #[arg(short, long)]
     force: bool
 }
