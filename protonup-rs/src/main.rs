@@ -18,6 +18,10 @@ struct Opt {
     /// Skip Menu, auto detect apps and download using default parameters
     #[arg(short, long)]
     quick_download: bool,
+
+    /// Force install for existing apps during quick downloads
+    #[arg(short, long)]
+    force: bool
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -58,9 +62,9 @@ impl fmt::Display for InitialMenu {
 #[tokio::main]
 async fn main() {
     // run quick downloads and skip InitialMenu
-    let Opt { quick_download } = Opt::parse();
+    let Opt { quick_download, force } = Opt::parse();
     if quick_download {
-        download::run_quick_downloads().await
+        download::run_quick_downloads(force).await
     } else {
         let answer: InitialMenu = Select::new(
             "ProtonUp Menu: Choose your action:",
@@ -72,7 +76,7 @@ async fn main() {
 
         // Set parameters based on users choice
         match answer {
-            InitialMenu::QuickUpdate => download::run_quick_downloads().await,
+            InitialMenu::QuickUpdate => download::run_quick_downloads(force).await,
             InitialMenu::DownloadForSteam => download::download_to_selected_app(Some(App::Steam)).await,
             InitialMenu::DownloadForLutris => download::download_to_selected_app(Some(App::Lutris)).await,
             InitialMenu::DownloadIntoCustomLocation => download::download_to_selected_app(None).await,

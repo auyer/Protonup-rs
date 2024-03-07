@@ -107,7 +107,7 @@ pub(crate) async fn unpack_file(
     Ok(())
 }
 
-pub async fn run_quick_downloads() {
+pub async fn run_quick_downloads(force: bool) {
     let found_apps = apps::list_installed_apps();
     if found_apps.is_empty() {
         println!("No apps found. Please install at least one app before using this feature.");
@@ -141,6 +141,10 @@ pub async fn run_quick_downloads() {
                 std::process::exit(1)
             }
         };
+
+        if files::check_if_exists(app_inst.default_install_dir(), download.output_dir(&wine_version)) && !force {
+            continue;
+        }
 
         let file = download_file(download).await.unwrap();
         unpack_file(&file, &destination, &wine_version)
@@ -230,16 +234,13 @@ pub async fn download_to_selected_app(app: Option<apps::App>) {
     // versions_to_install = vec![];
 
     // Let the user choose which releases they want to use
-    let mut release_list = match helper_menus::multiple_select_menu(
+    let mut release_list = helper_menus::multiple_select_menu(
         "Select the versions you want to download :",
         release_list,
-    ) {
-        Ok(release_list) => release_list,
-        Err(e) => {
-            eprintln!("The tag list could not be processed.\nError: {}", e);
-            vec![]
-        }
-    };
+    ).unwrap_or_else(|e| {
+        eprintln!("The tag list could not be processed.\nError: {}", e);
+        vec![]
+    });
 
     // Check if the versions the user selected are already on the disk
     check_if_already_downloaded(&mut release_list, &install_dir).await;
