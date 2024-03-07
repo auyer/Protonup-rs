@@ -15,15 +15,7 @@ use std::sync::Arc;
 use tar::Archive;
 use xz2::read::XzDecoder;
 
-fn path_result(path: &Path) -> String {
-    let spath = path.to_str();
-    match spath {
-        Some(p) => String::from(p),
-        None => String::from("path missing!"),
-    }
-}
-
-// decompress will detect the extension and decompress the file with the appropriate function
+/// decompress will detect the extension and decompress the file with the appropriate function
 pub fn decompress(from_path: &Path, destination_path: &Path) -> Result<()> {
     let path_str = from_path.as_os_str().to_string_lossy();
 
@@ -42,7 +34,7 @@ fn decompress_gz(from_path: &Path, destination_path: &Path) -> Result<()> {
     let file = File::open(from_path).with_context(|| {
         format!(
             "[Decompressing] Failed to open file from Path: {}",
-            path_result(from_path),
+            from_path.display(),
         )
     })?;
 
@@ -51,7 +43,7 @@ fn decompress_gz(from_path: &Path, destination_path: &Path) -> Result<()> {
     archive.unpack(destination_path).with_context(|| {
         format!(
             "[Decompressing] Failed to unpack into destination : {}",
-            path_result(destination_path)
+            destination_path.display()
         )
     })?;
     Ok(())
@@ -62,7 +54,7 @@ fn decompress_xz(from_path: &Path, destination_path: &Path) -> Result<()> {
     let file = File::open(from_path).with_context(|| {
         format!(
             "[Decompressing] Failed to open file from Path: {}",
-            path_result(from_path),
+            from_path.display()
         )
     })?;
 
@@ -71,7 +63,7 @@ fn decompress_xz(from_path: &Path, destination_path: &Path) -> Result<()> {
     archive.unpack(destination_path).with_context(|| {
         format!(
             "[Decompressing] Failed to unpack into destination : {}",
-            path_result(destination_path)
+            destination_path.display()
         )
     })?;
     Ok(())
@@ -85,20 +77,20 @@ pub fn create_progress_trackers() -> (Arc<AtomicUsize>, Arc<AtomicBool>) {
     )
 }
 
-// check_if_exists checks if a folder exists in a path
+/// check_if_exists checks if a folder exists in a path
 pub fn check_if_exists(path: &str, tag: &str) -> bool {
     let f_path = utils::expand_tilde(format!("{path}{tag}/")).unwrap();
     let p = f_path.as_path();
     p.is_dir()
 }
 
-// list_folders_in_path returns a vector of strings of the folders in a path
+/// list_folders_in_path returns a vector of strings of the folders in a path
 pub fn list_folders_in_path(path: &str) -> Result<Vec<String>, anyhow::Error> {
     let f_path = utils::expand_tilde(path).unwrap();
     let p = f_path.as_path();
     let paths: Vec<String> = p
         .read_dir()
-        .with_context(|| format!("Failed to read directory : {}", path_result(p)))?
+        .with_context(|| format!("Failed to read directory : {}", p.display()))?
         .filter_map(|e| e.ok())
         .filter(|e| e.path().is_dir())
         .map(|e| {
@@ -110,12 +102,12 @@ pub fn list_folders_in_path(path: &str) -> Result<Vec<String>, anyhow::Error> {
     Ok(paths)
 }
 
-// removes a directory and all its contents
+/// Removes a directory and all its contents
 pub fn remove_dir_all(path: &str) -> Result<()> {
     let f_path = utils::expand_tilde(path).unwrap();
     let p = f_path.as_path();
     std::fs::remove_dir_all(p)
-        .with_context(|| format!("[Remove] Failed to remove directory : {}", path_result(p)))?;
+        .with_context(|| format!("[Remove] Failed to remove directory : {}", p.display()))?;
     Ok(())
 }
 
@@ -143,7 +135,7 @@ pub async fn download_file_progress(
         .with_context(|| {
             format!(
                 "[Download] Failed creating destination file : {}",
-                path_result(install_dir)
+                install_dir.display()
             )
         })?;
 
@@ -156,7 +148,7 @@ pub async fn download_file_progress(
         file.write_all(&chunk).with_context(|| {
             format!(
                 "[Download] Failed creating destination file : {}",
-                path_result(install_dir)
+                install_dir.display()
             )
         })?;
         let new = min(downloaded + (chunk.len() as u64), total_size);
@@ -168,6 +160,7 @@ pub async fn download_file_progress(
     Ok(())
 }
 
+/// Downloads and returns the text response
 pub async fn download_file_into_memory(url: &String) -> Result<String> {
     let client = reqwest::Client::new();
     let res = client
@@ -187,9 +180,10 @@ pub async fn download_file_into_memory(url: &String) -> Result<String> {
         .with_context(|| format!("[Download SHA] Failed to read response from URL : {}", &url))
 }
 
+/// Checks the downloaded file integrity with the sha512sum
 pub fn hash_check_file(file_dir: String, git_hash: String) -> Result<bool> {
     let mut file = File::open(file_dir)
-        .context("[Hash Check] Failed oppening download file for checking. Was the file moved?")?;
+        .context("[Hash Check] Failed opening download file for checking. Was the file moved?")?;
     let mut hasher = Sha512::new();
     io::copy(&mut file, &mut hasher)
         .context("[Hash Check] Failed reading download file for checking")?;

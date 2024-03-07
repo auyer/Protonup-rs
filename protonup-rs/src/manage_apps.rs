@@ -10,7 +10,7 @@ pub(crate) enum ManageAppsMenuOptions {
     AppInstallations(apps::AppInstallations),
 }
 
-// APP_VARIANTS_WITH_DETECT contains all variants of the App enum including the DetectAll variant
+/// APP_VARIANTS_WITH_DETECT contains all variants of the App enum including the DetectAll variant
 static APP_VARIANTS_WITH_DETECT: &[ManageAppsMenuOptions] = &[
     ManageAppsMenuOptions::DetectAll,
     ManageAppsMenuOptions::AppInstallations(apps::AppInstallations::Steam),
@@ -28,6 +28,7 @@ impl fmt::Display for ManageAppsMenuOptions {
     }
 }
 
+/// Prompt the user for which App they want to manage
 fn manage_menu() -> Vec<ManageAppsMenuOptions> {
     let answer = MultiSelect::new(
         "Select the Applications you want to manage :",
@@ -46,6 +47,9 @@ fn manage_menu() -> Vec<ManageAppsMenuOptions> {
     }
 }
 
+/// Allow the user to delete existing wine versions
+///
+/// The user selects the apps and wine versions to remove
 pub(crate) fn manage_apps_routine() {
     let mut apps = vec![];
 

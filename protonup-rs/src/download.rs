@@ -19,6 +19,7 @@ use libprotonup::{
     variants::{self, Variant},
 };
 
+/// Downloads the requested file to the /tmp directory
 pub(crate) async fn download_file(download: Download) -> Result<PathBuf, String> {
     let mut temp_dir = utils::expand_tilde(constants::TEMP_DIR).unwrap();
 
@@ -87,8 +88,11 @@ pub(crate) async fn download_file(download: Download) -> Result<PathBuf, String>
     Ok(temp_dir)
 }
 
+/// Prepares downloaded file to be decompressed
+///
+/// Parses the passed in data and ensures the destination directory is created
 pub(crate) async fn unpack_file(
-    dowaload_path: &Path,
+    download_path: &Path,
     install_path: &str,
     wine_version: &Variant,
 ) -> Result<(), String> {
@@ -97,7 +101,7 @@ pub(crate) async fn unpack_file(
     fs::create_dir_all(&install_dir).unwrap();
 
     println!("Unpacking files into install location. Please wait");
-    files::decompress(dowaload_path, install_dir.as_path()).unwrap();
+    files::decompress(download_path, install_dir.as_path()).unwrap();
     println!(
         "Done! Restart {}. {} installed in {}",
         wine_version.intended_application(),
@@ -107,6 +111,7 @@ pub(crate) async fn unpack_file(
     Ok(())
 }
 
+/// Downloads the latest wine version for all the apps found
 pub async fn run_quick_downloads(force: bool) {
     let found_apps = apps::list_installed_apps();
     if found_apps.is_empty() {
@@ -161,6 +166,7 @@ pub async fn run_quick_downloads(force: bool) {
 }
 
 /// Start the Download for the selected app
+///
 /// If no app is provided, the user is prompted for which version of Wine/Proton to use and what directory to extract to
 pub async fn download_to_selected_app(app: Option<apps::App>) {
     // Get the version of Wine/Proton to install
@@ -184,7 +190,6 @@ pub async fn download_to_selected_app(app: Option<apps::App>) {
                 println!("Install location for selected app(s) not found. Exiting.");
                 std::process::exit(0);
             }
-
 
             // Figure out which versions of the App the user has (Native/Flatpak)
             installed_apps if installed_apps.len() == 1 => {
@@ -231,8 +236,6 @@ pub async fn download_to_selected_app(app: Option<apps::App>) {
         }
     };
 
-    // versions_to_install = vec![];
-
     // Let the user choose which releases they want to use
     let mut release_list = helper_menus::multiple_select_menu(
         "Select the versions you want to download :",
@@ -266,6 +269,7 @@ pub async fn download_to_selected_app(app: Option<apps::App>) {
 }
 
 /// Checks if the selected Release/version is already installed.
+///
 /// Will prompt the user to overwrite existing files
 async fn check_if_already_downloaded(release_list: &mut Vec<Release>, install_dir: &str) {
     release_list.retain(|release| {

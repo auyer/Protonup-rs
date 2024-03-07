@@ -1,6 +1,8 @@
 use inquire::{Confirm, InquireError, MultiSelect};
 
-/// Creates a inquire::MultiSelect menu with the first option selected
+/// Prompt the user to select multiple possible options with an inquire::MultiSelect menu
+///
+/// The first option is selected
 pub(crate) fn multiple_select_menu<T>(
     message: &str,
     options: Vec<T>,
@@ -13,6 +15,9 @@ where
         .prompt()
 }
 
+/// Prompt the user [Y/n] with an inquire::Confirm menu
+///
+/// `help_text` and `default` are used to set default values
 pub(crate) fn confirm_menu(text: String, help_text: String, default: bool) -> bool {
     let answer = Confirm::new(&text)
         .with_default(default)
