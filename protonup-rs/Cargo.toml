@@ -11,14 +11,19 @@ description = "TUI Program for Custom Proton Download and installation written i
 
 [dependencies]
 
+anyhow = "1.0.80"
+arcstr = "1.1.5"
+futures-util = "0.3"
 # Use this to use the local changes in libprotonup.
 libprotonup = { path = "../libprotonup" }
 # This is necessary to publish to crates.io
 # libprotonup = { version = "0.7.0" }
 inquire = { version = "0.7", default-features = false, features = ["termion"] }
 indicatif = { version = "0.17", features = [
-  "improved_unicode",
-  "unicode-segmentation",
+    "improved_unicode",
+    "unicode-segmentation",
+    "tokio"
 ] }
+tempfile = "3.10.1"
 tokio = { version = "1.36", features = ["macros", "rt-multi-thread"] }
 clap = { version = "4.5", features = ["derive"] }

@@ -1,7 +1,5 @@
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-pub const TEMP_DIR: &str = "/tmp/";
-
 pub const GITHUB_URL: &str = "https://api.github.com/repos";
 
 pub const GEPROTON_GITHUB_REPO: &str = "proton-ge-custom";

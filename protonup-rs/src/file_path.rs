@@ -18,7 +18,7 @@ impl FilePathCompleter {
             return Ok(());
         }
 
-        self.input = input.to_owned();
+        input.clone_into(&mut self.input);
         self.paths.clear();
 
         let input_path = std::path::PathBuf::from(input);
@@ -80,7 +80,6 @@ impl FilePathCompleter {
             return ret;
         }
         sorted.sort();
-        
 
         let mut first_word = sorted.first().unwrap().chars();
         let mut last_word = sorted.last().unwrap().chars();
