@@ -33,14 +33,14 @@ impl VariantGithubParameters {
         }
     }
 
-    ///
+    /// Get Variant
     pub fn variant_type(&self) -> &Variant {
         &self.variant_ref
     }
 }
 
 /// Variant is an enum with all supported "Proton" versions
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum Variant {
     GEProton,
     WineGE,

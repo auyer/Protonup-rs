@@ -26,13 +26,19 @@ impl std::fmt::Display for Release {
 impl Release {
     /// Returns a Download struct corresponding to the Release
     pub fn get_download_info(&self) -> Download {
-        let mut download: Download = Download::default();
-        download.version = self.tag_name.clone();
+        let mut download: Download = Download {
+            version: self.tag_name.clone(),
+            ..Download::default()
+        };
         for asset in &self.assets {
             if asset.name.ends_with("sha512sum") {
-                download.sha512sum_url = asset.browser_download_url.clone();
+                download
+                    .sha512sum_url
+                    .clone_from(&asset.browser_download_url);
             } else if asset.name.ends_with("tar.gz") || asset.name.ends_with("tar.xz") {
-                download.download_url = asset.browser_download_url.clone();
+                download
+                    .download_url
+                    .clone_from(&asset.browser_download_url);
                 download.size = asset.size as u64;
             }
         }
@@ -88,7 +94,15 @@ impl Download {
     pub fn output_dir(&self, variant: &Variant) -> &str {
         match variant {
             Variant::GEProton => &self.version,
-            Variant::WineGE => &self.download_url.rsplit_once("/wine-").unwrap().1.rsplit_once(".tar.xz").unwrap().0
+            Variant::WineGE => {
+                self.download_url
+                    .rsplit_once("/wine-")
+                    .unwrap()
+                    .1
+                    .rsplit_once(".tar.xz")
+                    .unwrap()
+                    .0
+            }
         }
     }
 }

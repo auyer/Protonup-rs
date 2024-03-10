@@ -21,7 +21,7 @@ struct Opt {
 
     /// Force install for existing apps during quick downloads
     #[arg(short, long)]
-    force: bool
+    force: bool,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -62,7 +62,10 @@ impl fmt::Display for InitialMenu {
 #[tokio::main]
 async fn main() {
     // run quick downloads and skip InitialMenu
-    let Opt { quick_download, force } = Opt::parse();
+    let Opt {
+        quick_download,
+        force,
+    } = Opt::parse();
     if quick_download {
         download::run_quick_downloads(force).await
     } else {
@@ -77,10 +80,16 @@ async fn main() {
         // Set parameters based on users choice
         match answer {
             InitialMenu::QuickUpdate => download::run_quick_downloads(force).await,
-            InitialMenu::DownloadForSteam => download::download_to_selected_app(Some(App::Steam)).await,
-            InitialMenu::DownloadForLutris => download::download_to_selected_app(Some(App::Lutris)).await,
-            InitialMenu::DownloadIntoCustomLocation => download::download_to_selected_app(None).await,
-            InitialMenu::ManageExistingInstallations => manage_apps_routine(),
+            InitialMenu::DownloadForSteam => {
+                download::download_to_selected_app(Some(App::Steam)).await
+            }
+            InitialMenu::DownloadForLutris => {
+                download::download_to_selected_app(Some(App::Lutris)).await
+            }
+            InitialMenu::DownloadIntoCustomLocation => {
+                download::download_to_selected_app(None).await
+            }
+            InitialMenu::ManageExistingInstallations => manage_apps_routine().await,
         }
     }
 }
