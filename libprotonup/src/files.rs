@@ -13,7 +13,7 @@ use tokio::fs::File;
 use tokio::io::{AsyncBufRead, AsyncRead, AsyncReadExt, AsyncWrite, BufReader, ReadBuf};
 use tokio::{fs, io, pin};
 use tokio_stream::wrappers::ReadDirStream;
-use tokio_tar::{Archive, Entry};
+use tokio_tar::Archive;
 use tokio_util::io::StreamReader;
 
 use crate::utils;
@@ -73,26 +73,10 @@ impl<R: AsyncBufRead + Unpin> AsyncRead for Decompressor<R> {
 pub async fn decompress<R: AsyncRead + Unpin>(reader: R, destination_path: &Path) -> Result<()> {
     let mut archive = Archive::new(reader);
 
-    let entries = archive
-        .entries()
-        .with_context(|| decompress_context(destination_path))?;
-
-    entries
-        .map_err(Error::new)
-        .try_for_each(|e| unpack_entry(e, destination_path))
+    archive
+        .unpack(destination_path)
         .await
         .with_context(|| decompress_context(destination_path))
-}
-
-async fn unpack_entry<R: AsyncRead + Unpin>(
-    mut entry: Entry<R>,
-    destination_path: &Path,
-) -> Result<()> {
-    entry
-        .unpack_in(destination_path)
-        .await
-        .with_context(|| decompress_context(destination_path))?;
-    Ok(())
 }
 
 /// check_if_exists checks if a folder exists in a path
@@ -180,9 +164,7 @@ pub async fn hash_check_file<R: AsyncRead + Unpin + ?Sized>(
 
     let hash = hasher.finalize();
 
-    let (git_hash, _) = git_hash
-        .rsplit_once(' ')
-        .context("[Hash Check] Failed decoding hash file. Is this the right hash ? Please file an issue to protonup-rs !")?;
+    let (git_hash, _) = git_hash.rsplit_once(' ').unwrap_or((git_hash, ""));
 
     if hex::encode(hash) != git_hash.trim() {
         return Ok(false);
@@ -199,7 +181,7 @@ async fn read_all_into_digest<R: AsyncRead + Unpin + ?Sized, D: Digest>(
 
     loop {
         let count = read.read(&mut buffer).await?;
-        digest.update(buffer);
+        digest.update(&buffer[..count]);
         if count != BUFFER_LEN {
             break;
         }
@@ -213,4 +195,22 @@ fn decompress_context(destination_path: &Path) -> String {
         "[Decompressing] Failed to unpack into destination : {}",
         destination_path.display()
     )
+}
+
+#[cfg(test)]
+mod test {
+    use sha2::{Digest, Sha512};
+
+    #[tokio::test]
+    async fn hash_check_file() {
+        let test_data = b"This Is A Test";
+        let hash = hex::encode(Sha512::new_with_prefix(&test_data).finalize());
+
+        assert!(
+            super::hash_check_file(&mut &test_data[..], &hash)
+                .await
+                .unwrap(),
+            "Hash didn't match"
+        );
+    }
 }

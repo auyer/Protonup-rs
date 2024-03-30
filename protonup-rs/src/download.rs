@@ -85,8 +85,8 @@ pub(crate) async fn download_file(
         ));
     });
 
-    if output_dir.exists() {
-        fs::remove_file(&output_dir).await?;
+    if files::check_if_exists(&output_dir.to_string_lossy(), "").await {
+        fs::remove_dir_all(&output_dir).await?;
     }
 
     let file = OpenOptions::new()
@@ -309,19 +309,16 @@ pub async fn download_to_selected_app(app: Option<apps::App>) {
         };
 
         // Let the user choose which releases they want to use
-        helper_menus::multiple_select_menu(
-            "Select the versions you want to download :",
-            release_list,
+        stream::iter(
+            helper_menus::multiple_select_menu(
+                "Select the versions you want to download :",
+                release_list,
+            )
+            .unwrap_or_else(|e| {
+                eprintln!("The tag list could not be processed.\nError: {}", e);
+                vec![]
+            }),
         )
-        .unwrap_or_else(|e| {
-            eprintln!("The tag list could not be processed.\nError: {}", e);
-            vec![]
-        })
-    };
-
-    let multi_progress = MultiProgress::with_draw_target(ProgressDrawTarget::stderr_with_hz(20));
-
-    stream::iter(releases)
         .filter_map(|r| async {
             if should_download(&r, install_dir.clone()).await {
                 Some(r)
@@ -329,6 +326,13 @@ pub async fn download_to_selected_app(app: Option<apps::App>) {
                 None
             }
         })
+        .collect::<Vec<_>>()
+        .await
+    };
+
+    let multi_progress = MultiProgress::with_draw_target(ProgressDrawTarget::stderr_with_hz(20));
+
+    stream::iter(releases)
         .map(|r| {
             let dir = install_dir.clone();
             let temp_dir = tempfile::tempdir()
@@ -348,8 +352,6 @@ pub async fn download_to_selected_app(app: Option<apps::App>) {
             future::ready(())
         })
         .await;
-
-    multi_progress.clear().unwrap()
 }
 
 async fn download_validate_unpack(
@@ -380,6 +382,15 @@ async fn download_validate_unpack(
         multi_progress.clone(),
     )
     .await?;
+
+    let download = release.get_download_info();
+    let output_dir = download.output_dir(&wine_version);
+    if files::check_if_exists(&install_dir, output_dir).await {
+        let path = Path::new(&install_dir.as_str()).join(output_dir);
+        fs::remove_dir_all(&path)
+            .await
+            .with_context(|| format!("Error removing existing install at {}", path.display()))?;
+    }
 
     let unpack_progress_bar = init_unpack_progress(install_dir.clone(), &file, multi_progress)
         .await
