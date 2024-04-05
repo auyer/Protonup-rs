@@ -1,162 +1,133 @@
-use super::constants;
-use crate::utils;
-use anyhow::{Context, Result};
-use flate2::read::GzDecoder;
-use futures_util::StreamExt;
+use std::future;
+use std::path::Path;
+use std::pin::Pin;
+use std::task::Poll;
+
+use anyhow::{Context, Error, Result};
+use async_compression::tokio::bufread::{GzipDecoder, XzDecoder};
+use futures_util::{StreamExt, TryStreamExt};
+use pin_project::pin_project;
 use reqwest::header::USER_AGENT;
 use sha2::{Digest, Sha512};
-use std::cmp::min;
-use std::fs::{File, OpenOptions};
-use std::io;
-use std::io::Write;
-use std::path::Path;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::Arc;
-use tar::Archive;
-use xz2::read::XzDecoder;
+use tokio::fs::File;
+use tokio::io::{AsyncBufRead, AsyncRead, AsyncReadExt, AsyncWrite, BufReader, ReadBuf};
+use tokio::{fs, io, pin};
+use tokio_stream::wrappers::ReadDirStream;
+use tokio_tar::Archive;
+use tokio_util::io::StreamReader;
 
-/// decompress will detect the extension and decompress the file with the appropriate function
-pub fn decompress(from_path: &Path, destination_path: &Path) -> Result<()> {
-    let path_str = from_path.as_os_str().to_string_lossy();
+use crate::utils;
 
-    if path_str.ends_with("tar.gz") {
-        decompress_gz(from_path, destination_path)
-    } else if path_str.ends_with("tar.xz") {
-        decompress_xz(from_path, destination_path)
-    } else {
-        println!("no decompress\nPath: {:?}", from_path);
-        Ok(())
+use super::constants;
+
+#[pin_project(project = DecompressorProject)]
+pub enum Decompressor<R: AsyncBufRead + Unpin> {
+    Gzip(#[pin] GzipDecoder<R>),
+    Xz(#[pin] XzDecoder<R>),
+}
+
+impl Decompressor<BufReader<File>> {
+    pub async fn from_path(path: &Path) -> Result<Self> {
+        let path_str = path.as_os_str().to_string_lossy();
+
+        let file = File::open(path).await.with_context(|| {
+            format!(
+                "[Decompressing] Failed to unpack into destination : {}",
+                path.display()
+            )
+        })?;
+
+        if path_str.ends_with("tar.gz") {
+            Ok(Decompressor::Gzip(GzipDecoder::new(BufReader::new(file))))
+        } else if path_str.ends_with("tar.xz") {
+            Ok(Decompressor::Xz(XzDecoder::new(BufReader::new(file))))
+        } else {
+            Err(Error::msg(format!(
+                "no decompress\nPath: {}",
+                path.display()
+            )))
+        }
     }
 }
 
-/// Decompress a tar.gz file
-fn decompress_gz(from_path: &Path, destination_path: &Path) -> Result<()> {
-    let file = File::open(from_path).with_context(|| {
-        format!(
-            "[Decompressing] Failed to open file from Path: {}",
-            from_path.display(),
-        )
-    })?;
-
-    let mut archive = Archive::new(GzDecoder::new(file));
-
-    archive.unpack(destination_path).with_context(|| {
-        format!(
-            "[Decompressing] Failed to unpack into destination : {}",
-            destination_path.display()
-        )
-    })?;
-    Ok(())
+impl<R: AsyncBufRead + Unpin> AsyncRead for Decompressor<R> {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        match self.project() {
+            DecompressorProject::Gzip(reader) => {
+                pin!(reader);
+                reader.poll_read(cx, buf)
+            }
+            DecompressorProject::Xz(reader) => {
+                pin!(reader);
+                reader.poll_read(cx, buf)
+            }
+        }
+    }
 }
 
-/// Decompress a tar.xz file
-fn decompress_xz(from_path: &Path, destination_path: &Path) -> Result<()> {
-    let file = File::open(from_path).with_context(|| {
-        format!(
-            "[Decompressing] Failed to open file from Path: {}",
-            from_path.display()
-        )
-    })?;
+/// decompress will detect the extension and decompress the file with the appropriate function
+pub async fn decompress<R: AsyncRead + Unpin>(reader: R, destination_path: &Path) -> Result<()> {
+    let mut archive = Archive::new(reader);
 
-    let mut archive = Archive::new(XzDecoder::new(file));
-
-    archive.unpack(destination_path).with_context(|| {
-        format!(
-            "[Decompressing] Failed to unpack into destination : {}",
-            destination_path.display()
-        )
-    })?;
-    Ok(())
-}
-
-/// Creates the progress trackers variable pointers
-pub fn create_progress_trackers() -> (Arc<AtomicUsize>, Arc<AtomicBool>) {
-    (
-        Arc::new(AtomicUsize::new(0)),
-        Arc::new(AtomicBool::new(false)),
-    )
+    archive
+        .unpack(destination_path)
+        .await
+        .with_context(|| decompress_context(destination_path))
 }
 
 /// check_if_exists checks if a folder exists in a path
-pub fn check_if_exists(path: &str, tag: &str) -> bool {
+pub async fn check_if_exists(path: &str, tag: &str) -> bool {
     let f_path = utils::expand_tilde(format!("{path}{tag}/")).unwrap();
     let p = f_path.as_path();
-    p.is_dir()
+    fs::metadata(p).await.map(|m| m.is_dir()).unwrap_or(false)
 }
 
 /// list_folders_in_path returns a vector of strings of the folders in a path
-pub fn list_folders_in_path(path: &str) -> Result<Vec<String>, anyhow::Error> {
+pub async fn list_folders_in_path(path: &str) -> Result<Vec<String>, anyhow::Error> {
     let f_path = utils::expand_tilde(path).unwrap();
-    let p = f_path.as_path();
-    let paths: Vec<String> = p
-        .read_dir()
-        .with_context(|| format!("Failed to read directory : {}", p.display()))?
-        .filter_map(|e| e.ok())
-        .filter(|e| e.path().is_dir())
-        .map(|e| {
-            let path = e.path();
-            let name = path.file_name().unwrap();
-            name.to_str().unwrap().to_string()
-        })
-        .collect();
-    Ok(paths)
+    let paths_real: Vec<String> = ReadDirStream::new(tokio::fs::read_dir(f_path).await?)
+        .filter_map(|e| future::ready(e.ok()))
+        .filter(|e| future::ready(e.path().is_dir()))
+        .map(|e| e.path().file_name().unwrap().to_str().unwrap().to_string())
+        .collect()
+        .await;
+    Ok(paths_real)
 }
 
 /// Removes a directory and all its contents
-pub fn remove_dir_all(path: &str) -> Result<()> {
+pub async fn remove_dir_all(path: &str) -> Result<()> {
     let f_path = utils::expand_tilde(path).unwrap();
     let p = f_path.as_path();
-    std::fs::remove_dir_all(p)
+    tokio::fs::remove_dir_all(p)
+        .await
         .with_context(|| format!("[Remove] Failed to remove directory : {}", p.display()))?;
     Ok(())
 }
 
-/// requires pointers to store the progress, and another to store "done" status
-/// Create them with `create_progress_trackers`
-pub async fn download_file_progress(
-    url: String,
-    total_size: u64,
-    install_dir: &Path,
-    progress: Arc<AtomicUsize>,
-    done: Arc<AtomicBool>,
+pub async fn download_to_async_write<W: AsyncWrite + Unpin>(
+    url: &str,
+    write: &mut W,
 ) -> Result<()> {
     let client = reqwest::Client::new();
     let res = client
-        .get(&url)
+        .get(url)
         .header(USER_AGENT, format!("protonup-rs {}", constants::VERSION))
         .send()
         .await
         .with_context(|| format!("[Download] Failed to call remote server on URL : {}", &url))?;
 
-    let mut file = OpenOptions::new()
-        .create_new(true)
-        .write(true)
-        .open(install_dir)
-        .with_context(|| {
-            format!(
-                "[Download] Failed creating destination file : {}",
-                install_dir.display()
-            )
-        })?;
-
-    let mut downloaded: u64 = 0;
-    let mut stream = res.bytes_stream();
-
-    while let Some(item) = stream.next().await {
-        let chunk = item.context("[Download] Failed reading stream from network")?;
-
-        file.write_all(&chunk).with_context(|| {
-            format!(
-                "[Download] Failed creating destination file : {}",
-                install_dir.display()
-            )
-        })?;
-        let new = min(downloaded + (chunk.len() as u64), total_size);
-        downloaded = new;
-        let val = Arc::clone(&progress);
-        val.swap(new as usize, Ordering::SeqCst);
-    }
-    done.swap(true, Ordering::SeqCst);
+    io::copy(
+        &mut StreamReader::new(
+            res.bytes_stream()
+                .map_err(|e| io::Error::new(io::ErrorKind::Other, e)),
+        ),
+        write,
+    )
+    .await?;
     Ok(())
 }
 
@@ -181,21 +152,65 @@ pub async fn download_file_into_memory(url: &String) -> Result<String> {
 }
 
 /// Checks the downloaded file integrity with the sha512sum
-pub fn hash_check_file(file_dir: String, git_hash: String) -> Result<bool> {
-    let mut file = File::open(file_dir)
-        .context("[Hash Check] Failed opening download file for checking. Was the file moved?")?;
+pub async fn hash_check_file<R: AsyncRead + Unpin + ?Sized>(
+    reader: &mut R,
+    git_hash: &str,
+) -> Result<bool> {
     let mut hasher = Sha512::new();
-    io::copy(&mut file, &mut hasher)
+
+    read_all_into_digest(reader, &mut hasher)
+        .await
         .context("[Hash Check] Failed reading download file for checking")?;
 
     let hash = hasher.finalize();
 
-    let (git_hash, _) = git_hash
-        .rsplit_once(' ')
-        .context("[Hash Check] Failed decoding hash file. Is this the right hash ? Please file an issue to protonup-rs !")?;
+    let (git_hash, _) = git_hash.rsplit_once(' ').unwrap_or((git_hash, ""));
 
     if hex::encode(hash) != git_hash.trim() {
         return Ok(false);
     }
     Ok(true)
+}
+
+async fn read_all_into_digest<R: AsyncRead + Unpin + ?Sized, D: Digest>(
+    read: &mut R,
+    digest: &mut D,
+) -> Result<()> {
+    const BUFFER_LEN: usize = 8 * 1024; // 8KB
+    let mut buffer = [0u8; BUFFER_LEN];
+
+    loop {
+        let count = read.read(&mut buffer).await?;
+        digest.update(&buffer[..count]);
+        if count != BUFFER_LEN {
+            break;
+        }
+    }
+
+    Ok(())
+}
+
+fn decompress_context(destination_path: &Path) -> String {
+    format!(
+        "[Decompressing] Failed to unpack into destination : {}",
+        destination_path.display()
+    )
+}
+
+#[cfg(test)]
+mod test {
+    use sha2::{Digest, Sha512};
+
+    #[tokio::test]
+    async fn hash_check_file() {
+        let test_data = b"This Is A Test";
+        let hash = hex::encode(Sha512::new_with_prefix(&test_data).finalize());
+
+        assert!(
+            super::hash_check_file(&mut &test_data[..], &hash)
+                .await
+                .unwrap(),
+            "Hash didn't match"
+        );
+    }
 }

@@ -37,20 +37,16 @@ fn manage_menu() -> Vec<ManageAppsMenuOptions> {
     .with_default(&[0_usize])
     .prompt();
 
-    match answer {
-        Ok(list) => list,
-
-        Err(_) => {
-            println!("The tag list could not be processed");
-            vec![]
-        }
-    }
+    answer.unwrap_or_else(|_| {
+        println!("The tag list could not be processed");
+        vec![]
+    })
 }
 
 /// Allow the user to delete existing wine versions
 ///
 /// The user selects the apps and wine versions to remove
-pub(crate) fn manage_apps_routine() {
+pub(crate) async fn manage_apps_routine() {
     let mut apps = vec![];
 
     let choices = manage_menu();
@@ -59,7 +55,7 @@ pub(crate) fn manage_apps_routine() {
         apps = apps::APP_INSTALLATIONS_VARIANTS.to_vec();
     }
     for app in apps {
-        let versions = match app.list_installed_versions() {
+        let versions = match app.list_installed_versions().await {
             Ok(versions) => versions,
             Err(_) => {
                 println!("App {} not found in your system, skipping... ", app);
@@ -70,15 +66,11 @@ pub(crate) fn manage_apps_routine() {
             println!("No versions found for {}, skipping... ", app);
             continue;
         }
-        let delete_versions = match multiple_select_menu(
+        let delete_versions = multiple_select_menu(
             &format!("Select the versions you want to DELETE from {}", app),
             versions,
-        ) {
-            Ok(versions) => versions,
-            Err(_) => {
-                vec![]
-            }
-        };
+        )
+        .unwrap_or_else(|_| vec![]);
 
         if delete_versions.is_empty() {
             println!("Zero versions selected for {}, skipping...\n", app);
@@ -91,6 +83,7 @@ pub(crate) fn manage_apps_routine() {
         ) {
             for version in delete_versions {
                 files::remove_dir_all(&format!("{}{}", &app.default_install_dir(), &version))
+                    .await
                     .map_or_else(
                         |e| {
                             eprintln!(
