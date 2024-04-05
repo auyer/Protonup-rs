@@ -15,9 +15,9 @@ anyhow = "1.0.81"
 arcstr = "1.1.5"
 futures-util = "0.3"
 # Use this to use the local changes in libprotonup.
-libprotonup = { path = "../libprotonup" }
+# libprotonup = { path = "../libprotonup" }
 # This is necessary to publish to crates.io
-# libprotonup = { version = "0.8.0" }
+libprotonup = { version = "0.8.0" }
 inquire = { version = "0.7", default-features = false, features = ["termion"] }
 indicatif = { version = "0.17", features = [
     "improved_unicode",
