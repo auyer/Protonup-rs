@@ -11,8 +11,8 @@ description = "TUI Program for Custom Proton Download and installation written i
 
 [dependencies]
 
-anyhow = "1.0.81"
-arcstr = "1.1.5"
+anyhow = "1.0.83"
+arcstr = "1.2.0"
 futures-util = "0.3"
 # Use this to use the local changes in libprotonup.
 libprotonup = { path = "../libprotonup" }

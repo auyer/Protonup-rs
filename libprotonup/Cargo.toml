@@ -10,9 +10,9 @@ readme = "../README.md"
 description = "Library for Custom Proton Download and installation"
 
 [dependencies]
-arcstr = "1.1.5"
+arcstr = "1.2.0"
 anyhow = "1.0"
-async-compression = { version = "0.4.7", features = ['gzip', 'xz', 'tokio'] }
+async-compression = { version = "0.4.10", features = ['gzip', 'xz', 'tokio'] }
 dirs = "5.0"
 futures-util = "0.3"
 hex = "0.4"
