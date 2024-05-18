@@ -9,6 +9,17 @@ readme = "../README.md"
 
 description = "TUI Program for Custom Proton Download and installation written in rust"
 
+[package.metadata.deb]
+maintainer = "Auyer <auyer@rcpassos.me>"
+copyright = "2024, Auyer <auyer@rcpassos.me>"
+extended-description = "TUI Program for Custom Proton Download and installation written in rust"
+depends = "$auto"
+section = "utility"
+priority = "optional"
+assets = [
+ ["target/release/protonup-rs", "usr/bin/", "755"],
+]
+
 [dependencies]
 
 anyhow = "1.0.81"
