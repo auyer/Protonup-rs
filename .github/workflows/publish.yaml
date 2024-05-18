@@ -34,13 +34,13 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
           branchName=$(echo $GITHUB_REF | sed 's/refs\/tags\///')
-          echo "::set-env name=CURRENT_VERSION::$(echo $branchName)"
+          echo "CURRENT_VERSION=$(echo $branchName)" >> $GITHUB_ENV
 
       - name: SET CURRENT_VERSION branch
         if: startsWith(github.ref, 'refs/heads/')
         run: |
           branchName=$(echo $GITHUB_REF  | sed 's/refs\/heads\/release\///')
-          echo "::set-env name=CURRENT_VERSION::$(echo $branchName)"
+          echo "CURRENT_VERSION=$(echo $branchName)" >> $GITHUB_ENV
 
       - name: Update local toolchain
         run: |
