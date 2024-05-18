@@ -37,9 +37,9 @@ jobs:
           echo "::set-env name=CURRENT_VERSION::$(echo $branchName)"
 
       - name: SET CURRENT_VERSION branch
-        if: startsWith(github.ref, 'refs/branch/')
+        if: startsWith(github.ref, 'refs/heads/')
         run: |
-          branchName=$(echo $GITHUB_REF  | sed 's/refs\/branch\/release\///')
+          branchName=$(echo $GITHUB_REF  | sed 's/refs\/heads\/release\///')
           echo "::set-env name=CURRENT_VERSION::$(echo $branchName)"
 
       - name: Update local toolchain
