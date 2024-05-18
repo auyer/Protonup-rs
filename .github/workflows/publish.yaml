@@ -5,6 +5,8 @@ on:
     # Sequence of patterns matched against refs/tags
     tags:
       - v*
+    branches:
+      - release/*
 
 jobs:
   release:
@@ -28,36 +30,49 @@ jobs:
           path: ~/.cargo
           key: ${{ runner.os }}-build-${{ env.cache-name }}
 
-      - uses: actions-rs/toolchain@v1
-        if: steps.cache-publish-action.outputs.cache-hit != 'true'
-        with:
-          toolchain: stable
+      - name: SET CURRENT_VERSION tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          branchName=$(echo $GITHUB_REF | sed 's/refs\/tags\///')
+          echo "::set-env name=CURRENT_VERSION::$(echo $branchName)"
+
+      - name: SET CURRENT_VERSION branch
+        if: startsWith(github.ref, 'refs/branch/')
+        run: |
+          branchName=$(echo $GITHUB_REF  | sed 's/refs\/branch\/release\///')
+          echo "::set-env name=CURRENT_VERSION::$(echo $branchName)"
+
+      - name: Update local toolchain
+        run: |
+          rustup update
+          rustup component add clippy
+          rustup install stable
 
       - name: Install cargo-deb
         if: steps.cache-publish-action.outputs.cache-hit != 'true'
         run: cargo install cargo-deb
 
       - name: Run cargo publish libprotonup
-        run: cargo publish -p libprotonup
         env:
           # This can help you tagging the github repository
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # This can help you publish to crates.io
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish --dry-run -p libprotonup
 
       - name: Run cargo build
         run: cargo build --release
 
       - name: Run cargo-deb to build a debian package
-        run: cargo-deb -p protonup-rs --deb-version ${{ github.ref }}
+        run: cargo-deb -p protonup-rs --deb-version $CURRENT_VERSION
 
       - name: Run cargo publish binary
-        run: cargo publish -p protonup-rs
         env:
           # This can help you tagging the github repository
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # This can help you publish to crates.io
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish --dry-run -p protonup-rs
 
       - name: Upload Tar gzed binaries to release
         uses: svenstaro/upload-release-action@v2
@@ -65,7 +80,7 @@ jobs:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: target/release/protonup-rs-linux-amd64.tar.gz
           asset_name: protonup-rs-linux-amd64.tar.gz
-          tag: ${{ github.ref }}
+          tag: $CURRENT_VERSION
 
       - name: Upload Ziped binaries to release
         uses: svenstaro/upload-release-action@v2
@@ -73,13 +88,13 @@ jobs:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: target/release/protonup-rs-linux-amd64.zip
           asset_name: protonup-rs-linux-amd64.zip
-          tag: ${{ github.ref }}
+          tag: $CURRENT_VERSION
 
       - name: Upload deb package to release
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: /app/target/debian/protonup-rs_${{ github.ref }}-1_amd64.deb
-          asset_name: /app/target/debian/protonup-rs_${{ github.ref }}-1_amd64.deb
-          tag: ${{ github.ref_name }}
+          file: /app/target/debian/protonup-rs_$CURRENT_VERSION-1_amd64.deb
+          asset_name: /app/target/debian/protonup-rs_$CURRENT_VERSION-1_amd64.deb
+          tag: $CURRENT_VERSION
 
