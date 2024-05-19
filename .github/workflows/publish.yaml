@@ -2,11 +2,10 @@ name: Release
 
 on:
   push:
-    # Sequence of patterns matched against refs/tags
     tags:
       - v*
     branches:
-      - release/*
+      - release/**
 
 jobs:
   release:
@@ -70,50 +69,20 @@ jobs:
           cd target/debian
           alien -k --to-rpm protonup-rs_${{ env.CURRENT_VERSION }}_amd64.deb
 
-      - name: Upload DEB package to release
-        uses: svenstaro/upload-release-action@v2
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: target/debian/protonup-rs_${{ env.CURRENT_VERSION }}_amd64.deb
-          asset_name: protonup-rs_${{ env.CURRENT_VERSION }}-1_amd64.deb
-          tag: v${{ env.CURRENT_VERSION }}
-          overwrite: true
-          draft: true
-
-      - name: Upload RPM package to release
-        uses: svenstaro/upload-release-action@v2
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: target/debian/protonup-rs-${{ env.CURRENT_VERSION }}-1.x86_64.rpm
-          asset_name: protonup-rs_${{ env.CURRENT_VERSION }}-1.x86_64.rpm
-          tag: v${{ env.CURRENT_VERSION }}
-          overwrite: true
-          draft: true
-
       - name: Compress binary release artefacts
         run: |
           cd ./target/release
           zip protonup-rs-linux-amd64.zip protonup-rs
           tar -czvf protonup-rs-linux-amd64.tar.gz protonup-rs
 
-      - name: Upload Tar gzed binaries to release
+      - name: Upload Ziped,Tar gzed, DEB and RPM binaries to release
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: target/release/protonup-rs-linux-amd64.tar.gz
-          asset_name: protonup-rs-linux-amd64.tar.gz
+          file: target/release/protonup*(.tar.gz|.zip|.rpm|.deb)
           tag: v${{ env.CURRENT_VERSION }}
           overwrite: true
-          draft: true
-
-      - name: Upload Ziped binaries to release
-        uses: svenstaro/upload-release-action@v2
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: target/release/protonup-rs-linux-amd64.zip
-          asset_name: protonup-rs-linux-amd64.zip
-          tag: v${{ env.CURRENT_VERSION }}
-          overwrite: true
+          file_glob: true
           draft: true
 
       - name: Run cargo publish binary
