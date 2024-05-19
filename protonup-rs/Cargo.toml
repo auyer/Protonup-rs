@@ -12,12 +12,13 @@ description = "TUI Program for Custom Proton Download and installation written i
 [package.metadata.deb]
 maintainer = "Auyer <auyer@rcpassos.me>"
 copyright = "2024, Auyer <auyer@rcpassos.me>"
-extended-description = "TUI Program for Custom Proton Download and installation written in rust"
+extended-description = "TUI Program used to download, install and manage custom Proton/Wine distributions for Steam and Lutris."
 depends = "$auto"
 section = "utility"
 priority = "optional"
 assets = [
  ["target/release/protonup-rs", "usr/bin/", "755"],
+ ["../README.md", "usr/share/doc/protonup-rs/README", "644"],
 ]
 
 [dependencies]
