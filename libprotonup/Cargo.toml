@@ -10,14 +10,14 @@ readme = "../README.md"
 description = "Library for Custom Proton Download and installation"
 
 [dependencies]
-arcstr = "1.1.5"
+arcstr = "1.2"
 anyhow = "1.0"
-async-compression = { version = "0.4.7", features = ['gzip', 'xz', 'tokio'] }
+async-compression = { version = "0.4", features = ['gzip', 'xz', 'tokio'] }
 dirs = "5.0"
 futures-util = "0.3"
 hex = "0.4"
 hex-literal = "0.4"
-pin-project = "1.1.5"
+pin-project = "1.1"
 reqwest = { version = "0.12", default-features = false, features = [
     "rustls-tls",
     "stream",
@@ -28,9 +28,9 @@ serde_json = "1.0"
 sha2 = "0.10"
 structopt = "0.3"
 tokio = { version = "1.37", features = ["macros"] }
-tokio-stream = { version = "0.1.15", features = ["fs"] }
-tokio-tar = "0.3.1"
-tokio-util = "0.7.10"
+tokio-stream = { version = "0.1", features = ["fs"] }
+tokio-tar = "0.3"
+tokio-util = "0.7"
 
 [dev-dependencies]
 tokio = { version = "1.37", features = ["macros", "rt"] }
