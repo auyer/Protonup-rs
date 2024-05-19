@@ -33,14 +33,16 @@ jobs:
       - name: SET CURRENT_VERSION tag
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
-          branchName=$(echo $GITHUB_REF | sed 's/refs\/tags\///')
-          echo "CURRENT_VERSION=$(echo $branchName)" >> $GITHUB_ENV
+          branchName=$(echo $GITHUB_REF | sed 's/refs\/tags\///' )
+          # variable CURRENT_VERSION should not have the "v" used in the branch name
+          echo "CURRENT_VERSION=$(echo $branchName | sed 's/v//' )" >> $GITHUB_ENV
 
       - name: SET CURRENT_VERSION branch
         if: startsWith(github.ref, 'refs/heads/')
         run: |
           branchName=$(echo $GITHUB_REF  | sed 's/refs\/heads\/release\///')
-          echo "CURRENT_VERSION=$(echo $branchName)" >> $GITHUB_ENV
+          # variable CURRENT_VERSION should not have the "v" used in the tag
+          echo "CURRENT_VERSION=$(echo $branchName | sed 's/v//' )" >> $GITHUB_ENV
 
       - name: Update local toolchain
         run: |
@@ -62,7 +64,7 @@ jobs:
           # retrieve available versions in crates.io api to skip upload if it was published already
           published_versions=$( curl 'https://crates.io/api/v1/crates/libprotonup' -H 'Accept: */*' |  jq '.versions[].num' )
           exists=false
-          if [[ ${published_versions[@]} =~ $(echo $CURRENT_VERSION | sed 's/v//' )  ]]
+          if [[ ${published_versions[@]} =~ $CURRENT_VERSION  ]]
           then
             exists=true
           fi
@@ -82,7 +84,7 @@ jobs:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: target/debian/protonup-rs_${{ env.CURRENT_VERSION }}_amd64.deb
           asset_name: protonup-rs_${{ env.CURRENT_VERSION }}-1_amd64.deb
-          tag: ${{ env.CURRENT_VERSION }}
+          tag: v${{ env.CURRENT_VERSION }}
           overwrite: true
           draft: true
 
@@ -98,7 +100,7 @@ jobs:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: target/release/protonup-rs-linux-amd64.tar.gz
           asset_name: protonup-rs-linux-amd64.tar.gz
-          tag: ${{ env.CURRENT_VERSION }}
+          tag: v${{ env.CURRENT_VERSION }}
           overwrite: true
           draft: true
 
@@ -108,7 +110,7 @@ jobs:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: target/release/protonup-rs-linux-amd64.zip
           asset_name: protonup-rs-linux-amd64.zip
-          tag: ${{ env.CURRENT_VERSION }}
+          tag: v${{ env.CURRENT_VERSION }}
           overwrite: true
           draft: true
 
