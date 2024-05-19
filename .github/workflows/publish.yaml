@@ -79,7 +79,7 @@ jobs:
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: target/release/protonup*(.tar.gz|.zip|.rpm|.deb)
+          file: 'target/{release,debian}/protonup-rs**.{gz,zip,rpm,deb}'
           tag: v${{ env.CURRENT_VERSION }}
           overwrite: true
           file_glob: true
