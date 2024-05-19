@@ -59,8 +59,14 @@ jobs:
           # This can help you publish to crates.io
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: |
-          uploadedVersion=$( cargo search libprotonup |  cut -d' ' -f3 )
-          if [ "v$uploadedVersion" != $CURRENT_VERSION]; then
+          # retrieve available versions in crates.io api to skip upload if it was published already
+          published_versions=$( curl 'https://crates.io/api/v1/crates/libprotonup' -H 'Accept: */*' |  jq '.versions[].num' )
+          exists=false
+          if [[ ${published_versions[@]} =~ $(echo $CURRENT_VERSION | sed 's/v//' )  ]]
+          then
+            exists=true
+          fi
+          if ! ( $exists ) ; then
             cargo publish -p libprotonup
           fi
 
@@ -113,7 +119,15 @@ jobs:
           # This can help you publish to crates.io
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: |
-          uploadedVersion=$( cargo search protonup-rs |  cut -d' ' -f3 )
-          if [ "v$uploadedVersion" != $CURRENT_VERSION]; then
+          # retrieve available versions in crates.io api to skip upload if it was published already
+          published_versions=$( curl 'https://crates.io/api/v1/crates/Protonup-rs'  -H 'Accept: */*' |  jq '.versions[].num' )
+          exists=false
+          if [[ ${published_versions[@]} =~ $(echo $CURRENT_VERSION | sed 's/v//' )  ]]
+          then
+            exists=true
+          fi
+          if ! ( $exists ) ; then
             cargo publish -p protonup-rs
           fi
+
+
