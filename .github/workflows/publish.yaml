@@ -70,9 +70,10 @@ jobs:
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: /app/target/debian/protonup-rs_$CURRENT_VERSION-1_amd64.deb
-          asset_name: /app/target/debian/protonup-rs_$CURRENT_VERSION-1_amd64.deb
-          tag: $CURRENT_VERSION
+          file: target/debian/protonup-rs_${{ env.CURRENT_VERSION }}_amd64.deb
+          asset_name: protonup-rs_${{ env.CURRENT_VERSION }}-1_amd64.deb
+          tag: ${{ env.CURRENT_VERSION }}
+          draft: true
 
       - name: Compress binary release artefacts
         run: |
@@ -86,7 +87,8 @@ jobs:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: target/release/protonup-rs-linux-amd64.tar.gz
           asset_name: protonup-rs-linux-amd64.tar.gz
-          tag: $CURRENT_VERSION
+          tag: ${{ env.CURRENT_VERSION }}
+          draft: true
 
       - name: Upload Ziped binaries to release
         uses: svenstaro/upload-release-action@v2
@@ -94,7 +96,8 @@ jobs:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: target/release/protonup-rs-linux-amd64.zip
           asset_name: protonup-rs-linux-amd64.zip
-          tag: $CURRENT_VERSION
+          tag: ${{ env.CURRENT_VERSION }}
+          draft: true
 
       - name: Run cargo publish binary
         env:
