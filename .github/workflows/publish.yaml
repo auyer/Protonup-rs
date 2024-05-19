@@ -73,6 +73,7 @@ jobs:
           file: target/debian/protonup-rs_${{ env.CURRENT_VERSION }}_amd64.deb
           asset_name: protonup-rs_${{ env.CURRENT_VERSION }}-1_amd64.deb
           tag: ${{ env.CURRENT_VERSION }}
+          overwrite: true
           draft: true
 
       - name: Compress binary release artefacts
@@ -88,6 +89,7 @@ jobs:
           file: target/release/protonup-rs-linux-amd64.tar.gz
           asset_name: protonup-rs-linux-amd64.tar.gz
           tag: ${{ env.CURRENT_VERSION }}
+          overwrite: true
           draft: true
 
       - name: Upload Ziped binaries to release
@@ -97,6 +99,7 @@ jobs:
           file: target/release/protonup-rs-linux-amd64.zip
           asset_name: protonup-rs-linux-amd64.zip
           tag: ${{ env.CURRENT_VERSION }}
+          overwrite: true
           draft: true
 
       - name: Run cargo publish binary
