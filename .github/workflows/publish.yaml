@@ -11,12 +11,7 @@ on:
 jobs:
   release:
     runs-on: ubuntu-latest
-
-    name: "publish"
-
-    # Reference your environment variables
-    environment: cargo
-
+    name: "Build and Publish Release"
     steps:
       - uses: actions/checkout@master
 
