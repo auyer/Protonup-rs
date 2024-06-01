@@ -17,8 +17,8 @@ depends = "$auto"
 section = "utility"
 priority = "optional"
 assets = [
- ["target/release/protonup-rs", "usr/bin/", "755"],
- ["../README.md", "usr/share/doc/protonup-rs/README", "644"],
+    ["target/release/protonup-rs", "usr/bin/", "755"],
+    ["../README.md", "usr/share/doc/protonup-rs/README", "644"],
 ]
 
 [dependencies]
@@ -26,10 +26,7 @@ assets = [
 anyhow = "1.0"
 arcstr = "1.2"
 futures-util = "0.3"
-# Use this to use the local changes in libprotonup.
-libprotonup = { path = "../libprotonup" }
-# This is necessary to publish to crates.io
-# libprotonup = { version = "0.8.1" }
+libprotonup = { path = "../libprotonup", version = "0.8.1" }
 inquire = { version = "0.7", default-features = false, features = ["termion"] }
 indicatif = { version = "0.17", features = [
     "improved_unicode",
