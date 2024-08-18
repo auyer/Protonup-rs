@@ -29,10 +29,10 @@ futures-util = "0.3"
 libprotonup = { path = "../libprotonup", version = "0.8.2" }
 inquire = { version = "0.7", default-features = false, features = ["termion"] }
 indicatif = { version = "0.17", features = [
-    "improved_unicode",
-    "unicode-segmentation",
-    "tokio"
+  "improved_unicode",
+  "unicode-segmentation",
+  "tokio",
 ] }
-tempfile = "3.10"
-tokio = { version = "1.38", features = ["macros", "rt-multi-thread"] }
+tempfile = "3.12"
+tokio = { version = "1.39", features = ["macros", "rt-multi-thread"] }
 clap = { version = "4.5", features = ["derive"] }
