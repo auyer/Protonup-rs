@@ -47,14 +47,20 @@ fn manage_menu() -> Vec<ManageAppsMenuOptions> {
 ///
 /// The user selects the apps and wine versions to remove
 pub(crate) async fn manage_apps_routine() {
-    let mut apps = vec![];
-
     let choices = manage_menu();
 
-    if choices.contains(&ManageAppsMenuOptions::DetectAll) {
-        apps = apps::APP_INSTALLATIONS_VARIANTS.to_vec();
+    // default to all apps
+    let mut selected_apps = apps::APP_INSTALLATIONS_VARIANTS.to_vec();
+    if !choices.contains(&ManageAppsMenuOptions::DetectAll) {
+        selected_apps = choices
+            .iter()
+            .map(|choice| match choice {
+                ManageAppsMenuOptions::DetectAll => unreachable!(), // managed by the default case
+                ManageAppsMenuOptions::AppInstallations(app) => app.to_owned(),
+            })
+            .collect::<Vec<apps::AppInstallations>>();
     }
-    for app in apps {
+    for app in selected_apps {
         let versions = match app.list_installed_versions().await {
             Ok(versions) => versions,
             Err(_) => {
