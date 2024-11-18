@@ -159,11 +159,11 @@ pub(crate) async fn validate_file(
 pub(crate) async fn unpack_file<R: AsyncRead + Unpin>(reader: R, install_path: &str) -> Result<()> {
     let install_dir = utils::expand_tilde(install_path).unwrap();
 
-    fs::create_dir_all(&install_dir).await.unwrap();
+    fs::create_dir_all(&install_dir).await.unwrap_or_default();
 
     files::decompress(reader, install_dir.as_path())
         .await
-        .unwrap();
+        .unwrap_or_default();
 
     Ok(())
 }
