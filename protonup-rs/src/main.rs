@@ -66,7 +66,7 @@ async fn main() {
         quick_download,
         force,
     } = Opt::parse();
-    if quick_download {
+    let releases = if quick_download {
         download::run_quick_downloads(force).await
     } else {
         let answer: InitialMenu = Select::new(
@@ -89,7 +89,16 @@ async fn main() {
             InitialMenu::DownloadIntoCustomLocation => {
                 download::download_to_selected_app(None).await
             }
-            InitialMenu::ManageExistingInstallations => manage_apps_routine().await,
+            InitialMenu::ManageExistingInstallations => {
+                manage_apps_routine().await;
+                Ok(vec![])
+            }
+        }
+    };
+
+    if let Ok(releases) = releases {
+        for release in releases {
+            println!("Installed {}", release.tag_name);
         }
     }
 }

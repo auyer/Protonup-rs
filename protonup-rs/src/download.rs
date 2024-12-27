@@ -169,11 +169,11 @@ pub(crate) async fn unpack_file<R: AsyncRead + Unpin>(reader: R, install_path: &
 }
 
 /// Downloads the latest wine version for all the apps found
-pub async fn run_quick_downloads(force: bool) {
+pub async fn run_quick_downloads(force: bool) -> Result<Vec<Release>> {
     let found_apps = apps::list_installed_apps().await;
     if found_apps.is_empty() {
         println!("No apps found. Please install at least one app before using this feature.");
-        return;
+        return Err(anyhow!("No apps found. Please install at least one app before using this feature."));
     }
     println!(
         "Found the following apps: {}",
@@ -187,6 +187,7 @@ pub async fn run_quick_downloads(force: bool) {
     let multi_progress = MultiProgress::with_draw_target(ProgressDrawTarget::stderr_with_hz(20));
 
     let joins = FuturesUnordered::new();
+    let mut releases: Vec<Release> = vec![];
     for app_inst in &found_apps {
         let wine_version = app_inst.as_app().app_wine_version();
         let destination = app_inst.default_install_dir().to_string();
@@ -215,12 +216,14 @@ pub async fn run_quick_downloads(force: bool) {
         let output_dir = tempfile::tempdir().expect("Failed to create tempdir");
 
         joins.push(download_validate_unpack(
-            release,
+            release.clone(),
             ArcStr::from(destination),
             wine_version,
             output_dir.into_path(),
             multi_progress.clone(),
         ));
+
+        releases.push(release);
     }
 
     joins
@@ -232,12 +235,14 @@ pub async fn run_quick_downloads(force: bool) {
         })
         .await;
     multi_progress.clear().unwrap();
+
+    Ok(releases)
 }
 
 /// Start the Download for the selected app
 ///
 /// If no app is provided, the user is prompted for which version of Wine/Proton to use and what directory to extract to
-pub async fn download_to_selected_app(app: Option<apps::App>) {
+pub async fn download_to_selected_app(app: Option<apps::App>) -> Result<Vec<Release>> {
     // Get the version of Wine/Proton to install
     let wine_version = match app {
         // Use the default for the app
@@ -332,7 +337,7 @@ pub async fn download_to_selected_app(app: Option<apps::App>) {
 
     let multi_progress = MultiProgress::with_draw_target(ProgressDrawTarget::stderr_with_hz(20));
 
-    stream::iter(releases)
+    stream::iter(releases.clone())
         .map(|r| {
             let dir = install_dir.clone();
             let temp_dir = tempfile::tempdir()
@@ -352,6 +357,8 @@ pub async fn download_to_selected_app(app: Option<apps::App>) {
             future::ready(())
         })
         .await;
+
+    Ok(releases)
 }
 
 async fn download_validate_unpack(
