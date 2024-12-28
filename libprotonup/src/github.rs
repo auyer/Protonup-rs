@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 pub type ReleaseList = Vec<Release>;
 
 /// Contains the information from one of the releases on GitHub
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Release {
     /// API URL of the Release
     url: Option<String>,
@@ -50,7 +50,7 @@ impl Release {
 /// Holds the information from the different Assets for each GitHub release
 ///
 /// An Asset could be for the wine tar folder or for the sha512sum
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Asset {
     url: String,
     id: i64,

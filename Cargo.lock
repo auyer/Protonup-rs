@@ -856,7 +856,7 @@ checksum = "433bfe06b8c75da9b2e3fbea6e5329ff87748f0b144ef75306e674c3f6f7c13f"
 
 [[package]]
 name = "libprotonup"
-version = "0.8.4"
+version = "0.8.5"
 dependencies = [
  "anyhow",
  "arcstr",
@@ -1097,7 +1097,7 @@ dependencies = [
 
 [[package]]
 name = "protonup-rs"
-version = "0.8.4"
+version = "0.8.5"
 dependencies = [
  "anyhow",
  "arcstr",
