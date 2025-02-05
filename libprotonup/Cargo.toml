@@ -1,6 +1,6 @@
 [package]
 name = "libprotonup"
-version = "0.8.5"
+version = "0.8.6"
 edition = "2021"
 authors = ["Auyer <auyer@rcpassos.me>"]
 repository = "https://github.com/auyer/protonup-rs"
