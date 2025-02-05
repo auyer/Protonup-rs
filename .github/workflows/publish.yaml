@@ -75,6 +75,16 @@ jobs:
           file_glob: true
           draft: true
 
+      - name: Upload installer script
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: 'protonup-rs-install.desktop'
+          tag: v${{ env.CURRENT_VERSION }}
+          overwrite: true
+          file_glob: true
+          draft: true
+
       - name: Run cargo publish binary
         env:
           # This can help you tagging the github repository
