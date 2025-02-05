@@ -173,7 +173,9 @@ pub async fn run_quick_downloads(force: bool) -> Result<Vec<Release>> {
     let found_apps = apps::list_installed_apps().await;
     if found_apps.is_empty() {
         println!("No apps found. Please install at least one app before using this feature.");
-        return Err(anyhow!("No apps found. Please install at least one app before using this feature."));
+        return Err(anyhow!(
+            "No apps found. Please install at least one app before using this feature."
+        ));
     }
     println!(
         "Found the following apps: {}",
