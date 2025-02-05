@@ -37,7 +37,10 @@ Options:
 
 This will download a simple ".desktop" file that will download the pre-compiled binary from release, decompress it, place it in "$HOME/.local/bin/", and add this folder to your PATH.
 After running it, open a new terminal window to run `protonup-rs`.
-<a name="download button" href="https://github.com/auyer/protonup-rs/blob/main/protonup-rs-install.desktop">Click Here to Download installer</a>
+
+<h2 align="center">
+  <a name="download button" href="https://github.com/auyer/protonup-rs/releases/latest/download/protonup-rs-install.desktop">Click Here to Download installer</a>
+</h2>
 
 ### In one line
 
