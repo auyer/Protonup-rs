@@ -31,9 +31,15 @@ Options:
 
 ---
 
-## Installing:
+## Installing
 
-### In one line:
+### Clickable download (Steam Deck Friendly)
+
+This will download a simple ".desktop" file that will download the pre-compiled binary from release, decompress it, place it in "$HOME/.local/bin/", and add this folder to your PATH.
+After running it, open a new terminal window to run `protonup-rs`.
+<a name="download button" href="https://github.com/auyer/protonup-rs/blob/main/protonup-rs-install.desktop">Click Here to Download installer</a>
+
+### In one line
 
 ```bash
 wget https://github.com/auyer/Protonup-rs/releases/latest/download/protonup-rs-linux-amd64.tar.gz -O - | tar -xz && zenity --password | sudo -S mv protonup-rs /usr/bin/
@@ -41,7 +47,7 @@ wget https://github.com/auyer/Protonup-rs/releases/latest/download/protonup-rs-l
 
 This assumes `/usr/bin` is in your path. You may change this to any other location (in your path `echo $PATH`).
 
-### Or manually:
+### Or manually
 
 Get the latest binary:
 [Download link](https://github.com/auyer/Protonup-rs/releases/latest/download/protonup-rs-linux-amd64.zip)
