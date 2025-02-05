@@ -35,12 +35,15 @@ Options:
 
 ### Clickable download (Steam Deck Friendly)
 
-This will download a simple ".desktop" file that will download the pre-compiled binary from release, decompress it, place it in "$HOME/.local/bin/", and add this folder to your PATH.
-After running it, open a new terminal window to run `protonup-rs`.
+- download .decktop file
+- run it
+- open a new terminal window to run `protonup-rs`
 
-<h2 align="center">
+<h3 align="center">
   <a name="download button" href="https://github.com/auyer/protonup-rs/releases/latest/download/protonup-rs-install.desktop">Click Here to Download installer</a>
-</h2>
+</h3>
+
+> **NOTE**: This will download a simple ".desktop" file that will download the pre-compiled binary from release, decompress it, place it in "$HOME/.local/bin/", and add this folder to your PATH.
 
 ### In one line
 
