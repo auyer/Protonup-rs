@@ -35,7 +35,7 @@ Options:
 
 ### Clickable download (Steam Deck Friendly)
 
-- download .decktop file
+- download .desktop file
 - run it
 - open a new terminal window to run `protonup-rs`
 
