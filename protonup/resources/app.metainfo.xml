@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>me.rcpassos.protonup-rs</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license> Apache-2.0</project_license>
+  <name>Protonup</name>
+  <summary>Manage custom Proton version for Steam and Lutris</summary>
+  <icon type="remote" width="64" height="64" scale="1">
+    https://github.com/auyer/Protonup-rs/raw/main/resources/icons/hicolor/scalable/apps/icon.svg
+  </icon>
+  <url type="vcs-browser">https://github.com/auyer/Protonup-rs</url>
+  <launchable type="desktop-id">me.rcpassos.protonup-rs.desktop</launchable>
+  <provides>
+    <id>me.rcpassos.protonup-rs</id>
+    <binaries>
+      <binary>protonup</binary>
+    </binaries>
+  </provides>
+  <requires>
+    <display_length compare="ge">360</display_length>
+  </requires>
+  <supports>
+    <control>keyboard</control>
+    <control>pointing</control>
+    <control>touch</control>
+  </supports>
+  <categories>
+    <category>COSMIC</category>
+  </categories>
+  <keywords>
+    <keyword>COSMIC</keyword>
+  </keywords>
+  <content_rating type="oars-1.1" />
+</component>
+

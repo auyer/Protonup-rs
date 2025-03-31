@@ -108,6 +108,7 @@ pub async fn remove_dir_all(path: &str) -> Result<()> {
     Ok(())
 }
 
+// download_to_async_write takes an URL, and downloads the data to a AsyncWrite receiver
 pub async fn download_to_async_write<W: AsyncWrite + Unpin>(
     url: &str,
     write: &mut W,

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=Protonup
+Comment=Manage custom Proton version for Steam and Lutris
+Type=Application
+Icon=me.rcpassos.protonup-rs
+Exec=protonup %F
+Terminal=false
+StartupNotify=true
+Categories=COSMIC
+Keywords=COSMIC
+MimeType=
