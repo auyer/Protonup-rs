@@ -7,12 +7,12 @@ repository = "https://github.com/auyer/protonup-rs"
 license = "Apache-2.0"
 
 [dependencies]
-iced = { version = "0.7", features = ["tokio"] }
-iced_native = { version = "0.8" }
-iced_futures = { version = "0.5", features = ["tokio"] }
-libprotonup = { path = "../libprotonup" }
+iced = { version = "0.13", features = ["tokio"] }
+iced_native = { version = "0.10" }
+iced_futures = { version = "0.13", features = ["tokio"] }
+libprotonup = { path = "../libprotonup", version = "0.8.6" }
 
 [dependencies.reqwest]
-version = "0.11"
+version = "0.12"
 default-features = false
 features = ["rustls-tls"]
