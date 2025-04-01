@@ -2,6 +2,8 @@
 
 Lib, CLI and GUI(wip) program to automate the installation and update of Proton-GE
 
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/10372/badge)](https://www.bestpractices.dev/projects/10372)
+
 > **NOTE**: This has no relations with the original ProtonUp project, and I am glad it was created.
 > ~~This is not nearly as feature complete as the original Protonup~~.
 >
