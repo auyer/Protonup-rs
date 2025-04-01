@@ -4,11 +4,15 @@ on:
   pull_request:
     types: [labeled, unlabeled, opened, edited, synchronize]
 
+permissions: read-all
+
 jobs:
   label_check:
     runs-on: ubuntu-latest
+    permissions:
+      checks: write
     steps:
-      - uses: yogevbd/enforce-label-action@2.2.2
+      - uses: yogevbd/enforce-label-action@a3c219da6b8fa73f6ba62b68ff09c469b3a1c024 #2.2.2
         with:
-          REQUIRED_LABELS_ANY: "🚀 Feature,💅 Improvement,🐛 Bug,📚 Docs,🧪 Tests,☁️ CI,🚨 Security,🤖 Dependencies"
-          REQUIRED_LABELS_ANY_DESCRIPTION: "It is necessary to add a label to your PR. This will help to categorize it and add a note on the release. Choose one of [🚀 Feature,💅 Improvement,🐛 Bug,📚 Docs,🧪 Tests,☁️ CI,🚨 Security,🤖 Dependencies]"
+          REQUIRED_LABELS_ANY: "Feature,Improvement,Bug,Docs,Tests,CI,Security,dependencies"
+          REQUIRED_LABELS_ANY_DESCRIPTION: "It is necessary to add a label to your PR. This will help to categorize it and add a note on the release. Choose one of [Feature, Improvement, Bug, Docs, Tests, CI, Security, Dependencies]"

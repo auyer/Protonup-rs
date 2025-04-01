@@ -5,12 +5,20 @@ on:
     tags:
       - v*
 
+permissions: read-all
+
 jobs:
   release:
     runs-on: ubuntu-latest
+    permissions:
+      actions: read # To read the workflow path.
+      id-token: write # To sign the provenance.
+      contents: write # To add assets to a release.
     name: "Build and Publish Release"
+    outputs:
+      hashes: ${{ steps.hash.outputs.hashes }}
     steps:
-      - uses: actions/checkout@master
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 #v4.2.2
 
       - name: SET CURRENT_VERSION tag
         run: |
@@ -51,6 +59,13 @@ jobs:
       - name: Run cargo build
         run: cargo build --release
 
+      # Generate the hashes for Provenance
+      - name: Generate subject
+        id: hash
+        run: |
+          set -euo pipefail
+          echo "hashes=$(sha256sum ./target/release/protonup-rs | base64 -w0)" >> "$GITHUB_OUTPUT"
+
       - name: Run cargo-deb to build a debian package
         run: cargo-deb -p protonup-rs --compress-type gzip --deb-version $CURRENT_VERSION
 
@@ -66,7 +81,7 @@ jobs:
           tar -czvf protonup-rs-linux-amd64.tar.gz protonup-rs
 
       - name: Upload Ziped,Tar gzed, DEB and RPM binaries to release
-        uses: svenstaro/upload-release-action@v2
+        uses: svenstaro/upload-release-action@04733e069f2d7f7f0b4aebc4fbdbce8613b03ccd #v2.9.0
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: 'target/{release,debian}/protonup-rs**.{gz,zip,rpm,deb}'
@@ -76,7 +91,7 @@ jobs:
           draft: true
 
       - name: Upload installer script
-        uses: svenstaro/upload-release-action@v2
+        uses: svenstaro/upload-release-action@04733e069f2d7f7f0b4aebc4fbdbce8613b03ccd #v2.9.0
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: 'protonup-rs-install.desktop'
@@ -103,4 +118,14 @@ jobs:
             cargo publish -p protonup-rs
           fi
 
-
+provenance:
+  needs: [build]
+  permissions:
+    actions: read # To read the workflow path.
+    id-token: write # To sign the provenance.
+    contents: write # To add assets to a release.
+  uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@f7dd8c54c2067bafc12ca7a55595d5ee9b75204a # v2.1.0
+  with:
+    base64-subjects: "${{ needs.build.outputs.hashes }}"
+    upload-assets: true
+    upload-tag-name: v${{ env.CURRENT_VERSION }}
