@@ -35,4 +35,4 @@ indicatif = { version = "0.17", features = [
 ] }
 tempfile = "3.19"
 tokio = { version = "1.44", features = ["macros", "rt-multi-thread"] }
-clap = { version = "4.5", features = ["derive"] }
+clap = { version = "4.5.34", features = ["derive"] }
