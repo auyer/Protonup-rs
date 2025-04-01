@@ -5,9 +5,15 @@ on:
     tags:
       - v*
 
+permissions: read-all
+
 jobs:
   release:
     runs-on: ubuntu-latest
+    permissions:
+      actions: read # To read the workflow path.
+      id-token: write # To sign the provenance.
+      contents: write # To add assets to a release.
     name: "Build and Publish Release"
     outputs:
       hashes: ${{ steps.hash.outputs.hashes }}

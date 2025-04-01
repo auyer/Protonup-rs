@@ -3,6 +3,8 @@ name: Lint
 on:
   pull_request:
 
+permissions: read-all
+
 jobs:
   clippy_check:
     runs-on: ubuntu-latest

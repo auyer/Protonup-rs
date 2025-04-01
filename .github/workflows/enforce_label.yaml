@@ -4,6 +4,8 @@ on:
   pull_request:
     types: [labeled, unlabeled, opened, edited, synchronize]
 
+permissions: read-all
+
 jobs:
   label_check:
     runs-on: ubuntu-latest
