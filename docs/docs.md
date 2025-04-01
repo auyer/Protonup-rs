@@ -36,9 +36,9 @@ It provides both a command-line interface (CLI) and a work-in-progress graphical
 1. Download the latest binary from [Releases](https://github.com/auyer/Protonup-rs/releases/latest/download/protonup-rs-linux-amd64.zip)
 2. Unzip and move to your PATH:
 
-   ```bash
-   unzip protonup-rs-linux-amd64.zip -d /usr/local/bin #(or any other path location)
-   ```
+```bash
+unzip protonup-rs-linux-amd64.zip -d /usr/local/bin #(or any other path location)
+```
 
 ### From Source
 
@@ -84,6 +84,11 @@ protonup-rs -q --force
 3. **Download for Lutris**: Install Wine-GE/GE-Proton for Lutris
 4. **Custom Location**: Install to a custom directory
 5. **Manage Installations**: View and manage existing Proton versions
+
+## External Interactions
+
+This software relies on the [github.com/GloriousEggroll/proton-ge-custom](https://github.com/GloriousEggroll/proton-ge-custom) project repository to be available.
+We should make it possible to add custom repositories, but this is not necessary at the moment.
 
 ## Development
 
