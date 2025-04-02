@@ -204,7 +204,7 @@ mod test {
     #[tokio::test]
     async fn hash_check_file() {
         let test_data = b"This Is A Test";
-        let hash = hex::encode(Sha512::new_with_prefix(&test_data).finalize());
+        let hash = hex::encode(Sha512::new_with_prefix(test_data).finalize());
 
         assert!(
             super::hash_check_file(&mut &test_data[..], &hash)
