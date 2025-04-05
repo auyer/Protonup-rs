@@ -1,9 +1,10 @@
 use crate::constants;
-use crate::variants::{Variant, VariantGithubParameters};
+use crate::sources::Source;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-
 pub type ReleaseList = Vec<Release>;
+
+pub const GITHUB_URL: &str = "https://api.github.com/repos";
 
 /// Contains the information from one of the releases on GitHub
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -31,7 +32,7 @@ impl Release {
             ..Download::default()
         };
         for asset in &self.assets {
-            if asset.name.ends_with("sha512sum") {
+            if asset.name.ends_with("sha512sum") || asset.name.ends_with("sha512") {
                 download
                     .sha512sum_url
                     .clone_from(&asset.browser_download_url);
@@ -61,14 +62,12 @@ pub struct Asset {
 }
 
 /// Returns a Vec of Releases from a GitHub repository, the URL used for the request is built from the passed in VariantParameters
-pub async fn list_releases(
-    source: &VariantGithubParameters,
-) -> Result<ReleaseList, reqwest::Error> {
+pub async fn list_releases(source: &Source) -> Result<ReleaseList, reqwest::Error> {
     let agent = format!("{}/v{}", constants::USER_AGENT, constants::VERSION,);
 
     let url = format!(
         "{}/{}/{}/releases",
-        source.repository_url, source.repository_account, source.repository_name,
+        GITHUB_URL, source.repository_account, source.repository_name,
     );
 
     let client = reqwest::Client::builder().user_agent(agent).build()?;
@@ -91,25 +90,29 @@ pub struct Download {
 }
 
 impl Download {
-    pub fn output_dir(&self, variant: &Variant) -> &str {
-        match variant {
-            Variant::GEProton => &self.version,
-            Variant::WineGE => {
-                self.download_url
-                    .rsplit_once("/wine-")
-                    .unwrap()
-                    .1
-                    .rsplit_once(".tar.xz")
-                    .unwrap()
-                    .0
-            }
-        }
+    // output_dir applies file_name filters defined for each source
+    pub fn output_dir(&self, source: &Source) -> String {
+        let mut name = match source.file_name_replacement.clone() {
+            Some(replacement) => self
+                .version
+                .clone()
+                .replace(&replacement.0, &replacement.1)
+                .to_owned(),
+            None => self.version.clone(),
+        };
+        name = match source.file_name_template.clone() {
+            Some(template) => template.replace("{version}", name.as_str()),
+            None => name,
+        };
+        name
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::variants;
+    use std::str::FromStr;
+
+    use crate::{constants, sources};
 
     use super::*;
 
@@ -117,12 +120,12 @@ mod tests {
     async fn test_list_releases() {
         let conditions = &[
             (
-                variants::Variant::WineGE.get_github_parameters(),
-                "List WineGE",
+                sources::Source::from_str(constants::DEFAULT_LUTRIS_TOOL).unwrap(),
+                "Get WineGE",
             ),
             (
-                variants::Variant::GEProton.get_github_parameters(),
-                "List GEProton",
+                sources::Source::from_str(constants::DEFAULT_STEAM_TOOL).unwrap(),
+                "Get GEProton",
             ),
         ];
 
@@ -159,20 +162,18 @@ mod tests {
 
         let conditions = &[
             (
-                variants::Variant::WineGE.get_github_parameters(),
+                sources::Source::from_str(constants::DEFAULT_LUTRIS_TOOL).unwrap(),
                 "Get WineGE",
             ),
             (
-                variants::Variant::GEProton.get_github_parameters(),
+                sources::Source::from_str(constants::DEFAULT_STEAM_TOOL).unwrap(),
                 "Get GEProton",
             ),
         ];
         for (source_parameters, desc) in conditions {
             let url = format!(
                 "{}/{}/{}/releases/latest",
-                source_parameters.repository_url,
-                source_parameters.repository_account,
-                source_parameters.repository_name
+                GITHUB_URL, source_parameters.repository_account, source_parameters.repository_name
             );
 
             let rel = match client.get(url).send().await {
@@ -189,6 +190,45 @@ mod tests {
                 "case : '{}' test: test_get_release wrong",
                 desc
             );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_get_download_name() {
+        let empty = "".to_owned();
+
+        let test_cases = vec![
+            // "GE-Proton
+            (
+                Download {
+                    version: "GE-Proton9-27".to_owned(),
+                    sha512sum_url: empty.clone(),
+                    size: 0,
+                    download_url: empty.clone(),
+                },
+                Source::from_str("GEProton").unwrap(),
+                "GE-Proton9-27",
+            ),
+            // WineGE
+            (
+                Download {
+                    version: "GE-Proton8-26".to_owned(),
+                    sha512sum_url: empty.clone(),
+                    size: 0,
+                    download_url: empty.clone(),
+                },
+                Source::from_str("WineGE").unwrap(),
+                "GE-Wine8-26",
+            ),
+        ];
+
+        for (input, source, expected) in test_cases {
+            let output = input.output_dir(&source);
+            println!("Input: {:#?}", input);
+            println!("Output: {:?}", output);
+            println!("Expected: {:?}", expected);
+            assert!(output == expected, "{} Should match: {}", output, expected);
+            println!();
         }
     }
 }

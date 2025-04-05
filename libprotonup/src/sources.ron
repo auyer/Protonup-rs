@@ -1,0 +1,17 @@
+[
+    (
+        name: "GEProton",
+        forge: GitHub,
+        repository_account: "GloriousEggroll",
+        repository_name: "proton-ge-custom",
+        compatible_applications: [Steam],
+    ),
+    (
+        name: "WineGE",
+        forge: GitHub,
+        repository_account: "GloriousEggroll",
+        repository_name: "wine-ge-custom",
+        compatible_applications: [Steam, Lutris],
+        file_name_replacement: Some(("Proton","Wine")),
+    ),
+]

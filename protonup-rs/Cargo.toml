@@ -1,7 +1,7 @@
 [package]
 name = "protonup-rs"
 version = "0.8.6"
-edition = "2021"
+edition = "2024"
 authors = ["Auyer <auyer@rcpassos.me>"]
 repository = "https://github.com/auyer/protonup-rs"
 license = "Apache-2.0"

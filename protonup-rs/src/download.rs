@@ -1,22 +1,21 @@
 use std::path::{Path, PathBuf};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use arcstr::ArcStr;
 use futures_util::stream::FuturesUnordered;
-use futures_util::{future, stream, StreamExt};
+use futures_util::{StreamExt, future, stream};
 use indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle};
 use inquire::{Select, Text};
 use tokio::fs;
 use tokio::fs::{File, OpenOptions};
-use tokio::io::{AsyncRead, BufReader};
+use tokio::io::BufReader;
 use tokio::sync::OnceCell;
 
 use libprotonup::files::Decompressor;
 use libprotonup::{
     apps, files,
     github::{self, Download, Release},
-    utils,
-    variants::{self, Variant},
+    sources::{Source, Sources},
 };
 
 use crate::{file_path, helper_menus};
@@ -33,7 +32,7 @@ pub(crate) async fn init_download_progress(
     progress_bar.set_style(get_progress_style().await);
     progress_bar.set_message(format!(
         "Downloading {} to {}",
-        download.download_url.split('/').last().unwrap(),
+        download.download_url.split('/').next_back().unwrap(),
         tmp_dir.display()
     ));
 
@@ -153,21 +152,6 @@ pub(crate) async fn validate_file(
     Ok(())
 }
 
-/// Prepares downloaded file to be decompressed
-///
-/// Parses the passed in data and ensures the destination directory is created
-pub(crate) async fn unpack_file<R: AsyncRead + Unpin>(reader: R, install_path: &str) -> Result<()> {
-    let install_dir = utils::expand_tilde(install_path).unwrap();
-
-    fs::create_dir_all(&install_dir).await.unwrap();
-
-    files::decompress(reader, install_dir.as_path())
-        .await
-        .unwrap();
-
-    Ok(())
-}
-
 /// Downloads the latest wine version for all the apps found
 pub async fn run_quick_downloads(force: bool) -> Result<Vec<Release>> {
     let found_apps = apps::list_installed_apps().await;
@@ -191,15 +175,18 @@ pub async fn run_quick_downloads(force: bool) -> Result<Vec<Release>> {
     let joins = FuturesUnordered::new();
     let mut releases: Vec<Release> = vec![];
     for app_inst in &found_apps {
-        let wine_version = app_inst.as_app().app_wine_version();
+        let compat_tool = app_inst.as_app().default_compatibility_tool();
         let destination = app_inst.default_install_dir().to_string();
 
-        // Get the latest Download info for the wine_version
-        let release = match github::list_releases(&wine_version.get_github_parameters()).await {
+        // Get the latest Download info for the compat_tool
+        let release = match github::list_releases(&compat_tool).await {
             // Get the Download info from the first item on the list, the latest version
             Ok(mut release_list) => release_list.remove(0),
             Err(e) => {
-                eprintln!("Failed to fetch Github data, make sure you're connected to the internet.\nError: {}", e);
+                eprintln!(
+                    "Failed to fetch Github data, make sure you're connected to the internet.\nError: {}",
+                    e
+                );
                 std::process::exit(1)
             }
         };
@@ -207,7 +194,7 @@ pub async fn run_quick_downloads(force: bool) -> Result<Vec<Release>> {
 
         if files::check_if_exists(
             &app_inst.default_install_dir(),
-            download.output_dir(&wine_version),
+            &download.output_dir(&compat_tool),
         )
         .await
             && !force
@@ -220,7 +207,7 @@ pub async fn run_quick_downloads(force: bool) -> Result<Vec<Release>> {
         joins.push(download_validate_unpack(
             release.clone(),
             ArcStr::from(destination),
-            wine_version,
+            compat_tool,
             output_dir.into_path(),
             multi_progress.clone(),
         ));
@@ -245,19 +232,6 @@ pub async fn run_quick_downloads(force: bool) -> Result<Vec<Release>> {
 ///
 /// If no app is provided, the user is prompted for which version of Wine/Proton to use and what directory to extract to
 pub async fn download_to_selected_app(app: Option<apps::App>) -> Result<Vec<Release>> {
-    // Get the version of Wine/Proton to install
-    let wine_version = match app {
-        // Use the default for the app
-        Some(app) => app.app_wine_version(),
-        // Or have the user select which one
-        None => Select::new(
-            "Choose the variant you want to install:",
-            variants::ALL_VARIANTS.to_vec(),
-        )
-        .prompt()
-        .unwrap_or_else(|_| std::process::exit(0)),
-    };
-
     // Get the folder to install Wine/Proton into
     let install_dir: ArcStr = match app {
         // If the user selected an app (Steam/Lutris)...
@@ -305,12 +279,30 @@ pub async fn download_to_selected_app(app: Option<apps::App>) -> Result<Vec<Rele
         ),
     };
 
+    // if an app was selected, filter compatible tools
+    let available_sources = match app {
+        // Use the default for the app
+        Some(app) => Source::sources_for_app(app),
+        // Or have the user select which one
+        None => Sources.clone(),
+    };
+
+    // TODO: maybe change to multi-select ?
+    let selected_tool = Select::new(
+        "Choose the compatibility tool you want to install:",
+        available_sources, // variants::ALL_VARIANTS.to_vec(),
+    )
+    .prompt()
+    .unwrap_or_else(|_| std::process::exit(0));
+
     let releases = {
-        let release_list = match github::list_releases(&wine_version.get_github_parameters()).await
-        {
+        let release_list = match github::list_releases(&selected_tool).await {
             Ok(data) => data,
             Err(e) => {
-                eprintln!("Failed to fetch Github data, make sure you're connected to the internet.\nError: {}", e);
+                eprintln!(
+                    "Failed to fetch Github data, make sure you're connected to the internet.\nError: {}",
+                    e
+                );
                 std::process::exit(1)
             }
         };
@@ -346,9 +338,10 @@ pub async fn download_to_selected_app(app: Option<apps::App>) -> Result<Vec<Rele
                 .expect("Unable to create tempdir")
                 .into_path();
             let progress = multi_progress.clone();
-            tokio::spawn(async move {
-                download_validate_unpack(r, dir, wine_version, temp_dir, progress).await
-            })
+            let tool = selected_tool.clone();
+            tokio::spawn(
+                async move { download_validate_unpack(r, dir, tool, temp_dir, progress).await },
+            )
         })
         .collect::<FuturesUnordered<_>>()
         .await
@@ -366,7 +359,7 @@ pub async fn download_to_selected_app(app: Option<apps::App>) -> Result<Vec<Rele
 async fn download_validate_unpack(
     release: Release,
     install_dir: ArcStr,
-    wine_version: Variant,
+    compat_tool: Source,
     temp_dir: PathBuf,
     multi_progress: MultiProgress,
 ) -> Result<()> {
@@ -393,8 +386,8 @@ async fn download_validate_unpack(
     .await?;
 
     let download = release.get_download_info();
-    let output_dir = download.output_dir(&wine_version);
-    if files::check_if_exists(&install_dir, output_dir).await {
+    let output_dir = download.output_dir(&compat_tool);
+    if files::check_if_exists(&install_dir, &output_dir).await {
         let path = Path::new(&install_dir.as_str()).join(output_dir);
         fs::remove_dir_all(&path)
             .await
@@ -408,7 +401,10 @@ async fn download_validate_unpack(
     let decompressor = Decompressor::from_path(&file)
         .await
         .with_context(|| format!("Error checking file type of {}", file.display()))?;
-    unpack_file(
+
+    files::unpack_file(
+        compat_tool.clone(),
+        download,
         unpack_progress_bar.wrap_async_read(decompressor),
         &install_dir,
     )
@@ -417,10 +413,10 @@ async fn download_validate_unpack(
 
     unpack_progress_bar.set_style(get_message_bar_style().await);
     unpack_progress_bar.finish_with_message(format!(
-        "Done! Restart {}. {} installed in {}",
-        wine_version.intended_application(),
-        wine_version,
-        install_dir.to_string()
+        "Done! {} installed in {}\nYour app might require a restart to detect {}",
+        compat_tool,
+        install_dir.to_string(),
+        compat_tool
     ));
     Ok(())
 }
