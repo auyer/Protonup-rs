@@ -48,13 +48,16 @@ impl InitialMenu {
 impl fmt::Display for InitialMenu {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            Self::QuickUpdate => write!(f, "Quick Update (detect apps and auto download)"),
-            Self::DownloadForSteam => write!(f, "Download GE-Proton for Steam"),
-            Self::DownloadForLutris => write!(f, "Download GE-Proton/Wine-GE for Lutris"),
+            Self::QuickUpdate => write!(
+                f,
+                "Quick Update (detect apps and update compatibility tools)"
+            ),
+            Self::DownloadForSteam => write!(f, "Download compatibility tools for Steam"),
+            Self::DownloadForLutris => write!(f, "Download compatibility tools for Lutris"),
             Self::DownloadIntoCustomLocation => {
-                write!(f, "Download GE-Proton/Wine-GE into custom location")
+                write!(f, "Download compatibility tools into custom location")
             }
-            Self::ManageExistingInstallations => write!(f, "Manage Existing Proton Installations"),
+            Self::ManageExistingInstallations => write!(f, "Manage Existing Installations"),
         }
     }
 }

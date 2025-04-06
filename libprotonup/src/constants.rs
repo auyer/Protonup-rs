@@ -1,10 +1,7 @@
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-pub const GITHUB_URL: &str = "https://api.github.com/repos";
-
-pub const GEPROTON_GITHUB_REPO: &str = "proton-ge-custom";
-pub const WINEGE_GITHUB_REPO: &str = "wine-ge-custom";
-pub const GE_GITHUB_ACCOUNT: &str = "GloriousEggroll";
+pub const DEFAULT_STEAM_TOOL: &str = "GEProton";
+pub const DEFAULT_LUTRIS_TOOL: &str = "WineGE";
 
 pub const USER_AGENT: &str = "protoup-rs";
 

@@ -1,5 +1,5 @@
 use std::future;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::task::Poll;
 
@@ -16,6 +16,8 @@ use tokio_stream::wrappers::ReadDirStream;
 use tokio_tar::Archive;
 use tokio_util::io::StreamReader;
 
+use crate::github::Download;
+use crate::sources::Source;
 use crate::utils;
 
 use super::constants;
@@ -69,14 +71,79 @@ impl<R: AsyncBufRead + Unpin> AsyncRead for Decompressor<R> {
     }
 }
 
-/// decompress will detect the extension and decompress the file with the appropriate function
-pub async fn decompress<R: AsyncRead + Unpin>(reader: R, destination_path: &Path) -> Result<()> {
+/// Prepares downloaded file to be decompressed
+///
+/// Parses the passed in data and ensures the destination directory is created
+pub async fn unpack_file<R: AsyncRead + Unpin>(
+    source: Source,
+    download: Download,
+    reader: R,
+    install_path: &str,
+) -> Result<()> {
+    let install_dir = utils::expand_tilde(install_path).unwrap();
+
+    fs::create_dir_all(&install_dir).await.unwrap();
+
+    decompress_with_new_top_level(
+        reader,
+        install_dir.as_path(),
+        download.output_dir(&source).as_str(),
+    )
+    .await
+    .unwrap();
+
+    Ok(())
+}
+
+/// decompress_with_new_top_level unpacks the tarrball,
+/// replacing the top level folder with the provided value
+async fn decompress_with_new_top_level<R: AsyncRead + Unpin>(
+    reader: R,
+    destination_path: &Path,
+    new_top_level: &str,
+) -> Result<()> {
     let mut archive = Archive::new(reader);
 
-    archive
-        .unpack(destination_path)
-        .await
-        .with_context(|| decompress_context(destination_path))
+    // Get the entries from the archive
+    let mut entries = archive.entries()?;
+
+    while let Some(entry) = entries.next().await {
+        let mut entry = entry?;
+
+        // Get the original path in the tar
+        let path = entry.path()?;
+
+        // Create the new path by replacing the top level
+        let new_path = if path.parent().is_some() {
+            let components: Vec<_> = path.components().collect();
+            // skip len 1, it corresponds to the top level itself
+            if components.len() > 1 {
+                let mut new_path = PathBuf::from(destination_path).join(new_top_level);
+                for component in components.iter().skip(1) {
+                    new_path.push(component);
+                }
+                new_path
+            } else {
+                PathBuf::from(destination_path)
+                    .join(new_top_level)
+                    .join(path.file_name().unwrap())
+            }
+        } else {
+            PathBuf::from(destination_path)
+                .join(new_top_level)
+                .join(path)
+        };
+
+        // Create parent directories if needed
+        if let Some(parent) = new_path.parent() {
+            fs::create_dir_all(parent).await?;
+        }
+
+        // Extract the file
+        entry.unpack(&new_path).await?;
+    }
+
+    Ok(())
 }
 
 /// check_if_exists checks if a folder exists in a path
@@ -190,21 +257,20 @@ async fn read_all_into_digest<R: AsyncRead + Unpin + ?Sized, D: Digest>(
     Ok(())
 }
 
-fn decompress_context(destination_path: &Path) -> String {
-    format!(
-        "[Decompressing] Failed to unpack into destination : {}",
-        destination_path.display()
-    )
-}
-
 #[cfg(test)]
 mod test {
+    use crate::sources;
+
+    use super::*;
     use sha2::{Digest, Sha512};
+    use std::fs;
+    use tar;
+    use tempfile::tempdir;
 
     #[tokio::test]
     async fn hash_check_file() {
         let test_data = b"This Is A Test";
-        let hash = hex::encode(Sha512::new_with_prefix(&test_data).finalize());
+        let hash = hex::encode(Sha512::new_with_prefix(test_data).finalize());
 
         assert!(
             super::hash_check_file(&mut &test_data[..], &hash)
@@ -212,5 +278,65 @@ mod test {
                 .unwrap(),
             "Hash didn't match"
         );
+    }
+
+    #[tokio::test]
+    async fn test_unpack_with_new_top_level() {
+        let empty = "".to_owned();
+
+        let s = Source::new_custom(
+            empty.clone(),
+            sources::Forge::GitHub,
+            empty.clone(),
+            empty.clone(),
+            None,
+            None,
+        );
+
+        let d = Download {
+            version: "new_top_123".to_owned(),
+            sha512sum_url: empty.clone(),
+            download_url: "test.tar".to_owned(),
+            size: 1,
+        };
+
+        // Create a temporary directory for the test
+        let temp_dir = tempdir().unwrap();
+        let tar_path = temp_dir.path().join("test.tar");
+        let output_dir = temp_dir.path().join("./output");
+        let new_top_level = d.version.clone();
+
+        // Create sample directory structure to tar
+        let original_top = temp_dir.path().join("original_top");
+        fs::create_dir_all(&original_top).unwrap();
+        fs::write(original_top.join("file1.txt"), "test content").unwrap();
+        fs::create_dir_all(original_top.join("subdir")).unwrap();
+        fs::write(original_top.join("subdir/file2.txt"), "more content").unwrap();
+
+        // Create a tar file
+        let tar_file = fs::File::create(&tar_path).unwrap();
+        let mut builder = tar::Builder::new(tar_file);
+        builder
+            .append_dir_all("original_top", &original_top)
+            .unwrap();
+        builder.finish().unwrap();
+
+        let file = File::open(tar_path).await.unwrap();
+
+        unpack_file(s, d, file, output_dir.to_str().unwrap())
+            .await
+            .expect("Unpacking failed");
+
+        // Verify the new directory structure
+        let new_root = output_dir.join(new_top_level);
+        assert!(new_root.exists(), "New top level directory not created");
+
+        let file1 = new_root.join("file1.txt");
+        assert!(file1.is_file(), "File not found in new structure");
+        assert_eq!(fs::read_to_string(file1).unwrap(), "test content");
+
+        let file2 = new_root.join("subdir/file2.txt");
+        assert!(file2.is_file(), "Nested file not found");
+        assert_eq!(fs::read_to_string(file2).unwrap(), "more content");
     }
 }

@@ -1,8 +1,8 @@
 use std::io::ErrorKind;
 
 use inquire::{
-    autocompletion::{Autocomplete, Replacement},
     CustomUserError,
+    autocompletion::{Autocomplete, Replacement},
 };
 
 #[derive(Clone, Default)]

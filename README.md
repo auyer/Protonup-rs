@@ -93,3 +93,13 @@ mv ./target/release/protonup-rs "your path"
 Not ready for usage.
 
 The GUI is in its [early stages](https://github.com/auyer/Protonup-rs/tree/feature/gui). My current plan is to develop it in the iced framework, but GUI development is not my forte.
+
+## Feedbacks & Contributing
+
+This project accepts contributions and feedbacks from anyone.
+For feedbacks, please use GitHub Issues or Discussions. Please be polite!
+
+For contributions, there aren't many rules.
+Just try to justify your changes, and try to make the pull request easy to review.
+Is is very recommended to add tests, specially for complex code.
+Thanks!

@@ -1,13 +1,15 @@
 use arcstr::ArcStr;
 use futures_util::stream::{self, StreamExt};
-use std::fmt;
+use serde::{Deserialize, Serialize};
+use std::{fmt, str::FromStr};
 
 use crate::{
+    constants,
     files::{self, list_folders_in_path},
-    variants::Variant,
+    sources::Source,
 };
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Deserialize, Serialize)]
 pub enum App {
     Steam,
     Lutris,
@@ -27,11 +29,12 @@ impl fmt::Display for App {
 }
 
 impl App {
-    /// Returns the version of Wine used for the App
-    pub fn app_wine_version(&self) -> Variant {
+    /// Returns the default compatibility tool for the App
+    pub fn default_compatibility_tool(&self) -> Source {
         match *self {
-            Self::Steam => Variant::GEProton,
-            Self::Lutris => Variant::WineGE,
+            // TODO: this could fail if the default apps change
+            Self::Steam => Source::from_str(constants::DEFAULT_STEAM_TOOL).unwrap(),
+            Self::Lutris => Source::from_str(constants::DEFAULT_LUTRIS_TOOL).unwrap(),
         }
     }
 
