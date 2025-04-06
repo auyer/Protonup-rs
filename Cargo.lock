@@ -1066,7 +1066,6 @@ dependencies = [
  "indicatif",
  "inquire",
  "libprotonup",
- "tempfile",
  "tokio",
 ]
 

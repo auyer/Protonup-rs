@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::task::Poll;
 
-use anyhow::{Context, Error, Result};
+use anyhow::{Context, Error, Result, anyhow};
 use async_compression::tokio::bufread::{GzipDecoder, XzDecoder};
 use futures_util::{StreamExt, TryStreamExt};
 use pin_project::pin_project;
@@ -25,6 +25,18 @@ use super::constants;
 pub enum Decompressor<R: AsyncBufRead + Unpin> {
     Gzip(#[pin] GzipDecoder<R>),
     Xz(#[pin] XzDecoder<R>),
+}
+
+pub(crate) fn check_supported_extension(file_name: String) -> Result<String> {
+    if file_name.ends_with("tar.gz") || file_name.ends_with("tgz") {
+        Ok("tar.gz".to_owned())
+    } else if file_name.ends_with("tar.xz") || file_name.ends_with("txz") {
+        Ok("tar.xz".to_owned())
+    } else {
+        Err(anyhow!(
+            "Downloaded file wasn't of the expected type. (tar.(gz/xz))"
+        ))
+    }
 }
 
 impl Decompressor<BufReader<File>> {
@@ -86,7 +98,7 @@ pub async fn unpack_file<R: AsyncRead + Unpin>(
     decompress_with_new_top_level(
         reader,
         install_dir.as_path(),
-        download.output_dir(&source).as_str(),
+        download.installation_dir(&source).as_str(),
     )
     .await
     .unwrap();

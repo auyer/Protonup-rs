@@ -68,17 +68,8 @@ pub(crate) async fn init_unpack_progress(
 pub(crate) async fn download_file(
     download: &Download,
     multi_progress: MultiProgress,
-    mut output_dir: PathBuf,
 ) -> Result<PathBuf> {
-    output_dir.push(if download.download_url.ends_with("tar.gz") {
-        format!("{}.tar.gz", &download.version)
-    } else if download.download_url.ends_with("tar.xz") {
-        format!("{}.tar.xz", &download.version)
-    } else {
-        return Err(anyhow!(
-            "Downloaded file wasn't of the expected type. (tar.(gz/xz)"
-        ));
-    });
+    let output_dir = download.download_dir()?;
 
     if files::check_if_exists(&output_dir.to_string_lossy(), "").await {
         fs::remove_dir_all(&output_dir).await?;
@@ -190,7 +181,7 @@ pub async fn run_quick_downloads(force: bool) -> Result<Vec<Release>> {
 
         if files::check_if_exists(
             &app_inst.default_install_dir(),
-            &download.output_dir(&compat_tool),
+            &download.installation_dir(&compat_tool),
         )
         .await
             && !force
@@ -198,13 +189,10 @@ pub async fn run_quick_downloads(force: bool) -> Result<Vec<Release>> {
             continue;
         }
 
-        let output_dir = tempfile::tempdir().expect("Failed to create tempdir");
-
         joins.push(download_validate_unpack(
             release.clone(),
             ArcStr::from(destination),
             compat_tool,
-            output_dir.into_path(),
             multi_progress.clone(),
         ));
 
@@ -330,14 +318,9 @@ pub async fn download_to_selected_app(app: Option<apps::App>) -> Result<Vec<Rele
     stream::iter(releases.clone())
         .map(|r| {
             let dir = install_dir.clone();
-            let temp_dir = tempfile::tempdir()
-                .expect("Unable to create tempdir")
-                .into_path();
             let progress = multi_progress.clone();
             let tool = selected_tool.clone();
-            tokio::spawn(
-                async move { download_validate_unpack(r, dir, tool, temp_dir, progress).await },
-            )
+            tokio::spawn(async move { download_validate_unpack(r, dir, tool, progress).await })
         })
         .collect::<FuturesUnordered<_>>()
         .await
@@ -356,12 +339,10 @@ async fn download_validate_unpack(
     release: Release,
     install_dir: ArcStr,
     compat_tool: Source,
-    temp_dir: PathBuf,
     multi_progress: MultiProgress,
 ) -> Result<()> {
-    // TODO: more of this logic should be in the library
     let download = release.get_download_info();
-    let file = download_file(&download, multi_progress.clone(), temp_dir)
+    let file = download_file(&download, multi_progress.clone())
         .await
         .with_context(|| {
             format!(
@@ -392,7 +373,7 @@ async fn download_validate_unpack(
     }
 
     let download = release.get_download_info();
-    let output_dir = download.output_dir(&compat_tool);
+    let output_dir = download.installation_dir(&compat_tool);
     if files::check_if_exists(&install_dir, &output_dir).await {
         let path = Path::new(&install_dir.as_str()).join(output_dir);
         fs::remove_dir_all(&path)
