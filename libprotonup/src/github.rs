@@ -1,4 +1,5 @@
 use crate::constants;
+use crate::hashing;
 use crate::sources::Source;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
@@ -32,10 +33,16 @@ impl Release {
             ..Download::default()
         };
         for asset in &self.assets {
-            if asset.name.ends_with("sha512sum") || asset.name.ends_with("sha512") {
-                download
-                    .sha512sum_url
-                    .clone_from(&asset.browser_download_url);
+            if asset.name.contains("sha512") {
+                download.hash_sum = Some(hashing::HashSums {
+                    sum_content: asset.browser_download_url.clone(),
+                    sum_type: hashing::HashSumType::Sha512,
+                })
+            } else if asset.name.contains("sha256") {
+                download.hash_sum = Some(hashing::HashSums {
+                    sum_content: asset.browser_download_url.clone(),
+                    sum_type: hashing::HashSumType::Sha256,
+                })
             } else if asset.name.ends_with("tar.gz") || asset.name.ends_with("tar.xz") {
                 download
                     .download_url
@@ -81,8 +88,8 @@ pub async fn list_releases(source: &Source) -> Result<ReleaseList, reqwest::Erro
 #[derive(Default, Debug, PartialEq, Clone)]
 pub struct Download {
     pub version: String,
-    /// Download URL for the release's file hash to check download integrity
-    pub sha512sum_url: String,
+    /// file hash to check download integrity
+    pub hash_sum: Option<hashing::HashSums>,
     /// Download URL for the release's compressed tar file
     pub download_url: String,
     /// The reported size of the tar download
@@ -202,7 +209,7 @@ mod tests {
             (
                 Download {
                     version: "GE-Proton9-27".to_owned(),
-                    sha512sum_url: empty.clone(),
+                    hash_sum: None,
                     size: 0,
                     download_url: empty.clone(),
                 },
@@ -213,7 +220,7 @@ mod tests {
             (
                 Download {
                     version: "GE-Proton8-26".to_owned(),
-                    sha512sum_url: empty.clone(),
+                    hash_sum: None,
                     size: 0,
                     download_url: empty.clone(),
                 },

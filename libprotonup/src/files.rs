@@ -8,9 +8,8 @@ use async_compression::tokio::bufread::{GzipDecoder, XzDecoder};
 use futures_util::{StreamExt, TryStreamExt};
 use pin_project::pin_project;
 use reqwest::header::USER_AGENT;
-use sha2::{Digest, Sha512};
 use tokio::fs::File;
-use tokio::io::{AsyncBufRead, AsyncRead, AsyncReadExt, AsyncWrite, BufReader, ReadBuf};
+use tokio::io::{AsyncBufRead, AsyncRead, AsyncWrite, BufReader, ReadBuf};
 use tokio::{fs, io, pin};
 use tokio_stream::wrappers::ReadDirStream;
 use tokio_tar::Archive;
@@ -218,67 +217,14 @@ pub async fn download_file_into_memory(url: &String) -> Result<String> {
         .with_context(|| format!("[Download SHA] Failed to read response from URL : {}", &url))
 }
 
-/// Checks the downloaded file integrity with the sha512sum
-pub async fn hash_check_file<R: AsyncRead + Unpin + ?Sized>(
-    reader: &mut R,
-    git_hash: &str,
-) -> Result<bool> {
-    let mut hasher = Sha512::new();
-
-    read_all_into_digest(reader, &mut hasher)
-        .await
-        .context("[Hash Check] Failed reading download file for checking")?;
-
-    let hash = hasher.finalize();
-
-    let (git_hash, _) = git_hash.rsplit_once(' ').unwrap_or((git_hash, ""));
-
-    if hex::encode(hash) != git_hash.trim() {
-        return Ok(false);
-    }
-    Ok(true)
-}
-
-async fn read_all_into_digest<R: AsyncRead + Unpin + ?Sized, D: Digest>(
-    read: &mut R,
-    digest: &mut D,
-) -> Result<()> {
-    const BUFFER_LEN: usize = 8 * 1024; // 8KB
-    let mut buffer = [0u8; BUFFER_LEN];
-
-    loop {
-        let count = read.read(&mut buffer).await?;
-        digest.update(&buffer[..count]);
-        if count != BUFFER_LEN {
-            break;
-        }
-    }
-
-    Ok(())
-}
-
 #[cfg(test)]
 mod test {
     use crate::sources;
 
     use super::*;
-    use sha2::{Digest, Sha512};
     use std::fs;
     use tar;
     use tempfile::tempdir;
-
-    #[tokio::test]
-    async fn hash_check_file() {
-        let test_data = b"This Is A Test";
-        let hash = hex::encode(Sha512::new_with_prefix(test_data).finalize());
-
-        assert!(
-            super::hash_check_file(&mut &test_data[..], &hash)
-                .await
-                .unwrap(),
-            "Hash didn't match"
-        );
-    }
 
     #[tokio::test]
     async fn test_unpack_with_new_top_level() {
@@ -295,7 +241,7 @@ mod test {
 
         let d = Download {
             version: "new_top_123".to_owned(),
-            sha512sum_url: empty.clone(),
+            hash_sum: None,
             download_url: "test.tar".to_owned(),
             size: 1,
         };

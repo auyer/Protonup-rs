@@ -11,10 +11,10 @@ use tokio::fs::{File, OpenOptions};
 use tokio::io::BufReader;
 use tokio::sync::OnceCell;
 
-use libprotonup::files::Decompressor;
 use libprotonup::{
     apps, files,
     github::{self, Download, Release},
+    hashing,
     sources::{Source, Sources},
 };
 
@@ -62,10 +62,6 @@ pub(crate) async fn init_unpack_progress(
         target_dir
     ));
     Ok(progress_bar)
-}
-
-pub(crate) async fn get_expected_hash(download: &Download) -> Result<String> {
-    files::download_file_into_memory(&download.sha512sum_url).await
 }
 
 /// Downloads the requested file to the /tmp directory
@@ -121,7 +117,7 @@ pub(crate) async fn download_file(
 
 pub(crate) async fn validate_file(
     path: &Path,
-    hash: &str,
+    hash: hashing::HashSums,
     multi_progress: MultiProgress,
 ) -> Result<()> {
     let file = File::open(path)
@@ -130,7 +126,7 @@ pub(crate) async fn validate_file(
 
     let hash_progress_bar = init_hash_progress(path, multi_progress).await?;
 
-    if !files::hash_check_file(
+    if !hashing::hash_check_file(
         &mut hash_progress_bar.wrap_async_read(BufReader::new(file)),
         hash,
     )
@@ -363,6 +359,7 @@ async fn download_validate_unpack(
     temp_dir: PathBuf,
     multi_progress: MultiProgress,
 ) -> Result<()> {
+    // TODO: more of this logic should be in the library
     let download = release.get_download_info();
     let file = download_file(&download, multi_progress.clone(), temp_dir)
         .await
@@ -372,18 +369,27 @@ async fn download_validate_unpack(
                 release.tag_name
             )
         })?;
+    match download.hash_sum {
+        Some(git_hash_sum) => {
+            let hash_content = &files::download_file_into_memory(&git_hash_sum.sum_content)
+                .await
+                .with_context(|| {
+                    format!(
+                        "Error getting expected download hash for {}",
+                        &release.tag_name
+                    )
+                })?;
+            let hash_sum = hashing::HashSums {
+                sum_content: hash_content.to_owned(),
+                sum_type: git_hash_sum.sum_type,
+            };
 
-    validate_file(
-        &file,
-        &get_expected_hash(&download).await.with_context(|| {
-            format!(
-                "Error getting expected download hash for {}",
-                &release.tag_name
-            )
-        })?,
-        multi_progress.clone(),
-    )
-    .await?;
+            validate_file(&file, hash_sum, multi_progress.clone()).await?;
+        }
+        None => {
+            println!("No sum files available, skipping");
+        }
+    }
 
     let download = release.get_download_info();
     let output_dir = download.output_dir(&compat_tool);
@@ -398,7 +404,7 @@ async fn download_validate_unpack(
         .await
         .with_context(|| format!("Error unpacking {}", file.display()))?;
 
-    let decompressor = Decompressor::from_path(&file)
+    let decompressor = files::Decompressor::from_path(&file)
         .await
         .with_context(|| format!("Error checking file type of {}", file.display()))?;
 
