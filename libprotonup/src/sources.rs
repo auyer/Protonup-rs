@@ -26,6 +26,11 @@ pub struct Source {
     pub repository_name: String,
     /// compatible with these applications
     pub compatible_applications: Vec<apps::App>,
+
+    /// release asset filter is a regex to filter out uwanted release assets
+    pub release_asset_filter: Option<String>,
+
+    // Templates in order :
     /// file_name_replacement does a replace_all to the text version
     pub file_name_replacement: Option<(String, String)>,
     /// file_name_template will add prefixes and suffixes to
@@ -50,6 +55,7 @@ impl Source {
         forge: Forge,
         repository_account: String,
         repository_name: String,
+        release_asset_filter: Option<String>,
         file_name_replacement: Option<(String, String)>,
         file_name_template: Option<String>,
     ) -> Source {
@@ -58,6 +64,7 @@ impl Source {
             forge,
             repository_account,
             repository_name,
+            release_asset_filter,
             file_name_replacement,
             file_name_template,
             compatible_applications: vec![], // TODO: fill this if it becomes helpful
@@ -71,6 +78,18 @@ impl Source {
             .to_owned()
             .filter(move |s| s.compatible_applications.contains(&app))
             .collect()
+    }
+
+    /// filter_asset executes a regex on the file name to determine if the asset found matches
+    /// returns true if No filter defined, and false if the filter does not compile
+    pub fn filter_asset(&self, path: &str) -> bool {
+        match self.release_asset_filter.clone() {
+            Some(asset_filter) => match regex::Regex::new(&asset_filter) {
+                Ok(re) => re.is_match(path),
+                Err(_) => false,
+            },
+            None => true,
+        }
     }
 }
 
@@ -90,5 +109,62 @@ impl FromStr for Source {
             }
         }
         Err(())
+    }
+}
+
+#[cfg(test)] // Only compile this module when running `cargo test`
+mod tests {
+    // Import the functions from the parent module (or wherever they are defined)
+    use super::*;
+
+    const TEST_CASES: &[(&str, bool)] = &[
+        // --- Valid Cases ---
+        ("dxvk-2.6.1.tar.gz", true),    // Standard 3-part version
+        ("dxvk-2.6.tar.gz", true),      // Standard 2-part version
+        ("dxvk-10.20.30.tar.gz", true), // Multi-digit 3-part version
+        ("dxvk-10.20.tar.gz", true),    // Multi-digit 2-part version
+        ("dxvk-0.0.0.tar.gz", true),    // Zeroes are valid digits
+        ("dxvk-0.1.tar.gz", true),      // Zeroes are valid digits
+        // --- Invalid Cases ---
+        ("dxvk-invalid.zip", false),       // Wrong suffix
+        ("dxvk-2.tar.gz", false), // Requires Major.Minor minimum (fails regex \d+\.\d+ and manual split len check)
+        ("dxvk-2.6.1.beta.tar.gz", false), // Extra text in version part
+        ("dxvk-.tar.gz", false),  // Missing version part
+        ("dxvk-2.6..tar.gz", false), // Double dot in version part
+        ("prefix-dxvk-2.6.tar.gz", false), // Incorrect prefix
+        ("dxvk-2.6.tar.gz-suffix", false), // Incorrect suffix
+        ("", false),              // Empty string
+        ("dxvk-a.b.tar.gz", false), // Non-digits in version part
+        ("dxvk-1.2.3.4.tar.gz", false), // Too many version parts
+        ("dxvk-1.2 .tar.gz", false), // Space in version part
+        ("dxvk-1..tar.gz", false), // Double dot variant
+        ("dxvk-1.2.", false),     // Wrong suffix / incomplete
+        (".tar.gz", false),       // Missing prefix and version
+        ("dxvk-", false),         // Missing version and suffix
+    ];
+
+    #[test]
+    fn test_is_dxvk_archive_name_regex_table() {
+        let empty = "".to_owned();
+        // example regex for dxvk
+        let dxvk_regex = r"^dxvk-\d+\.\d+(?:\.\d+)?\.tar\.gz$";
+
+        for (input, expected) in TEST_CASES {
+            let s = Source::new_custom(
+                empty.clone(),
+                Forge::GitHub,
+                empty.clone(),
+                empty.clone(),
+                Some(dxvk_regex.to_owned()),
+                None,
+                None,
+            );
+            let actual = s.filter_asset(input.to_owned());
+            assert_eq!(
+                actual, *expected,
+                "Regex test failed for input: '{}'. Expected {}, got {}",
+                input, expected, actual
+            );
+        }
     }
 }

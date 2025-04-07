@@ -362,6 +362,7 @@ mod test {
             empty.clone(),
             None,
             None,
+            None,
         );
 
         let d = Download {

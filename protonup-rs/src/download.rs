@@ -177,7 +177,7 @@ pub async fn run_quick_downloads(force: bool) -> Result<Vec<Release>> {
                 std::process::exit(1)
             }
         };
-        let download = release.get_download_info();
+        let download = release.get_download_info(&compat_tool);
 
         if files::check_if_exists(
             &app_inst.default_install_dir(),
@@ -341,7 +341,7 @@ async fn download_validate_unpack(
     compat_tool: Source,
     multi_progress: MultiProgress,
 ) -> Result<()> {
-    let download = release.get_download_info();
+    let download = release.get_download_info(&compat_tool);
     let file = download_file(&download, multi_progress.clone())
         .await
         .with_context(|| {
@@ -372,7 +372,7 @@ async fn download_validate_unpack(
         }
     }
 
-    let download = release.get_download_info();
+    let download = release.get_download_info(&compat_tool);
     let output_dir = download.installation_dir(&compat_tool);
     if files::check_if_exists(&install_dir, &output_dir).await {
         let path = Path::new(&install_dir.as_str()).join(output_dir);

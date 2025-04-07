@@ -30,7 +30,7 @@ impl std::fmt::Display for Release {
 
 impl Release {
     /// Returns a Download struct corresponding to the Release
-    pub fn get_download_info(&self) -> Download {
+    pub fn get_download_info(&self, source: &Source) -> Download {
         let mut download: Download = Download {
             version: self.tag_name.clone(),
             ..Download::default()
@@ -46,14 +46,15 @@ impl Release {
                     sum_content: asset.browser_download_url.clone(),
                     sum_type: hashing::HashSumType::Sha256,
                 })
-            } else if files::check_supported_extension(asset.name.clone()).is_ok() {
+            } else if source.filter_asset(asset.dowload_file_name().as_str())
+                && files::check_supported_extension(asset.name.clone()).is_ok()
+            {
                 download
                     .download_url
                     .clone_from(&asset.browser_download_url);
                 download.size = asset.size as u64;
             }
         }
-
         download
     }
 }
@@ -69,6 +70,16 @@ pub struct Asset {
     size: i64,
     updated_at: String,
     browser_download_url: String,
+}
+
+impl Asset {
+    pub fn dowload_file_name(&self) -> String {
+        self.browser_download_url
+            .split('/')
+            .next_back()
+            .unwrap_or(&self.browser_download_url)
+            .to_owned()
+    }
 }
 
 /// Returns a Vec of Releases from a GitHub repository, the URL used for the request is built from the passed in VariantParameters
