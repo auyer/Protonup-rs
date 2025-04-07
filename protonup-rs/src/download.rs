@@ -11,10 +11,10 @@ use tokio::fs::{File, OpenOptions};
 use tokio::io::BufReader;
 use tokio::sync::OnceCell;
 
-use libprotonup::files::Decompressor;
 use libprotonup::{
     apps, files,
     github::{self, Download, Release},
+    hashing,
     sources::{Source, Sources},
 };
 
@@ -64,25 +64,12 @@ pub(crate) async fn init_unpack_progress(
     Ok(progress_bar)
 }
 
-pub(crate) async fn get_expected_hash(download: &Download) -> Result<String> {
-    files::download_file_into_memory(&download.sha512sum_url).await
-}
-
 /// Downloads the requested file to the /tmp directory
 pub(crate) async fn download_file(
     download: &Download,
     multi_progress: MultiProgress,
-    mut output_dir: PathBuf,
 ) -> Result<PathBuf> {
-    output_dir.push(if download.download_url.ends_with("tar.gz") {
-        format!("{}.tar.gz", &download.version)
-    } else if download.download_url.ends_with("tar.xz") {
-        format!("{}.tar.xz", &download.version)
-    } else {
-        return Err(anyhow!(
-            "Downloaded file wasn't of the expected type. (tar.(gz/xz)"
-        ));
-    });
+    let output_dir = download.download_dir()?;
 
     if files::check_if_exists(&output_dir.to_string_lossy(), "").await {
         fs::remove_dir_all(&output_dir).await?;
@@ -121,7 +108,7 @@ pub(crate) async fn download_file(
 
 pub(crate) async fn validate_file(
     path: &Path,
-    hash: &str,
+    hash: hashing::HashSums,
     multi_progress: MultiProgress,
 ) -> Result<()> {
     let file = File::open(path)
@@ -130,7 +117,7 @@ pub(crate) async fn validate_file(
 
     let hash_progress_bar = init_hash_progress(path, multi_progress).await?;
 
-    if !files::hash_check_file(
+    if !hashing::hash_check_file(
         &mut hash_progress_bar.wrap_async_read(BufReader::new(file)),
         hash,
     )
@@ -194,7 +181,7 @@ pub async fn run_quick_downloads(force: bool) -> Result<Vec<Release>> {
 
         if files::check_if_exists(
             &app_inst.default_install_dir(),
-            &download.output_dir(&compat_tool),
+            &download.installation_dir(&compat_tool),
         )
         .await
             && !force
@@ -202,13 +189,10 @@ pub async fn run_quick_downloads(force: bool) -> Result<Vec<Release>> {
             continue;
         }
 
-        let output_dir = tempfile::tempdir().expect("Failed to create tempdir");
-
         joins.push(download_validate_unpack(
             release.clone(),
             ArcStr::from(destination),
             compat_tool,
-            output_dir.into_path(),
             multi_progress.clone(),
         ));
 
@@ -334,14 +318,9 @@ pub async fn download_to_selected_app(app: Option<apps::App>) -> Result<Vec<Rele
     stream::iter(releases.clone())
         .map(|r| {
             let dir = install_dir.clone();
-            let temp_dir = tempfile::tempdir()
-                .expect("Unable to create tempdir")
-                .into_path();
             let progress = multi_progress.clone();
             let tool = selected_tool.clone();
-            tokio::spawn(
-                async move { download_validate_unpack(r, dir, tool, temp_dir, progress).await },
-            )
+            tokio::spawn(async move { download_validate_unpack(r, dir, tool, progress).await })
         })
         .collect::<FuturesUnordered<_>>()
         .await
@@ -360,11 +339,10 @@ async fn download_validate_unpack(
     release: Release,
     install_dir: ArcStr,
     compat_tool: Source,
-    temp_dir: PathBuf,
     multi_progress: MultiProgress,
 ) -> Result<()> {
     let download = release.get_download_info();
-    let file = download_file(&download, multi_progress.clone(), temp_dir)
+    let file = download_file(&download, multi_progress.clone())
         .await
         .with_context(|| {
             format!(
@@ -372,21 +350,30 @@ async fn download_validate_unpack(
                 release.tag_name
             )
         })?;
+    match download.hash_sum {
+        Some(git_hash_sum) => {
+            let hash_content = &files::download_file_into_memory(&git_hash_sum.sum_content)
+                .await
+                .with_context(|| {
+                    format!(
+                        "Error getting expected download hash for {}",
+                        &release.tag_name
+                    )
+                })?;
+            let hash_sum = hashing::HashSums {
+                sum_content: hash_content.to_owned(),
+                sum_type: git_hash_sum.sum_type,
+            };
 
-    validate_file(
-        &file,
-        &get_expected_hash(&download).await.with_context(|| {
-            format!(
-                "Error getting expected download hash for {}",
-                &release.tag_name
-            )
-        })?,
-        multi_progress.clone(),
-    )
-    .await?;
+            validate_file(&file, hash_sum, multi_progress.clone()).await?;
+        }
+        None => {
+            println!("No sum files available, skipping");
+        }
+    }
 
     let download = release.get_download_info();
-    let output_dir = download.output_dir(&compat_tool);
+    let output_dir = download.installation_dir(&compat_tool);
     if files::check_if_exists(&install_dir, &output_dir).await {
         let path = Path::new(&install_dir.as_str()).join(output_dir);
         fs::remove_dir_all(&path)
@@ -398,7 +385,7 @@ async fn download_validate_unpack(
         .await
         .with_context(|| format!("Error unpacking {}", file.display()))?;
 
-    let decompressor = Decompressor::from_path(&file)
+    let decompressor = files::Decompressor::from_path(&file)
         .await
         .with_context(|| format!("Error checking file type of {}", file.display()))?;
 

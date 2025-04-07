@@ -1,4 +1,8 @@
+use std::path::PathBuf;
+
 use crate::constants;
+use crate::files;
+use crate::hashing;
 use crate::sources::Source;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
@@ -32,11 +36,17 @@ impl Release {
             ..Download::default()
         };
         for asset in &self.assets {
-            if asset.name.ends_with("sha512sum") || asset.name.ends_with("sha512") {
-                download
-                    .sha512sum_url
-                    .clone_from(&asset.browser_download_url);
-            } else if asset.name.ends_with("tar.gz") || asset.name.ends_with("tar.xz") {
+            if asset.name.contains("sha512") {
+                download.hash_sum = Some(hashing::HashSums {
+                    sum_content: asset.browser_download_url.clone(),
+                    sum_type: hashing::HashSumType::Sha512,
+                })
+            } else if asset.name.contains("sha256") {
+                download.hash_sum = Some(hashing::HashSums {
+                    sum_content: asset.browser_download_url.clone(),
+                    sum_type: hashing::HashSumType::Sha256,
+                })
+            } else if files::check_supported_extension(asset.name.clone()).is_ok() {
                 download
                     .download_url
                     .clone_from(&asset.browser_download_url);
@@ -81,8 +91,8 @@ pub async fn list_releases(source: &Source) -> Result<ReleaseList, reqwest::Erro
 #[derive(Default, Debug, PartialEq, Clone)]
 pub struct Download {
     pub version: String,
-    /// Download URL for the release's file hash to check download integrity
-    pub sha512sum_url: String,
+    /// file hash to check download integrity
+    pub hash_sum: Option<hashing::HashSums>,
     /// Download URL for the release's compressed tar file
     pub download_url: String,
     /// The reported size of the tar download
@@ -90,8 +100,9 @@ pub struct Download {
 }
 
 impl Download {
-    // output_dir applies file_name filters defined for each source
-    pub fn output_dir(&self, source: &Source) -> String {
+    // installation_dir applies file_name filters defined for each source,
+    // and returns the final installation directory
+    pub fn installation_dir(&self, source: &Source) -> String {
         let mut name = match source.file_name_replacement.clone() {
             Some(replacement) => self
                 .version
@@ -105,6 +116,21 @@ impl Download {
             None => name,
         };
         name
+    }
+
+    // output_dir checks if the file is supported and returns the standardized file name
+    pub fn download_dir(&self) -> Result<PathBuf> {
+        let mut output_dir = tempfile::tempdir()
+            .expect("Failed to create tempdir")
+            .into_path();
+
+        match files::check_supported_extension(self.download_url.clone()) {
+            Ok(ext) => {
+                output_dir.push(format!("{}.{}", &self.version, ext));
+                Ok(output_dir)
+            }
+            Err(err) => Err(err),
+        }
     }
 }
 
@@ -202,7 +228,7 @@ mod tests {
             (
                 Download {
                     version: "GE-Proton9-27".to_owned(),
-                    sha512sum_url: empty.clone(),
+                    hash_sum: None,
                     size: 0,
                     download_url: empty.clone(),
                 },
@@ -213,7 +239,7 @@ mod tests {
             (
                 Download {
                     version: "GE-Proton8-26".to_owned(),
-                    sha512sum_url: empty.clone(),
+                    hash_sum: None,
                     size: 0,
                     download_url: empty.clone(),
                 },
@@ -223,7 +249,7 @@ mod tests {
         ];
 
         for (input, source, expected) in test_cases {
-            let output = input.output_dir(&source);
+            let output = input.installation_dir(&source);
             println!("Input: {:#?}", input);
             println!("Output: {:?}", output);
             println!("Expected: {:?}", expected);
