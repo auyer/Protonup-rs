@@ -1,7 +1,5 @@
 #![no_main]
 
-use std::str::FromStr;
-
 use libfuzzer_sys::fuzz_target;
 
 extern crate libprotonup;
