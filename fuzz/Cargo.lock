@@ -713,8 +713,11 @@ dependencies = [
 name = "libprotonup-fuzz"
 version = "0.0.0"
 dependencies = [
+ "hex",
  "libfuzzer-sys",
  "libprotonup",
+ "sha2",
+ "tokio",
 ]
 
 [[package]]
