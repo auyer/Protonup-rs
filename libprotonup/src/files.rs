@@ -4,7 +4,7 @@ use std::pin::Pin;
 use std::task::Poll;
 
 use anyhow::{Context, Error, Result, anyhow};
-use async_compression::tokio::bufread::{GzipDecoder, XzDecoder};
+use async_compression::tokio::bufread::{GzipDecoder, XzDecoder, ZstdDecoder};
 use futures_util::{StreamExt, TryStreamExt};
 use pin_project::pin_project;
 use reqwest::header::USER_AGENT;
@@ -25,16 +25,19 @@ use super::constants;
 pub enum Decompressor<R: AsyncBufRead + Unpin> {
     Gzip(#[pin] GzipDecoder<R>),
     Xz(#[pin] XzDecoder<R>),
+    Zstd(#[pin] ZstdDecoder<R>),
 }
 
 pub(crate) fn check_supported_extension(file_name: String) -> Result<String> {
     if file_name.ends_with("tar.gz") || file_name.ends_with("tgz") {
         Ok("tar.gz".to_owned())
+    } else if file_name.ends_with("tar.zst") || file_name.ends_with("tar.zstd") {
+        Ok("tar.zst".to_owned())
     } else if file_name.ends_with("tar.xz") || file_name.ends_with("txz") {
         Ok("tar.xz".to_owned())
     } else {
         Err(anyhow!(
-            "Downloaded file wasn't of the expected type. (tar.(gz/xz))"
+            "Downloaded file wasn't of the expected type. (tar.(gz/xz/zst))"
         ))
     }
 }
@@ -50,10 +53,13 @@ impl Decompressor<BufReader<File>> {
             )
         })?;
 
+        // TODO: implement this using the same validation fuction
         if path_str.ends_with("tar.gz") {
             Ok(Decompressor::Gzip(GzipDecoder::new(BufReader::new(file))))
         } else if path_str.ends_with("tar.xz") {
             Ok(Decompressor::Xz(XzDecoder::new(BufReader::new(file))))
+        } else if path_str.ends_with("tar.zst") {
+            Ok(Decompressor::Zstd(ZstdDecoder::new(BufReader::new(file))))
         } else {
             Err(Error::msg(format!(
                 "no decompress\nPath: {}",
@@ -75,6 +81,10 @@ impl<R: AsyncBufRead + Unpin> AsyncRead for Decompressor<R> {
                 reader.poll_read(cx, buf)
             }
             DecompressorProject::Xz(reader) => {
+                pin!(reader);
+                reader.poll_read(cx, buf)
+            }
+            DecompressorProject::Zstd(reader) => {
                 pin!(reader);
                 reader.poll_read(cx, buf)
             }
@@ -234,9 +244,112 @@ mod test {
     use crate::sources;
 
     use super::*;
+    use anyhow::Result;
     use std::fs;
     use tar;
     use tempfile::tempdir;
+
+    #[test]
+    fn test_check_supported_extension() {
+        struct TestCase {
+            name: &'static str,
+            file_name: String,
+            expected: Result<String>,
+        }
+
+        let test_cases = vec![
+            TestCase {
+                name: "tar.gz",
+                file_name: "my_archive.tar.gz".to_string(),
+                expected: Ok("tar.gz".to_string()),
+            },
+            TestCase {
+                name: "tgz",
+                file_name: "another_archive.tgz".to_string(),
+                expected: Ok("tar.gz".to_string()),
+            },
+            TestCase {
+                name: "tar.zst",
+                file_name: "data.tar.zst".to_string(),
+                expected: Ok("tar.zst".to_string()),
+            },
+            TestCase {
+                name: "tar.zstd",
+                file_name: "backup.tar.zstd".to_string(),
+                expected: Ok("tar.zst".to_string()),
+            },
+            TestCase {
+                name: "tar.xz",
+                file_name: "image.tar.xz".to_string(),
+                expected: Ok("tar.xz".to_string()),
+            },
+            TestCase {
+                name: "txz",
+                file_name: "report.txz".to_string(),
+                expected: Ok("tar.xz".to_string()),
+            },
+            TestCase {
+                name: "unsupported extension - zip",
+                file_name: "document.zip".to_string(),
+                expected: Err(anyhow::anyhow!(
+                    "Downloaded file wasn't of the expected type. (tar.(gz/xz/zst))",
+                )),
+            },
+            TestCase {
+                name: "unsupported extension - tar",
+                file_name: "plain.tar".to_string(),
+                expected: Err(anyhow::anyhow!(
+                    "Downloaded file wasn't of the expected type. (tar.(gz/xz/zst))",
+                )),
+            },
+            TestCase {
+                name: "unsupported extension - no extension",
+                file_name: "config".to_string(),
+                expected: Err(anyhow::anyhow!(
+                    "Downloaded file wasn't of the expected type. (tar.(gz/xz/zst))",
+                )),
+            },
+            TestCase {
+                name: "filename with supported extension in the middle",
+                file_name: "prefix.tar.gz.suffix".to_string(),
+                expected: Err(anyhow::anyhow!(
+                    "Downloaded file wasn't of the expected type. (tar.(gz/xz/zst))",
+                )),
+            },
+            TestCase {
+                name: "empty filename",
+                file_name: "".to_string(),
+                expected: Err(anyhow::anyhow!(
+                    "Downloaded file wasn't of the expected type. (tar.(gz/xz/zst))",
+                )),
+            },
+        ];
+
+        for test_case in test_cases {
+            let result = check_supported_extension(test_case.file_name);
+            match (result, test_case.expected) {
+                (Ok(actual), Ok(expected)) => {
+                    assert_eq!(actual, expected, "Test '{}' failed", test_case.name)
+                }
+                (Err(actual), Err(expected)) => {
+                    assert_eq!(
+                        actual.to_string(),
+                        expected.to_string(),
+                        "Test '{}' failed",
+                        test_case.name
+                    );
+                }
+                (Ok(_), Err(_)) => panic!(
+                    "Test '{}' failed: Expected error, got success",
+                    test_case.name
+                ),
+                (Err(_), Ok(_)) => panic!(
+                    "Test '{}' failed: Expected success, got error",
+                    test_case.name
+                ),
+            }
+        }
+    }
 
     #[tokio::test]
     async fn test_unpack_with_new_top_level() {
