@@ -1,0 +1,32 @@
+[package]
+name = "libprotonup-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+[dependencies.libprotonup]
+path = "../libprotonup"
+
+# Use independent workspace for fuzzers
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "sources"
+path = "fuzz_targets/sources.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "expand_tilde"
+path = "fuzz_targets/expand_tilde.rs"
+test = false
+doc = false
+bench = false

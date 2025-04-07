@@ -1,0 +1,7 @@
+homepage: "https://github.com/auyer/Protonup-rs"
+primary_contact: "rafael@rcpassos.me"
+sanitizers:
+  - address
+fuzzing_engines:
+  - libfuzzer
+language: rust
