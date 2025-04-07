@@ -1,19 +1,17 @@
-FROM gcr.io/oss-fuzz-base/base-builder
-#FROM gcr.io/oss-fuzz-base/base-builder-rust
+FROM gcr.io/oss-fuzz-base/base-builder-rust@sha256:37f879129ff67bea6ead5c06ae6e910d6ec27b1c9f85314e212ce005c3e57beb
 
-RUN apt-get update && apt-get install -y make autoconf automake libtool curl cmake python llvm-dev libclang-dev clang libc++-dev libc++abi-dev lld
+ENV CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER clang
+ENV RUSTUP_TOOLCHAIN nightly-2025-04-05
 
-ENV PATH="/root/.cargo/bin:${PATH}"
-
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | bash -s -- -y --default-toolchain nightly && \
+RUN rm -rf /rust/rustup/toolchains/nightly-2024-07-12-x86_64-unknown-linux-gnu && \
+		rustup default nightly && rustup toolchain install nightly-2025-04-05 && \
 		rustup component add rust-src && \
-		cargo install cargo-fuzz
+		cargo install cargo-fuzz && \
+		# remoevs default toolchain
+		rm -rf /rust/rustup/toolchains/nightly-x86_64-unknown-linux-gnu && mkdir -p /rust/rustup/toolchains/nightly-x86_64-unknown-linux-gnu && \
+		# copy to where the Fuzz builder expects to find the toolchain
+		cp -r /rust/rustup/toolchains/nightly-2025-04-05-x86_64-unknown-linux-gnu/* /rust/rustup/toolchains/nightly-x86_64-unknown-linux-gnu/ 
 
-# copy toolchain to where the action fuzzer expects to find it
-RUN mkdir -p /rust/rustup/toolchains/ && cp -r ~/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu /rust/rustup/toolchains/
-
-
-# RUN rustup default nightly && rustup update
 # Copy your project's source code.
 COPY . $SRC/
 # Working directory for build.sh.
