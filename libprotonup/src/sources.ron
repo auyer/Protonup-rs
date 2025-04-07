@@ -14,4 +14,20 @@
         compatible_applications: [Steam, Lutris],
         file_name_replacement: Some(("Proton","Wine")),
     ),
+    (
+        name: "Luxtorpeda",
+        forge: GitHub,
+        repository_account: "luxtorpeda-dev",
+        repository_name: "luxtorpeda",
+        compatible_applications: [Steam],
+        file_name_template: Some("Luxtorpeda-{version}")
+    ),
+    (
+        name: "Boxtron",
+        forge: GitHub,
+        repository_account: "dreamer",
+        repository_name: "boxtron",
+        compatible_applications: [Steam],
+        file_name_template: Some("Boxtron-{version}")
+    ),
 ]
