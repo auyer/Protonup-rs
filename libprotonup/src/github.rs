@@ -1,9 +1,11 @@
 use std::path::PathBuf;
 
+use crate::apps;
 use crate::constants;
 use crate::files;
 use crate::hashing;
 use crate::sources::Source;
+use crate::utils;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 pub type ReleaseList = Vec<Release>;
@@ -101,6 +103,9 @@ pub async fn list_releases(source: &Source) -> Result<ReleaseList, reqwest::Erro
 /// Contains all the information needed to download the corresponding release from GitHub
 #[derive(Default, Debug, PartialEq, Clone)]
 pub struct Download {
+    /// for what app this dowload is
+    pub for_app: apps::AppInstallations,
+    /// the tag from the Forge
     pub version: String,
     /// file hash to check download integrity
     pub hash_sum: Option<hashing::HashSums>,
@@ -111,9 +116,16 @@ pub struct Download {
 }
 
 impl Download {
+    /// combines the path for the app, requirements for the tool
+    pub fn installation_dir(&self, source: &Source) -> Option<PathBuf> {
+        let mut path = PathBuf::from(self.for_app.default_install_dir().as_str());
+        path.push(self.for_app.as_app().subfolder_for_tool(source));
+        utils::expand_tilde(path)
+    }
+
     // installation_dir applies file_name filters defined for each source,
     // and returns the final installation directory
-    pub fn installation_dir(&self, source: &Source) -> String {
+    pub fn installation_name(&self, source: &Source) -> String {
         let mut name = match source.file_name_replacement.clone() {
             Some(replacement) => self
                 .version
@@ -244,6 +256,7 @@ mod tests {
                 Download {
                     version: "GE-Proton9-27".to_owned(),
                     hash_sum: None,
+                    for_app: apps::AppInstallations::Steam,
                     size: 0,
                     download_url: empty.clone(),
                 },
@@ -254,6 +267,7 @@ mod tests {
             (
                 Download {
                     version: "GE-Proton8-26".to_owned(),
+                    for_app: apps::AppInstallations::Steam,
                     hash_sum: None,
                     size: 0,
                     download_url: empty.clone(),
@@ -264,7 +278,7 @@ mod tests {
         ];
 
         for (input, source, expected) in test_cases {
-            let output = input.installation_dir(&source);
+            let output = input.installation_name(&source);
             println!("Input: {:#?}", input);
             println!("Output: {:?}", output);
             println!("Expected: {:?}", expected);

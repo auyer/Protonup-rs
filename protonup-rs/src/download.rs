@@ -181,7 +181,7 @@ pub async fn run_quick_downloads(force: bool) -> Result<Vec<Release>> {
 
         if files::check_if_exists(
             &app_inst.default_install_dir(),
-            &download.installation_dir(&compat_tool),
+            &download.installation_name(&compat_tool),
         )
         .await
             && !force
@@ -373,9 +373,9 @@ async fn download_validate_unpack(
     }
 
     let download = release.get_download_info(&compat_tool);
-    let output_dir = download.installation_dir(&compat_tool);
-    if files::check_if_exists(&install_dir, &output_dir).await {
-        let path = Path::new(&install_dir.as_str()).join(output_dir);
+    let install_name = download.installation_name(&compat_tool);
+    if files::check_if_exists(&install_dir, &install_name).await {
+        let path = Path::new(&install_dir.as_str()).join(install_name);
         fs::remove_dir_all(&path)
             .await
             .with_context(|| format!("Error removing existing install at {}", path.display()))?;

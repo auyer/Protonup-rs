@@ -1,8 +1,10 @@
 use arcstr::ArcStr;
 use futures_util::stream::{self, StreamExt};
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 use std::{fmt, str::FromStr};
 
+use crate::sources::ToolType;
 use crate::{
     constants,
     files::{self, list_folders_in_path},
@@ -59,10 +61,30 @@ impl App {
             }
         }
     }
+
+    pub fn list_subfolders(&self) -> Option<Vec<&str>> {
+        match self {
+            App::Steam => None,
+            App::Lutris => Some(vec!["runners/wine", "runtime"]),
+        }
+    }
+
+    // returns the subfolder from the App base path if the app and tool requires it,
+    // or an empty string if not required
+    pub fn subfolder_for_tool(&self, source: &Source) -> &str {
+        match self {
+            App::Steam => "",
+            App::Lutris => match source.tool_type {
+                ToolType::WineBased => "runners/wine",
+                ToolType::Runtime => "runtime",
+            },
+        }
+    }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Default, Debug, PartialEq, Eq, Clone)]
 pub enum AppInstallations {
+    #[default]
     Steam,
     SteamFlatpak,
     Lutris,
@@ -90,9 +112,9 @@ impl AppInstallations {
                     "~/.var/app/com.valvesoftware.Steam/data/Steam/compatibilitytools.d/"
                 )
             }
-            Self::Lutris => arcstr::literal!("~/.local/share/lutris/runners/wine/"),
+            Self::Lutris => arcstr::literal!("~/.local/share/lutris/"),
             Self::LutrisFlatpak => {
-                arcstr::literal!("~/.var/app/net.lutris.Lutris/data/lutris/runners/wine/")
+                arcstr::literal!("~/.var/app/net.lutris.Lutris/data/lutris/")
             }
         }
     }
@@ -109,7 +131,19 @@ impl AppInstallations {
 
     /// Get a list of the currently installed wine versions
     pub async fn list_installed_versions(&self) -> Result<Vec<String>, anyhow::Error> {
-        list_folders_in_path(&self.default_install_dir()).await
+        let base_dir = self.default_install_dir().to_string();
+        match self.as_app().list_subfolders() {
+            Some(sub_folders) => {
+                let mut versions = Vec::new();
+                for sub_folder in sub_folders {
+                    let path = PathBuf::from(&base_dir).join(sub_folder);
+                    let folders = list_folders_in_path(&path).await?;
+                    versions.extend(folders);
+                }
+                Ok(versions)
+            }
+            None => list_folders_in_path(&PathBuf::from(&base_dir)).await,
+        }
     }
 
     /// Returns the base App
@@ -130,7 +164,7 @@ pub async fn list_installed_apps() -> Vec<AppInstallations> {
 async fn detect_installations(app_installations: &[AppInstallations]) -> Vec<AppInstallations> {
     stream::iter(app_installations)
         .filter_map(|app| async move {
-            if files::check_if_exists(app.app_base_dir(), "").await {
+            if files::check_if_exists(app.app_base_dir(), ".").await {
                 Some(app.clone())
             } else {
                 None

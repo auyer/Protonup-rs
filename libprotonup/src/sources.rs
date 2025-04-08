@@ -26,6 +26,8 @@ pub struct Source {
     pub repository_name: String,
     /// compatible with these applications
     pub compatible_applications: Vec<apps::App>,
+    /// ToolType can be used to change how it is installed
+    pub tool_type: ToolType,
 
     /// release asset filter is a regex to filter out uwanted release assets
     pub release_asset_filter: Option<String>,
@@ -48,13 +50,22 @@ pub enum Forge {
     GitHub,
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize)]
+/// ToolTypes
+pub enum ToolType {
+    WineBased,
+    Runtime,
+}
+
 impl Source {
     /// new_custom is a generator for custom VariantParameters
+    #[allow(clippy::too_many_arguments)]
     pub fn new_custom(
         name: String,
         forge: Forge,
         repository_account: String,
         repository_name: String,
+        tool_type: ToolType,
         release_asset_filter: Option<String>,
         file_name_replacement: Option<(String, String)>,
         file_name_template: Option<String>,
@@ -64,6 +75,7 @@ impl Source {
             forge,
             repository_account,
             repository_name,
+            tool_type,
             release_asset_filter,
             file_name_replacement,
             file_name_template,
@@ -155,6 +167,7 @@ mod tests {
                 Forge::GitHub,
                 empty.clone(),
                 empty.clone(),
+                ToolType::Runtime,
                 Some(dxvk_regex.to_owned()),
                 None,
                 None,

@@ -108,7 +108,7 @@ pub async fn unpack_file<R: AsyncRead + Unpin>(
     decompress_with_new_top_level(
         reader,
         install_dir.as_path(),
-        download.installation_dir(&source).as_str(),
+        download.installation_name(&source).as_str(),
     )
     .await
     .unwrap();
@@ -175,7 +175,7 @@ pub async fn check_if_exists(path: &str, tag: &str) -> bool {
 }
 
 /// list_folders_in_path returns a vector of strings of the folders in a path
-pub async fn list_folders_in_path(path: &str) -> Result<Vec<String>, anyhow::Error> {
+pub async fn list_folders_in_path(path: &PathBuf) -> Result<Vec<String>, anyhow::Error> {
     let f_path = utils::expand_tilde(path).unwrap();
     let paths_real: Vec<String> = ReadDirStream::new(tokio::fs::read_dir(f_path).await?)
         .filter_map(|e| future::ready(e.ok()))
@@ -241,7 +241,7 @@ pub async fn download_file_into_memory(url: &String) -> Result<String> {
 
 #[cfg(test)]
 mod test {
-    use crate::sources;
+    use crate::{apps::AppInstallations, sources};
 
     use super::*;
     use anyhow::Result;
@@ -360,12 +360,14 @@ mod test {
             sources::Forge::GitHub,
             empty.clone(),
             empty.clone(),
+            sources::ToolType::WineBased,
             None,
             None,
             None,
         );
 
         let d = Download {
+            for_app: AppInstallations::Steam,
             version: "new_top_123".to_owned(),
             hash_sum: None,
             download_url: "test.tar".to_owned(),
