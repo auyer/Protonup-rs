@@ -145,19 +145,19 @@ mod tests {
     #[tokio::test]
     async fn test_list_releases() {
         let conditions = &[
-                (
-                    sources::Source::from_str(constants::DEFAULT_LUTRIS_TOOL).unwrap(),
-                    "Get WineGE",
-                ),
-                (
-                    sources::Source::from_str(constants::DEFAULT_STEAM_TOOL).unwrap(),
-                    "Get GEProton",
-                ),
-                (
-                    sources::Source::from_str("Luxtorpeda").unwrap(),
-                    "Get Luxtorpeda",
-                ),
-            ];
+            (
+                sources::Source::from_str(constants::DEFAULT_LUTRIS_TOOL).unwrap(),
+                "Get WineGE",
+            ),
+            (
+                sources::Source::from_str(constants::DEFAULT_STEAM_TOOL).unwrap(),
+                "Get GEProton",
+            ),
+            (
+                sources::Source::from_str("Luxtorpeda").unwrap(),
+                "Get Luxtorpeda",
+            ),
+        ];
 
         for (source_parameters, desc) in conditions {
             let result = list_releases(source_parameters).await;
