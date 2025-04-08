@@ -153,6 +153,10 @@ mod tests {
                 sources::Source::from_str(constants::DEFAULT_STEAM_TOOL).unwrap(),
                 "Get GEProton",
             ),
+            (
+                sources::Source::from_str("Luxtorpeda").unwrap(),
+                "Get Luxtorpeda",
+            ),
         ];
 
         for (source_parameters, desc) in conditions {
