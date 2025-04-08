@@ -12,10 +12,10 @@ use tokio::io::BufReader;
 use tokio::sync::OnceCell;
 
 use libprotonup::{
-    apps, files,
-    github::{self, Download, Release},
-    hashing,
-    sources::{Source, Sources},
+    apps,
+    downloads::{self, Download, Release},
+    files, hashing,
+    sources::{CompatTool, CompatTools},
 };
 
 use crate::{file_path, helper_menus};
@@ -166,12 +166,12 @@ pub async fn run_quick_downloads(force: bool) -> Result<Vec<Release>> {
         let destination = app_inst.default_install_dir().to_string();
 
         // Get the latest Download info for the compat_tool
-        let release = match github::list_releases(&compat_tool).await {
+        let release = match downloads::list_releases(&compat_tool).await {
             // Get the Download info from the first item on the list, the latest version
             Ok(mut release_list) => release_list.remove(0),
             Err(e) => {
                 eprintln!(
-                    "Failed to fetch Github data, make sure you're connected to the internet.\nError: {}",
+                    "Failed to fetch data, make sure you're connected to the internet.\nError: {}",
                     e
                 );
                 std::process::exit(1)
@@ -266,9 +266,9 @@ pub async fn download_to_selected_app(app: Option<apps::App>) -> Result<Vec<Rele
     // if an app was selected, filter compatible tools
     let available_sources = match app {
         // Use the default for the app
-        Some(app) => Source::sources_for_app(app),
+        Some(app) => CompatTool::sources_for_app(app),
         // Or have the user select which one
-        None => Sources.clone(),
+        None => CompatTools.clone(),
     };
 
     // TODO: maybe change to multi-select ?
@@ -280,11 +280,11 @@ pub async fn download_to_selected_app(app: Option<apps::App>) -> Result<Vec<Rele
     .unwrap_or_else(|_| std::process::exit(0));
 
     let releases = {
-        let release_list = match github::list_releases(&selected_tool).await {
+        let release_list = match downloads::list_releases(&selected_tool).await {
             Ok(data) => data,
             Err(e) => {
                 eprintln!(
-                    "Failed to fetch Github data, make sure you're connected to the internet.\nError: {}",
+                    "Failed to fetch data, make sure you're connected to the internet.\nError: {}",
                     e
                 );
                 std::process::exit(1)
@@ -338,7 +338,7 @@ pub async fn download_to_selected_app(app: Option<apps::App>) -> Result<Vec<Rele
 async fn download_validate_unpack(
     release: Release,
     install_dir: ArcStr,
-    compat_tool: Source,
+    compat_tool: CompatTool,
     multi_progress: MultiProgress,
 ) -> Result<()> {
     let download = release.get_download_info(&compat_tool);

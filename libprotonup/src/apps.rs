@@ -8,7 +8,7 @@ use crate::sources::ToolType;
 use crate::{
     constants,
     files::{self, list_folders_in_path},
-    sources::Source,
+    sources::CompatTool,
 };
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Deserialize, Serialize)]
@@ -32,11 +32,11 @@ impl fmt::Display for App {
 
 impl App {
     /// Returns the default compatibility tool for the App
-    pub fn default_compatibility_tool(&self) -> Source {
+    pub fn default_compatibility_tool(&self) -> CompatTool {
         match *self {
             // TODO: this could fail if the default apps change
-            Self::Steam => Source::from_str(constants::DEFAULT_STEAM_TOOL).unwrap(),
-            Self::Lutris => Source::from_str(constants::DEFAULT_LUTRIS_TOOL).unwrap(),
+            Self::Steam => CompatTool::from_str(constants::DEFAULT_STEAM_TOOL).unwrap(),
+            Self::Lutris => CompatTool::from_str(constants::DEFAULT_LUTRIS_TOOL).unwrap(),
         }
     }
 
@@ -71,7 +71,7 @@ impl App {
 
     // returns the subfolder from the App base path if the app and tool requires it,
     // or an empty string if not required
-    pub fn subfolder_for_tool(&self, source: &Source) -> &str {
+    pub fn subfolder_for_tool(&self, source: &CompatTool) -> &str {
         match self {
             App::Steam => "",
             App::Lutris => match source.tool_type {

@@ -4,7 +4,7 @@ use crate::apps;
 use crate::constants;
 use crate::files;
 use crate::hashing;
-use crate::sources::Source;
+use crate::sources::CompatTool;
 use crate::utils;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
@@ -32,7 +32,7 @@ impl std::fmt::Display for Release {
 
 impl Release {
     /// Returns a Download struct corresponding to the Release
-    pub fn get_download_info(&self, source: &Source) -> Download {
+    pub fn get_download_info(&self, source: &CompatTool) -> Download {
         let mut download: Download = Download {
             version: self.tag_name.clone(),
             ..Download::default()
@@ -85,7 +85,7 @@ impl Asset {
 }
 
 /// Returns a Vec of Releases from a GitHub repository, the URL used for the request is built from the passed in VariantParameters
-pub async fn list_releases(source: &Source) -> Result<ReleaseList, reqwest::Error> {
+pub async fn list_releases(source: &CompatTool) -> Result<ReleaseList, reqwest::Error> {
     let agent = format!("{}/v{}", constants::USER_AGENT, constants::VERSION,);
 
     let url = format!(
@@ -117,7 +117,7 @@ pub struct Download {
 
 impl Download {
     /// combines the path for the app, requirements for the tool
-    pub fn installation_dir(&self, source: &Source) -> Option<PathBuf> {
+    pub fn installation_dir(&self, source: &CompatTool) -> Option<PathBuf> {
         let mut path = PathBuf::from(self.for_app.default_install_dir().as_str());
         path.push(self.for_app.as_app().subfolder_for_tool(source));
         utils::expand_tilde(path)
@@ -125,7 +125,7 @@ impl Download {
 
     // installation_dir applies file_name filters defined for each source,
     // and returns the final installation directory
-    pub fn installation_name(&self, source: &Source) -> String {
+    pub fn installation_name(&self, source: &CompatTool) -> String {
         let mut name = match source.file_name_replacement.clone() {
             Some(replacement) => self
                 .version
@@ -169,15 +169,15 @@ mod tests {
     async fn test_list_releases() {
         let conditions = &[
             (
-                sources::Source::from_str(constants::DEFAULT_LUTRIS_TOOL).unwrap(),
+                sources::CompatTool::from_str(constants::DEFAULT_LUTRIS_TOOL).unwrap(),
                 "Get WineGE",
             ),
             (
-                sources::Source::from_str(constants::DEFAULT_STEAM_TOOL).unwrap(),
+                sources::CompatTool::from_str(constants::DEFAULT_STEAM_TOOL).unwrap(),
                 "Get GEProton",
             ),
             (
-                sources::Source::from_str("Luxtorpeda").unwrap(),
+                sources::CompatTool::from_str("Luxtorpeda").unwrap(),
                 "Get Luxtorpeda",
             ),
         ];
@@ -215,11 +215,11 @@ mod tests {
 
         let conditions = &[
             (
-                sources::Source::from_str(constants::DEFAULT_LUTRIS_TOOL).unwrap(),
+                sources::CompatTool::from_str(constants::DEFAULT_LUTRIS_TOOL).unwrap(),
                 "Get WineGE",
             ),
             (
-                sources::Source::from_str(constants::DEFAULT_STEAM_TOOL).unwrap(),
+                sources::CompatTool::from_str(constants::DEFAULT_STEAM_TOOL).unwrap(),
                 "Get GEProton",
             ),
         ];
@@ -260,7 +260,7 @@ mod tests {
                     size: 0,
                     download_url: empty.clone(),
                 },
-                Source::from_str("GEProton").unwrap(),
+                CompatTool::from_str("GEProton").unwrap(),
                 "GE-Proton9-27",
             ),
             // WineGE
@@ -272,7 +272,7 @@ mod tests {
                     size: 0,
                     download_url: empty.clone(),
                 },
-                Source::from_str("WineGE").unwrap(),
+                CompatTool::from_str("WineGE").unwrap(),
                 "GE-Wine8-26",
             ),
         ];

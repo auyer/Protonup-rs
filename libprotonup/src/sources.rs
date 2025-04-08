@@ -6,7 +6,7 @@ use std::{fmt, str::FromStr};
 const SOURCCES_RON: &str = include_str!("sources.ron");
 
 lazy_static! {
-    pub static ref Sources: Vec<Source> = ron::from_str(SOURCCES_RON).unwrap();
+    pub static ref CompatTools: Vec<CompatTool> = ron::from_str(SOURCCES_RON).unwrap();
 }
 
 /// Struct used to build GitHub API request URLs.
@@ -15,7 +15,7 @@ lazy_static! {
 /// the repository name for either Wine GE or Proton GE,
 /// and a Variant Enum for identifying the parameters type
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct Source {
+pub struct CompatTool {
     /// source name
     pub name: String,
     /// the forge from witch this program will get the tool
@@ -57,7 +57,7 @@ pub enum ToolType {
     Runtime,
 }
 
-impl Source {
+impl CompatTool {
     /// new_custom is a generator for custom VariantParameters
     #[allow(clippy::too_many_arguments)]
     pub fn new_custom(
@@ -69,8 +69,8 @@ impl Source {
         release_asset_filter: Option<String>,
         file_name_replacement: Option<(String, String)>,
         file_name_template: Option<String>,
-    ) -> Source {
-        Source {
+    ) -> CompatTool {
+        CompatTool {
             name,
             forge,
             repository_account,
@@ -83,8 +83,8 @@ impl Source {
         }
     }
 
-    pub fn sources_for_app(app: apps::App) -> Vec<Source> {
-        Sources
+    pub fn sources_for_app(app: apps::App) -> Vec<CompatTool> {
+        CompatTools
             .iter()
             .cloned()
             .to_owned()
@@ -105,17 +105,17 @@ impl Source {
     }
 }
 
-impl fmt::Display for Source {
+impl fmt::Display for CompatTool {
     /// Returns a string representation of this Variant
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.name)
     }
 }
 
-impl FromStr for Source {
+impl FromStr for CompatTool {
     type Err = ();
-    fn from_str(input: &str) -> Result<Source, Self::Err> {
-        for s in Sources.iter() {
+    fn from_str(input: &str) -> Result<CompatTool, Self::Err> {
+        for s in CompatTools.iter() {
             if s.name.to_lowercase() == input.to_lowercase() {
                 return Ok(s.clone());
             }
@@ -162,7 +162,7 @@ mod tests {
         let dxvk_regex = r"^dxvk-\d+\.\d+(?:\.\d+)?\.tar\.gz$";
 
         for (input, expected) in TEST_CASES {
-            let s = Source::new_custom(
+            let s = CompatTool::new_custom(
                 empty.clone(),
                 Forge::GitHub,
                 empty.clone(),

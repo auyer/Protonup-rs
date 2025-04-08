@@ -15,8 +15,8 @@ use tokio_stream::wrappers::ReadDirStream;
 use tokio_tar::Archive;
 use tokio_util::io::StreamReader;
 
-use crate::github::Download;
-use crate::sources::Source;
+use crate::downloads::Download;
+use crate::sources::CompatTool;
 use crate::utils;
 
 use super::constants;
@@ -96,7 +96,7 @@ impl<R: AsyncBufRead + Unpin> AsyncRead for Decompressor<R> {
 ///
 /// Parses the passed in data and ensures the destination directory is created
 pub async fn unpack_file<R: AsyncRead + Unpin>(
-    source: Source,
+    source: CompatTool,
     download: Download,
     reader: R,
     install_path: &str,
@@ -355,7 +355,7 @@ mod test {
     async fn test_unpack_with_new_top_level() {
         let empty = "".to_owned();
 
-        let s = Source::new_custom(
+        let s = CompatTool::new_custom(
             empty.clone(),
             sources::Forge::GitHub,
             empty.clone(),
