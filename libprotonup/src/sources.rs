@@ -97,12 +97,12 @@ impl CompatTool {
         name
     }
 
-    pub fn sources_for_app(app: apps::App) -> Vec<CompatTool> {
+    pub fn sources_for_app(app: &apps::App) -> Vec<CompatTool> {
         CompatTools
             .iter()
             .cloned()
             .to_owned()
-            .filter(move |s| s.compatible_applications.contains(&app))
+            .filter(move |s| s.compatible_applications.contains(app))
             .collect()
     }
 

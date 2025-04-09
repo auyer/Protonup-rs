@@ -211,7 +211,7 @@ pub async fn run_quick_downloads(force: bool) -> Result<Vec<Release>> {
 /// If no app is provided, the user is prompted for which version of Wine/Proton to use and what directory to extract to
 pub async fn download_to_selected_app(app: Option<apps::App>) -> Result<Vec<Release>> {
     // Get the folder to install Wine/Proton into
-    let app_inst = match app {
+    let app_inst = match app.clone() {
         // If the user selected an app (Steam/Lutris)...
         Some(app) => match app.detect_installation_method().await {
             installed_apps if installed_apps.is_empty() => {
@@ -258,7 +258,7 @@ pub async fn download_to_selected_app(app: Option<apps::App>) -> Result<Vec<Rele
     // if an app was selected, filter compatible tools
     let available_sources = match app {
         // Use the default for the app
-        Some(app) => CompatTool::sources_for_app(app),
+        Some(app) => CompatTool::sources_for_app(&app),
         // Or have the user select which one
         None => CompatTools.clone(),
     };
@@ -407,7 +407,7 @@ async fn download_validate_unpack(
 
     unpack_progress_bar.set_style(get_message_bar_style().await);
     unpack_progress_bar.finish_with_message(format!(
-        "Done! {} installed in {}/{}\nYour app might require a restart to detect {}",
+        "Done! {} installed in {}{}\nYour app might require a restart to detect {}",
         compat_tool,
         download
             .for_app

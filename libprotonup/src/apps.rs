@@ -12,10 +12,11 @@ use crate::{
     sources::CompatTool,
 };
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Deserialize, Serialize)]
+#[derive(Debug, PartialEq, Eq, Clone, Deserialize, Serialize)]
 pub enum App {
     Steam,
     Lutris,
+    Custom(String),
     // TODO:  HeroicGamesLauncher,
 }
 
@@ -27,6 +28,7 @@ impl fmt::Display for App {
         match *self {
             Self::Steam => write!(f, "Steam"),
             Self::Lutris => write!(f, "Lutris"),
+            Self::Custom(_) => write!(f, "Custom"),
         }
     }
 }
@@ -34,24 +36,26 @@ impl fmt::Display for App {
 impl App {
     /// Returns the default compatibility tool for the App
     pub fn default_compatibility_tool(&self) -> CompatTool {
-        match *self {
+        match self {
             // TODO: this could fail if the default apps change
             Self::Steam => CompatTool::from_str(constants::DEFAULT_STEAM_TOOL).unwrap(),
             Self::Lutris => CompatTool::from_str(constants::DEFAULT_LUTRIS_TOOL).unwrap(),
+            Self::Custom(_) => CompatTool::from_str(constants::DEFAULT_STEAM_TOOL).unwrap(),
         }
     }
 
     /// Returns the variantst of AppInstallations corresponding to the App
     pub fn app_installations(&self) -> Vec<AppInstallations> {
-        match *self {
+        match self {
             Self::Steam => vec![AppInstallations::Steam, AppInstallations::SteamFlatpak],
             Self::Lutris => vec![AppInstallations::Lutris, AppInstallations::LutrisFlatpak],
+            Self::Custom(path) => vec![AppInstallations::Custom(path.clone())],
         }
     }
 
     /// Checks the versions (Native vs Flatpak) of the App that are installed
     pub async fn detect_installation_method(&self) -> Vec<AppInstallations> {
-        match *self {
+        match self {
             Self::Steam => {
                 detect_installations(&[AppInstallations::Steam, AppInstallations::SteamFlatpak])
                     .await
@@ -60,6 +64,9 @@ impl App {
                 detect_installations(&[AppInstallations::Lutris, AppInstallations::LutrisFlatpak])
                     .await
             }
+            Self::Custom(path) => {
+                detect_installations(&[AppInstallations::Custom(path.clone())]).await
+            }
         }
     }
 
@@ -67,6 +74,7 @@ impl App {
         match self {
             App::Steam => None,
             App::Lutris => Some(vec!["runners/wine", "runtime"]),
+            App::Custom(_) => None,
         }
     }
 
@@ -79,6 +87,7 @@ impl App {
                 ToolType::WineBased => "runners/wine",
                 ToolType::Runtime => "runtime",
             },
+            App::Custom(_) => "",
         }
     }
 }
@@ -175,11 +184,11 @@ impl AppInstallations {
     }
 
     /// Returns the base App
-    pub const fn as_app(&self) -> App {
-        match *self {
+    pub fn as_app(&self) -> App {
+        match self {
             Self::Steam | Self::SteamFlatpak => App::Steam,
             Self::Lutris | Self::LutrisFlatpak => App::Lutris,
-            Self::Custom(_) => todo!(), // TODO: will this backlink be used ?
+            Self::Custom(path) => App::Custom(path.to_owned()),
         }
     }
 }
