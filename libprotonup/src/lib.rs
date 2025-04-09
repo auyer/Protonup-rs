@@ -1,7 +1,7 @@
 pub mod apps;
 pub mod constants;
-pub mod files;
 pub mod downloads;
+pub mod files;
 pub mod hashing;
 pub mod sources;
 pub mod utils;
