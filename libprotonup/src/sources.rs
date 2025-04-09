@@ -87,9 +87,7 @@ impl CompatTool {
     // and returns the final installation directory
     pub fn installation_name(&self, version: &str) -> String {
         let mut name = match &self.file_name_replacement {
-            Some(replacement) => version
-                .replace(&replacement.0, &replacement.1)
-                .to_owned(),
+            Some(replacement) => version.replace(&replacement.0, &replacement.1).to_owned(),
             None => version.to_owned(),
         };
         name = match &self.file_name_template {

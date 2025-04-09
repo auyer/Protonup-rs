@@ -4,7 +4,7 @@
         forge: GitHub,
         repository_account: "GloriousEggroll",
         repository_name: "proton-ge-custom",
-		    tool_type: WineBased,
+        tool_type: WineBased,
         compatible_applications: [Steam, Lutris],
     ),
     (
@@ -12,7 +12,7 @@
         forge: GitHub,
         repository_account: "GloriousEggroll",
         repository_name: "wine-ge-custom",
-		    tool_type: WineBased,
+        tool_type: WineBased,
         compatible_applications: [Steam, Lutris],
         file_name_replacement: Some(("Proton","Wine")),
     ),
@@ -21,7 +21,7 @@
         forge: GitHub,
         repository_account: "luxtorpeda-dev",
         repository_name: "luxtorpeda",
-		    tool_type: Runtime,
+        tool_type: Runtime,
         compatible_applications: [Steam],
         file_name_template: Some("Luxtorpeda-{version}")
     ),
@@ -30,7 +30,7 @@
         forge: GitHub,
         repository_account: "dreamer",
         repository_name: "boxtron",
-		    tool_type: Runtime,
+        tool_type: Runtime,
         compatible_applications: [Steam],
         file_name_template: Some("Boxtron-{version}")
     ),

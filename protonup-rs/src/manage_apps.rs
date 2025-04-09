@@ -1,7 +1,7 @@
 use inquire::MultiSelect;
 use libprotonup::{
     apps::{self},
-    files::{self,Folders},
+    files::{self, Folders},
 };
 use std::fmt;
 
