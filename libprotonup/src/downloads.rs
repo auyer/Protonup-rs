@@ -5,7 +5,6 @@ use crate::constants;
 use crate::files;
 use crate::hashing;
 use crate::sources::CompatTool;
-use crate::utils;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 pub type ReleaseList = Vec<Release>;
@@ -32,8 +31,13 @@ impl std::fmt::Display for Release {
 
 impl Release {
     /// Returns a Download struct corresponding to the Release
-    pub fn get_download_info(&self, source: &CompatTool) -> Download {
+    pub fn get_download_info(
+        &self,
+        for_app: &apps::AppInstallations,
+        compat_tool: &CompatTool,
+    ) -> Download {
         let mut download: Download = Download {
+            for_app: for_app.to_owned(),
             version: self.tag_name.clone(),
             ..Download::default()
         };
@@ -48,7 +52,7 @@ impl Release {
                     sum_content: asset.browser_download_url.clone(),
                     sum_type: hashing::HashSumType::Sha256,
                 })
-            } else if source.filter_asset(asset.dowload_file_name().as_str())
+            } else if compat_tool.filter_asset(asset.dowload_file_name().as_str())
                 && files::check_supported_extension(asset.name.clone()).is_ok()
             {
                 download
@@ -85,12 +89,12 @@ impl Asset {
 }
 
 /// Returns a Vec of Releases from a GitHub repository, the URL used for the request is built from the passed in VariantParameters
-pub async fn list_releases(source: &CompatTool) -> Result<ReleaseList, reqwest::Error> {
+pub async fn list_releases(compat_tool: &CompatTool) -> Result<ReleaseList, reqwest::Error> {
     let agent = format!("{}/v{}", constants::USER_AGENT, constants::VERSION,);
 
     let url = format!(
         "{}/{}/{}/releases",
-        GITHUB_URL, source.repository_account, source.repository_name,
+        GITHUB_URL, compat_tool.repository_account, compat_tool.repository_name,
     );
 
     let client = reqwest::Client::builder().user_agent(agent).build()?;
@@ -116,31 +120,6 @@ pub struct Download {
 }
 
 impl Download {
-    /// combines the path for the app, requirements for the tool
-    pub fn installation_dir(&self, source: &CompatTool) -> Option<PathBuf> {
-        let mut path = PathBuf::from(self.for_app.default_install_dir().as_str());
-        path.push(self.for_app.as_app().subfolder_for_tool(source));
-        utils::expand_tilde(path)
-    }
-
-    // installation_dir applies file_name filters defined for each source,
-    // and returns the final installation directory
-    pub fn installation_name(&self, source: &CompatTool) -> String {
-        let mut name = match source.file_name_replacement.clone() {
-            Some(replacement) => self
-                .version
-                .clone()
-                .replace(&replacement.0, &replacement.1)
-                .to_owned(),
-            None => self.version.clone(),
-        };
-        name = match source.file_name_template.clone() {
-            Some(template) => template.replace("{version}", name.as_str()),
-            None => name,
-        };
-        name
-    }
-
     // output_dir checks if the file is supported and returns the standardized file name
     pub fn download_dir(&self) -> Result<PathBuf> {
         let mut output_dir = tempfile::tempdir()
@@ -277,13 +256,12 @@ mod tests {
             ),
         ];
 
-        for (input, source, expected) in test_cases {
-            let output = input.installation_name(&source);
+        for (input, compat_tool, expected) in test_cases {
+            let output = compat_tool.installation_name(&input.version);
             println!("Input: {:#?}", input);
             println!("Output: {:?}", output);
             println!("Expected: {:?}", expected);
             assert!(output == expected, "{} Should match: {}", output, expected);
-            println!();
         }
     }
 }

@@ -1,7 +1,6 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, anyhow};
-use arcstr::ArcStr;
 use futures_util::stream::FuturesUnordered;
 use futures_util::{StreamExt, future, stream};
 use indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle};
@@ -50,7 +49,7 @@ pub(crate) async fn init_hash_progress(
 }
 
 pub(crate) async fn init_unpack_progress(
-    target_dir: ArcStr,
+    target_dir: &Path,
     source_file: &Path,
     multi_progress: MultiProgress,
 ) -> Result<ProgressBar> {
@@ -59,7 +58,7 @@ pub(crate) async fn init_unpack_progress(
     progress_bar.set_message(format!(
         "Unpacking {} to {}",
         source_file.display(),
-        target_dir
+        target_dir.display()
     ));
     Ok(progress_bar)
 }
@@ -71,7 +70,7 @@ pub(crate) async fn download_file(
 ) -> Result<PathBuf> {
     let output_dir = download.download_dir()?;
 
-    if files::check_if_exists(&output_dir.to_string_lossy(), "").await {
+    if files::check_if_exists(&output_dir).await {
         fs::remove_dir_all(&output_dir).await?;
     }
 
@@ -161,9 +160,8 @@ pub async fn run_quick_downloads(force: bool) -> Result<Vec<Release>> {
 
     let joins = FuturesUnordered::new();
     let mut releases: Vec<Release> = vec![];
-    for app_inst in &found_apps {
+    for app_inst in found_apps {
         let compat_tool = app_inst.as_app().default_compatibility_tool();
-        let destination = app_inst.default_install_dir().to_string();
 
         // Get the latest Download info for the compat_tool
         let release = match downloads::list_releases(&compat_tool).await {
@@ -177,21 +175,17 @@ pub async fn run_quick_downloads(force: bool) -> Result<Vec<Release>> {
                 std::process::exit(1)
             }
         };
-        let download = release.get_download_info(&compat_tool);
+        let download = release.get_download_info(&app_inst, &compat_tool);
 
-        if files::check_if_exists(
-            &app_inst.default_install_dir(),
-            &download.installation_name(&compat_tool),
-        )
-        .await
-            && !force
-        {
+        let mut download_path = PathBuf::from(&app_inst.default_install_dir().as_str());
+        download_path.push(compat_tool.installation_name(&download.version));
+        if files::check_if_exists(&download_path.clone()).await && !force {
             continue;
         }
 
         joins.push(download_validate_unpack(
             release.clone(),
-            ArcStr::from(destination),
+            app_inst,
             compat_tool,
             multi_progress.clone(),
         ));
@@ -217,7 +211,7 @@ pub async fn run_quick_downloads(force: bool) -> Result<Vec<Release>> {
 /// If no app is provided, the user is prompted for which version of Wine/Proton to use and what directory to extract to
 pub async fn download_to_selected_app(app: Option<apps::App>) -> Result<Vec<Release>> {
     // Get the folder to install Wine/Proton into
-    let install_dir: ArcStr = match app {
+    let app_inst = match app {
         // If the user selected an app (Steam/Lutris)...
         Some(app) => match app.detect_installation_method().await {
             installed_apps if installed_apps.is_empty() => {
@@ -229,10 +223,9 @@ pub async fn download_to_selected_app(app: Option<apps::App>) -> Result<Vec<Rele
             installed_apps if installed_apps.len() == 1 => {
                 println!(
                     "Detected {}. Installing to {}",
-                    installed_apps[0],
-                    installed_apps[0].default_install_dir()
+                    installed_apps[0], installed_apps[0]
                 );
-                installed_apps[0].default_install_dir()
+                installed_apps[0].clone()
             }
             // If the user has more than one installation method, ask them which one they would like to use
             installed_apps => Select::new(
@@ -240,11 +233,10 @@ pub async fn download_to_selected_app(app: Option<apps::App>) -> Result<Vec<Rele
                 installed_apps,
             )
             .prompt()
-            .unwrap_or_else(|_| std::process::exit(0))
-            .default_install_dir(),
+            .unwrap_or_else(|_| std::process::exit(0)),
         },
         // If the user didn't select an app, ask them what directory they want to install to
-        None => ArcStr::from(
+        None => apps::AppInstallations::new_custom_app_install(
             Text::new("Installation path:")
                 .with_autocomplete(file_path::FilePathCompleter::default())
                 .with_help_message(&format!(
@@ -302,9 +294,17 @@ pub async fn download_to_selected_app(app: Option<apps::App>) -> Result<Vec<Rele
                 vec![]
             }),
         )
-        .filter_map(|r| async {
-            if should_download(&r, install_dir.clone()).await {
-                Some(r)
+        .filter_map(|relese| async {
+            if should_download(
+                &relese,
+                &mut app_inst
+                    .installation_dir(&selected_tool)
+                    .unwrap()
+                    .join(selected_tool.installation_name(&relese.tag_name)),
+            )
+            .await
+            {
+                Some(relese)
             } else {
                 None
             }
@@ -316,11 +316,13 @@ pub async fn download_to_selected_app(app: Option<apps::App>) -> Result<Vec<Rele
     let multi_progress = MultiProgress::with_draw_target(ProgressDrawTarget::stderr_with_hz(20));
 
     stream::iter(releases.clone())
-        .map(|r| {
-            let dir = install_dir.clone();
+        .map(|release| {
             let progress = multi_progress.clone();
             let tool = selected_tool.clone();
-            tokio::spawn(async move { download_validate_unpack(r, dir, tool, progress).await })
+            let app_inst = app_inst.clone();
+            tokio::spawn(async move {
+                download_validate_unpack(release, app_inst, tool, progress).await
+            })
         })
         .collect::<FuturesUnordered<_>>()
         .await
@@ -337,11 +339,12 @@ pub async fn download_to_selected_app(app: Option<apps::App>) -> Result<Vec<Rele
 
 async fn download_validate_unpack(
     release: Release,
-    install_dir: ArcStr,
+    for_app: apps::AppInstallations,
     compat_tool: CompatTool,
     multi_progress: MultiProgress,
 ) -> Result<()> {
-    let download = release.get_download_info(&compat_tool);
+    let install_dir = for_app.installation_dir(&compat_tool).unwrap();
+    let download = release.get_download_info(&for_app, &compat_tool);
     let file = download_file(&download, multi_progress.clone())
         .await
         .with_context(|| {
@@ -372,16 +375,20 @@ async fn download_validate_unpack(
         }
     }
 
-    let download = release.get_download_info(&compat_tool);
-    let install_name = download.installation_name(&compat_tool);
-    if files::check_if_exists(&install_dir, &install_name).await {
-        let path = Path::new(&install_dir.as_str()).join(install_name);
-        fs::remove_dir_all(&path)
-            .await
-            .with_context(|| format!("Error removing existing install at {}", path.display()))?;
+    let download = release.get_download_info(&for_app, &compat_tool);
+    // download.installation_dir(source: &CompatTool)
+    let install_name = compat_tool.installation_name(&download.version);
+    let install_path = install_dir.join(install_name.clone());
+    if files::check_if_exists(&install_path).await {
+        fs::remove_dir_all(&install_path).await.with_context(|| {
+            format!(
+                "Error removing existing install at {}",
+                install_path.display()
+            )
+        })?;
     }
 
-    let unpack_progress_bar = init_unpack_progress(install_dir.clone(), &file, multi_progress)
+    let unpack_progress_bar = init_unpack_progress(&install_dir.clone(), &file, multi_progress)
         .await
         .with_context(|| format!("Error unpacking {}", file.display()))?;
 
@@ -390,8 +397,8 @@ async fn download_validate_unpack(
         .with_context(|| format!("Error checking file type of {}", file.display()))?;
 
     files::unpack_file(
-        compat_tool.clone(),
-        download,
+        &compat_tool,
+        &download,
         unpack_progress_bar.wrap_async_read(decompressor),
         &install_dir,
     )
@@ -400,9 +407,15 @@ async fn download_validate_unpack(
 
     unpack_progress_bar.set_style(get_message_bar_style().await);
     unpack_progress_bar.finish_with_message(format!(
-        "Done! {} installed in {}\nYour app might require a restart to detect {}",
+        "Done! {} installed in {}/{}\nYour app might require a restart to detect {}",
         compat_tool,
-        install_dir.to_string(),
+        download
+            .for_app
+            .installation_dir(&compat_tool)
+            .unwrap()
+            .to_str()
+            .unwrap(),
+        install_name,
         compat_tool
     ));
     Ok(())
@@ -411,10 +424,10 @@ async fn download_validate_unpack(
 /// Checks if the selected Release/version is already installed.
 ///
 /// Will prompt the user to overwrite existing files
-async fn should_download(release: &Release, install_dir: ArcStr) -> bool {
+async fn should_download(release: &Release, install_dir: &mut PathBuf) -> bool {
     // Check if versions exist in disk.
     // If they do, ask the user if it should be overwritten
-    !files::check_if_exists(&install_dir, &release.tag_name).await
+    !files::check_if_exists(install_dir).await
         || helper_menus::confirm_menu(
             format!(
                 "Version {} exists in the installation path. Overwrite?",

@@ -1,3 +1,4 @@
+use std::fmt;
 use std::future;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
@@ -96,10 +97,10 @@ impl<R: AsyncBufRead + Unpin> AsyncRead for Decompressor<R> {
 ///
 /// Parses the passed in data and ensures the destination directory is created
 pub async fn unpack_file<R: AsyncRead + Unpin>(
-    source: CompatTool,
-    download: Download,
+    compat_tool: &CompatTool,
+    download: &Download,
     reader: R,
-    install_path: &str,
+    install_path: &Path,
 ) -> Result<()> {
     let install_dir = utils::expand_tilde(install_path).unwrap();
 
@@ -108,7 +109,7 @@ pub async fn unpack_file<R: AsyncRead + Unpin>(
     decompress_with_new_top_level(
         reader,
         install_dir.as_path(),
-        download.installation_name(&source).as_str(),
+        compat_tool.installation_name(&download.version).as_str(),
     )
     .await
     .unwrap();
@@ -168,8 +169,8 @@ async fn decompress_with_new_top_level<R: AsyncRead + Unpin>(
 }
 
 /// check_if_exists checks if a folder exists in a path
-pub async fn check_if_exists(path: &str, tag: &str) -> bool {
-    let f_path = utils::expand_tilde(format!("{path}{tag}/")).unwrap();
+pub async fn check_if_exists(path: &PathBuf) -> bool {
+    let f_path = utils::expand_tilde(path).unwrap();
     let p = f_path.as_path();
     fs::metadata(p).await.map(|m| m.is_dir()).unwrap_or(false)
 }
@@ -187,7 +188,7 @@ pub async fn list_folders_in_path(path: &PathBuf) -> Result<Vec<String>, anyhow:
 }
 
 /// Removes a directory and all its contents
-pub async fn remove_dir_all(path: &str) -> Result<()> {
+pub async fn remove_dir_all(path: &PathBuf) -> Result<()> {
     let f_path = utils::expand_tilde(path).unwrap();
     let p = f_path.as_path();
     tokio::fs::remove_dir_all(p)
@@ -209,10 +210,7 @@ pub async fn download_to_async_write<W: AsyncWrite + Unpin>(
         .with_context(|| format!("[Download] Failed to call remote server on URL : {}", &url))?;
 
     io::copy(
-        &mut StreamReader::new(
-            res.bytes_stream()
-                .map_err(|e| io::Error::new(io::ErrorKind::Other, e)),
-        ),
+        &mut StreamReader::new(res.bytes_stream().map_err(io::Error::other)),
         write,
     )
     .await?;
@@ -237,6 +235,31 @@ pub async fn download_file_into_memory(url: &String) -> Result<String> {
     res.text()
         .await
         .with_context(|| format!("[Download SHA] Failed to read response from URL : {}", &url))
+}
+
+/// Folder structure is a helper to Display a combo of Path and subpath
+pub struct Folder(pub (PathBuf, String));
+
+impl fmt::Display for Folder {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Access the tuple's second element (String) using self.0.1
+        write!(f, "{}", self.0.1)
+    }
+}
+
+/// Folders is just an alias of Vec<Folder> to implement Display
+pub struct Folders(pub Vec<Folder>);
+
+impl fmt::Display for Folders {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for (i, folder) in self.0.iter().enumerate() {
+            if i > 0 {
+                write!(f, ", ")?;
+            }
+            write!(f, "{}", folder)?;
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -397,7 +420,7 @@ mod test {
 
         let file = File::open(tar_path).await.unwrap();
 
-        unpack_file(s, d, file, output_dir.to_str().unwrap())
+        unpack_file(&s, &d, file, output_dir.as_path())
             .await
             .expect("Unpacking failed");
 

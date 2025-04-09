@@ -16,7 +16,7 @@ lazy_static! {
 /// and a Variant Enum for identifying the parameters type
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct CompatTool {
-    /// source name
+    /// compat_tool name
     pub name: String,
     /// the forge from witch this program will get the tool
     pub forge: Forge,
@@ -81,6 +81,22 @@ impl CompatTool {
             file_name_template,
             compatible_applications: vec![], // TODO: fill this if it becomes helpful
         }
+    }
+
+    // installation_dir applies file_name filters defined for each compat_tool,
+    // and returns the final installation directory
+    pub fn installation_name(&self, version: &str) -> String {
+        let mut name = match &self.file_name_replacement {
+            Some(replacement) => version
+                .replace(&replacement.0, &replacement.1)
+                .to_owned(),
+            None => version.to_owned(),
+        };
+        name = match &self.file_name_template {
+            Some(template) => template.replace("{version}", name.as_str()),
+            None => name,
+        };
+        name
     }
 
     pub fn sources_for_app(app: apps::App) -> Vec<CompatTool> {
