@@ -127,6 +127,14 @@ jobs:
           cd target/release/
           echo "hashes=$(sha256sum $(echo *.zip *.deb *.rpm *.gz ) | base64 -w0)" >> "$GITHUB_OUTPUT"
 
+      - uses: actions/attest-build-provenance@c074443f1aee8d4aeeae555aebba3282517141b2 # v2.2.3
+        with:
+          subject-path: |
+            'target/release/protonup-rs**.gz'
+            'target/release/protonup-rs**.zip'
+            'target/release/protonup-rs**.deb'
+            'target/release/protonup-rs**.rpm'
+
   provenance:
     needs: [release]
     permissions:
