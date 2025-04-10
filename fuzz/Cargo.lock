@@ -697,7 +697,7 @@ dependencies = [
 
 [[package]]
 name = "libprotonup"
-version = "0.8.6"
+version = "0.9.0-rc1"
 dependencies = [
  "anyhow",
  "arcstr",
@@ -745,9 +745,9 @@ dependencies = [
 
 [[package]]
 name = "linux-raw-sys"
-version = "0.9.3"
+version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fe7db12097d22ec582439daf8618b8fdd1a7bef6270e9af3b1ebcd30893cf413"
+checksum = "cd945864f07fe9f5371a27ad7b52a172b4b499999f1d97574c9fa68373937e12"
 
 [[package]]
 name = "litemap"
