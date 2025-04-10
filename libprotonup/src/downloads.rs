@@ -52,7 +52,7 @@ impl Release {
                     sum_content: asset.browser_download_url.clone(),
                     sum_type: hashing::HashSumType::Sha256,
                 })
-            } else if compat_tool.filter_asset(asset.dowload_file_name().as_str())
+            } else if compat_tool.filter_asset(asset.download_file_name().as_str())
                 && files::check_supported_extension(asset.name.clone()).is_ok()
             {
                 download
@@ -79,7 +79,7 @@ pub struct Asset {
 }
 
 impl Asset {
-    pub fn dowload_file_name(&self) -> String {
+    pub fn download_file_name(&self) -> String {
         self.browser_download_url
             .split('/')
             .next_back()
@@ -107,7 +107,7 @@ pub async fn list_releases(compat_tool: &CompatTool) -> Result<ReleaseList, reqw
 /// Contains all the information needed to download the corresponding release from GitHub
 #[derive(Default, Debug, PartialEq, Clone)]
 pub struct Download {
-    /// for what app this dowload is
+    /// for what app this download is
     pub for_app: apps::AppInstallations,
     /// the tag from the Forge
     pub version: String,

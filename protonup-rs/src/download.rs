@@ -294,17 +294,17 @@ pub async fn download_to_selected_app(app: Option<apps::App>) -> Result<Vec<Rele
                 vec![]
             }),
         )
-        .filter_map(|relese| async {
+        .filter_map(|release| async {
             if should_download(
-                &relese,
+                &release,
                 &mut app_inst
                     .installation_dir(&selected_tool)
                     .unwrap()
-                    .join(selected_tool.installation_name(&relese.tag_name)),
+                    .join(selected_tool.installation_name(&release.tag_name)),
             )
             .await
             {
-                Some(relese)
+                Some(release)
             } else {
                 None
             }
