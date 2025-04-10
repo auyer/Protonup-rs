@@ -48,10 +48,20 @@
         forge: GitHub,
         repository_account: "lutris",
         repository_name: "vkd3d",
-	    tool_type: Runtime,
+        tool_type: Runtime,
         compatible_applications: [Lutris],
         file_name_replacement: Some(("Proton","Wine")),
-	    subfolder: Some("runtime"),
+        subfolder: Some("runtime"),
         file_name_template: Some("VKD3D-Lutris-{version}")
+    ),
+    (
+        name: "DXVK",
+        forge: GitHub,
+        repository_account: "doitsujin",
+        repository_name: "dxvk",
+        tool_type: Runtime,
+        compatible_applications: [Lutris],
+        release_asset_filter : Some(r"^dxvk-\d+\.\d+(?:\.\d+)?\.tar\.gz$"),
+        file_name_template: Some("DXVK-{version}")
     ),
 ]
