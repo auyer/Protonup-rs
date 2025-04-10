@@ -118,14 +118,14 @@ jobs:
             cargo publish -p protonup-rs
           fi
 
-provenance:
-  needs: [build]
-  permissions:
-    actions: read # To read the workflow path.
-    id-token: write # To sign the provenance.
-    contents: write # To add assets to a release.
-  uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@f7dd8c54c2067bafc12ca7a55595d5ee9b75204a # v2.1.0
-  with:
-    base64-subjects: "${{ needs.build.outputs.hashes }}"
-    upload-assets: true
-    upload-tag-name: v${{ env.CURRENT_VERSION }}
+  provenance:
+    needs: [build]
+    permissions:
+      actions: read # To read the workflow path.
+      id-token: write # To sign the provenance.
+      contents: write # To add assets to a release.
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@f7dd8c54c2067bafc12ca7a55595d5ee9b75204a # v2.1.0
+    with:
+      base64-subjects: "${{ needs.build.outputs.hashes }}"
+      upload-assets: true
+      upload-tag-name: v${{ env.CURRENT_VERSION }}
