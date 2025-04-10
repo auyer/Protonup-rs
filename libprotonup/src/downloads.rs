@@ -1,9 +1,10 @@
 use std::path::PathBuf;
 
+use crate::apps;
 use crate::constants;
 use crate::files;
 use crate::hashing;
-use crate::sources::Source;
+use crate::sources::CompatTool;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 pub type ReleaseList = Vec<Release>;
@@ -30,8 +31,13 @@ impl std::fmt::Display for Release {
 
 impl Release {
     /// Returns a Download struct corresponding to the Release
-    pub fn get_download_info(&self) -> Download {
+    pub fn get_download_info(
+        &self,
+        for_app: &apps::AppInstallations,
+        compat_tool: &CompatTool,
+    ) -> Download {
         let mut download: Download = Download {
+            for_app: for_app.to_owned(),
             version: self.tag_name.clone(),
             ..Download::default()
         };
@@ -46,14 +52,15 @@ impl Release {
                     sum_content: asset.browser_download_url.clone(),
                     sum_type: hashing::HashSumType::Sha256,
                 })
-            } else if files::check_supported_extension(asset.name.clone()).is_ok() {
+            } else if compat_tool.filter_asset(asset.dowload_file_name().as_str())
+                && files::check_supported_extension(asset.name.clone()).is_ok()
+            {
                 download
                     .download_url
                     .clone_from(&asset.browser_download_url);
                 download.size = asset.size as u64;
             }
         }
-
         download
     }
 }
@@ -71,13 +78,23 @@ pub struct Asset {
     browser_download_url: String,
 }
 
+impl Asset {
+    pub fn dowload_file_name(&self) -> String {
+        self.browser_download_url
+            .split('/')
+            .next_back()
+            .unwrap_or(&self.browser_download_url)
+            .to_owned()
+    }
+}
+
 /// Returns a Vec of Releases from a GitHub repository, the URL used for the request is built from the passed in VariantParameters
-pub async fn list_releases(source: &Source) -> Result<ReleaseList, reqwest::Error> {
+pub async fn list_releases(compat_tool: &CompatTool) -> Result<ReleaseList, reqwest::Error> {
     let agent = format!("{}/v{}", constants::USER_AGENT, constants::VERSION,);
 
     let url = format!(
         "{}/{}/{}/releases",
-        GITHUB_URL, source.repository_account, source.repository_name,
+        GITHUB_URL, compat_tool.repository_account, compat_tool.repository_name,
     );
 
     let client = reqwest::Client::builder().user_agent(agent).build()?;
@@ -90,6 +107,9 @@ pub async fn list_releases(source: &Source) -> Result<ReleaseList, reqwest::Erro
 /// Contains all the information needed to download the corresponding release from GitHub
 #[derive(Default, Debug, PartialEq, Clone)]
 pub struct Download {
+    /// for what app this dowload is
+    pub for_app: apps::AppInstallations,
+    /// the tag from the Forge
     pub version: String,
     /// file hash to check download integrity
     pub hash_sum: Option<hashing::HashSums>,
@@ -100,24 +120,6 @@ pub struct Download {
 }
 
 impl Download {
-    // installation_dir applies file_name filters defined for each source,
-    // and returns the final installation directory
-    pub fn installation_dir(&self, source: &Source) -> String {
-        let mut name = match source.file_name_replacement.clone() {
-            Some(replacement) => self
-                .version
-                .clone()
-                .replace(&replacement.0, &replacement.1)
-                .to_owned(),
-            None => self.version.clone(),
-        };
-        name = match source.file_name_template.clone() {
-            Some(template) => template.replace("{version}", name.as_str()),
-            None => name,
-        };
-        name
-    }
-
     // output_dir checks if the file is supported and returns the standardized file name
     pub fn download_dir(&self) -> Result<PathBuf> {
         let mut output_dir = tempfile::tempdir()
@@ -146,15 +148,15 @@ mod tests {
     async fn test_list_releases() {
         let conditions = &[
             (
-                sources::Source::from_str(constants::DEFAULT_LUTRIS_TOOL).unwrap(),
+                sources::CompatTool::from_str(constants::DEFAULT_LUTRIS_TOOL).unwrap(),
                 "Get WineGE",
             ),
             (
-                sources::Source::from_str(constants::DEFAULT_STEAM_TOOL).unwrap(),
+                sources::CompatTool::from_str(constants::DEFAULT_STEAM_TOOL).unwrap(),
                 "Get GEProton",
             ),
             (
-                sources::Source::from_str("Luxtorpeda").unwrap(),
+                sources::CompatTool::from_str("Luxtorpeda").unwrap(),
                 "Get Luxtorpeda",
             ),
         ];
@@ -192,11 +194,11 @@ mod tests {
 
         let conditions = &[
             (
-                sources::Source::from_str(constants::DEFAULT_LUTRIS_TOOL).unwrap(),
+                sources::CompatTool::from_str(constants::DEFAULT_LUTRIS_TOOL).unwrap(),
                 "Get WineGE",
             ),
             (
-                sources::Source::from_str(constants::DEFAULT_STEAM_TOOL).unwrap(),
+                sources::CompatTool::from_str(constants::DEFAULT_STEAM_TOOL).unwrap(),
                 "Get GEProton",
             ),
         ];
@@ -233,32 +235,33 @@ mod tests {
                 Download {
                     version: "GE-Proton9-27".to_owned(),
                     hash_sum: None,
+                    for_app: apps::AppInstallations::Steam,
                     size: 0,
                     download_url: empty.clone(),
                 },
-                Source::from_str("GEProton").unwrap(),
+                CompatTool::from_str("GEProton").unwrap(),
                 "GE-Proton9-27",
             ),
             // WineGE
             (
                 Download {
                     version: "GE-Proton8-26".to_owned(),
+                    for_app: apps::AppInstallations::Steam,
                     hash_sum: None,
                     size: 0,
                     download_url: empty.clone(),
                 },
-                Source::from_str("WineGE").unwrap(),
+                CompatTool::from_str("WineGE").unwrap(),
                 "GE-Wine8-26",
             ),
         ];
 
-        for (input, source, expected) in test_cases {
-            let output = input.installation_dir(&source);
+        for (input, compat_tool, expected) in test_cases {
+            let output = compat_tool.installation_name(&input.version);
             println!("Input: {:#?}", input);
             println!("Output: {:?}", output);
             println!("Expected: {:?}", expected);
             assert!(output == expected, "{} Should match: {}", output, expected);
-            println!();
         }
     }
 }

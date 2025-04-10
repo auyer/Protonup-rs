@@ -1,5 +1,8 @@
 use inquire::MultiSelect;
-use libprotonup::{apps, files};
+use libprotonup::{
+    apps::{self},
+    files::{self, Folders},
+};
 use std::fmt;
 
 use super::helper_menus::{confirm_menu, multiple_select_menu};
@@ -82,27 +85,25 @@ pub(crate) async fn manage_apps_routine() {
             println!("Zero versions selected for {}, skipping...\n", app);
             continue;
         }
+        let delete_versions = Folders(delete_versions);
         if confirm_menu(
-            format!("Are you sure you want to delete {:?} ?", delete_versions),
+            format!("Are you sure you want to delete {} ?", delete_versions),
             format!("If you choose yes, you will them from {}", app),
             true,
         ) {
-            for version in delete_versions {
-                files::remove_dir_all(&format!("{}{}", &app.default_install_dir(), &version))
-                    .await
-                    .map_or_else(
-                        |e| {
-                            eprintln!(
-                                "Error deleting {}{}: {}",
-                                &app.default_install_dir(),
-                                &version,
-                                e
-                            )
-                        },
-                        |_| {
-                            println!("{} {} deleted successfully", &app, &version);
-                        },
-                    );
+            for version in delete_versions.0 {
+                let version = version.0;
+                let version_path = version.0.join(&version.1);
+                files::remove_dir_all(&version_path).await.map_or_else(
+                    |e| eprintln!("Error deleting {}: {}", version_path.as_path().display(), e),
+                    |_| {
+                        println!(
+                            "{} {} deleted successfully",
+                            &app,
+                            version_path.as_path().display()
+                        );
+                    },
+                );
             }
         }
     }

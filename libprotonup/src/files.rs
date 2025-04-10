@@ -1,10 +1,11 @@
+use std::fmt;
 use std::future;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::task::Poll;
 
 use anyhow::{Context, Error, Result, anyhow};
-use async_compression::tokio::bufread::{GzipDecoder, XzDecoder};
+use async_compression::tokio::bufread::{GzipDecoder, XzDecoder, ZstdDecoder};
 use futures_util::{StreamExt, TryStreamExt};
 use pin_project::pin_project;
 use reqwest::header::USER_AGENT;
@@ -15,8 +16,8 @@ use tokio_stream::wrappers::ReadDirStream;
 use tokio_tar::Archive;
 use tokio_util::io::StreamReader;
 
-use crate::github::Download;
-use crate::sources::Source;
+use crate::downloads::Download;
+use crate::sources::CompatTool;
 use crate::utils;
 
 use super::constants;
@@ -25,16 +26,19 @@ use super::constants;
 pub enum Decompressor<R: AsyncBufRead + Unpin> {
     Gzip(#[pin] GzipDecoder<R>),
     Xz(#[pin] XzDecoder<R>),
+    Zstd(#[pin] ZstdDecoder<R>),
 }
 
 pub(crate) fn check_supported_extension(file_name: String) -> Result<String> {
     if file_name.ends_with("tar.gz") || file_name.ends_with("tgz") {
         Ok("tar.gz".to_owned())
+    } else if file_name.ends_with("tar.zst") || file_name.ends_with("tar.zstd") {
+        Ok("tar.zst".to_owned())
     } else if file_name.ends_with("tar.xz") || file_name.ends_with("txz") {
         Ok("tar.xz".to_owned())
     } else {
         Err(anyhow!(
-            "Downloaded file wasn't of the expected type. (tar.(gz/xz))"
+            "Downloaded file wasn't of the expected type. (tar.(gz/xz/zst))"
         ))
     }
 }
@@ -50,10 +54,13 @@ impl Decompressor<BufReader<File>> {
             )
         })?;
 
+        // TODO: implement this using the same validation fuction
         if path_str.ends_with("tar.gz") {
             Ok(Decompressor::Gzip(GzipDecoder::new(BufReader::new(file))))
         } else if path_str.ends_with("tar.xz") {
             Ok(Decompressor::Xz(XzDecoder::new(BufReader::new(file))))
+        } else if path_str.ends_with("tar.zst") {
+            Ok(Decompressor::Zstd(ZstdDecoder::new(BufReader::new(file))))
         } else {
             Err(Error::msg(format!(
                 "no decompress\nPath: {}",
@@ -78,6 +85,10 @@ impl<R: AsyncBufRead + Unpin> AsyncRead for Decompressor<R> {
                 pin!(reader);
                 reader.poll_read(cx, buf)
             }
+            DecompressorProject::Zstd(reader) => {
+                pin!(reader);
+                reader.poll_read(cx, buf)
+            }
         }
     }
 }
@@ -86,10 +97,10 @@ impl<R: AsyncBufRead + Unpin> AsyncRead for Decompressor<R> {
 ///
 /// Parses the passed in data and ensures the destination directory is created
 pub async fn unpack_file<R: AsyncRead + Unpin>(
-    source: Source,
-    download: Download,
+    compat_tool: &CompatTool,
+    download: &Download,
     reader: R,
-    install_path: &str,
+    install_path: &Path,
 ) -> Result<()> {
     let install_dir = utils::expand_tilde(install_path).unwrap();
 
@@ -98,7 +109,7 @@ pub async fn unpack_file<R: AsyncRead + Unpin>(
     decompress_with_new_top_level(
         reader,
         install_dir.as_path(),
-        download.installation_dir(&source).as_str(),
+        compat_tool.installation_name(&download.version).as_str(),
     )
     .await
     .unwrap();
@@ -158,14 +169,14 @@ async fn decompress_with_new_top_level<R: AsyncRead + Unpin>(
 }
 
 /// check_if_exists checks if a folder exists in a path
-pub async fn check_if_exists(path: &str, tag: &str) -> bool {
-    let f_path = utils::expand_tilde(format!("{path}{tag}/")).unwrap();
+pub async fn check_if_exists(path: &PathBuf) -> bool {
+    let f_path = utils::expand_tilde(path).unwrap();
     let p = f_path.as_path();
     fs::metadata(p).await.map(|m| m.is_dir()).unwrap_or(false)
 }
 
 /// list_folders_in_path returns a vector of strings of the folders in a path
-pub async fn list_folders_in_path(path: &str) -> Result<Vec<String>, anyhow::Error> {
+pub async fn list_folders_in_path(path: &PathBuf) -> Result<Vec<String>, anyhow::Error> {
     let f_path = utils::expand_tilde(path).unwrap();
     let paths_real: Vec<String> = ReadDirStream::new(tokio::fs::read_dir(f_path).await?)
         .filter_map(|e| future::ready(e.ok()))
@@ -177,7 +188,7 @@ pub async fn list_folders_in_path(path: &str) -> Result<Vec<String>, anyhow::Err
 }
 
 /// Removes a directory and all its contents
-pub async fn remove_dir_all(path: &str) -> Result<()> {
+pub async fn remove_dir_all(path: &PathBuf) -> Result<()> {
     let f_path = utils::expand_tilde(path).unwrap();
     let p = f_path.as_path();
     tokio::fs::remove_dir_all(p)
@@ -199,10 +210,7 @@ pub async fn download_to_async_write<W: AsyncWrite + Unpin>(
         .with_context(|| format!("[Download] Failed to call remote server on URL : {}", &url))?;
 
     io::copy(
-        &mut StreamReader::new(
-            res.bytes_stream()
-                .map_err(|e| io::Error::new(io::ErrorKind::Other, e)),
-        ),
+        &mut StreamReader::new(res.bytes_stream().map_err(io::Error::other)),
         write,
     )
     .await?;
@@ -229,29 +237,160 @@ pub async fn download_file_into_memory(url: &String) -> Result<String> {
         .with_context(|| format!("[Download SHA] Failed to read response from URL : {}", &url))
 }
 
+/// Folder structure is a helper to Display a combo of Path and subpath
+pub struct Folder(pub (PathBuf, String));
+
+impl fmt::Display for Folder {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Access the tuple's second element (String) using self.0.1
+        write!(f, "{}", self.0.1)
+    }
+}
+
+/// Folders is just an alias of Vec<Folder> to implement Display
+pub struct Folders(pub Vec<Folder>);
+
+impl fmt::Display for Folders {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for (i, folder) in self.0.iter().enumerate() {
+            if i > 0 {
+                write!(f, ", ")?;
+            }
+            write!(f, "{}", folder)?;
+        }
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod test {
-    use crate::sources;
+    use crate::{apps::AppInstallations, sources};
 
     use super::*;
+    use anyhow::Result;
     use std::fs;
     use tar;
     use tempfile::tempdir;
+
+    #[test]
+    fn test_check_supported_extension() {
+        struct TestCase {
+            name: &'static str,
+            file_name: String,
+            expected: Result<String>,
+        }
+
+        let test_cases = vec![
+            TestCase {
+                name: "tar.gz",
+                file_name: "my_archive.tar.gz".to_string(),
+                expected: Ok("tar.gz".to_string()),
+            },
+            TestCase {
+                name: "tgz",
+                file_name: "another_archive.tgz".to_string(),
+                expected: Ok("tar.gz".to_string()),
+            },
+            TestCase {
+                name: "tar.zst",
+                file_name: "data.tar.zst".to_string(),
+                expected: Ok("tar.zst".to_string()),
+            },
+            TestCase {
+                name: "tar.zstd",
+                file_name: "backup.tar.zstd".to_string(),
+                expected: Ok("tar.zst".to_string()),
+            },
+            TestCase {
+                name: "tar.xz",
+                file_name: "image.tar.xz".to_string(),
+                expected: Ok("tar.xz".to_string()),
+            },
+            TestCase {
+                name: "txz",
+                file_name: "report.txz".to_string(),
+                expected: Ok("tar.xz".to_string()),
+            },
+            TestCase {
+                name: "unsupported extension - zip",
+                file_name: "document.zip".to_string(),
+                expected: Err(anyhow::anyhow!(
+                    "Downloaded file wasn't of the expected type. (tar.(gz/xz/zst))",
+                )),
+            },
+            TestCase {
+                name: "unsupported extension - tar",
+                file_name: "plain.tar".to_string(),
+                expected: Err(anyhow::anyhow!(
+                    "Downloaded file wasn't of the expected type. (tar.(gz/xz/zst))",
+                )),
+            },
+            TestCase {
+                name: "unsupported extension - no extension",
+                file_name: "config".to_string(),
+                expected: Err(anyhow::anyhow!(
+                    "Downloaded file wasn't of the expected type. (tar.(gz/xz/zst))",
+                )),
+            },
+            TestCase {
+                name: "filename with supported extension in the middle",
+                file_name: "prefix.tar.gz.suffix".to_string(),
+                expected: Err(anyhow::anyhow!(
+                    "Downloaded file wasn't of the expected type. (tar.(gz/xz/zst))",
+                )),
+            },
+            TestCase {
+                name: "empty filename",
+                file_name: "".to_string(),
+                expected: Err(anyhow::anyhow!(
+                    "Downloaded file wasn't of the expected type. (tar.(gz/xz/zst))",
+                )),
+            },
+        ];
+
+        for test_case in test_cases {
+            let result = check_supported_extension(test_case.file_name);
+            match (result, test_case.expected) {
+                (Ok(actual), Ok(expected)) => {
+                    assert_eq!(actual, expected, "Test '{}' failed", test_case.name)
+                }
+                (Err(actual), Err(expected)) => {
+                    assert_eq!(
+                        actual.to_string(),
+                        expected.to_string(),
+                        "Test '{}' failed",
+                        test_case.name
+                    );
+                }
+                (Ok(_), Err(_)) => panic!(
+                    "Test '{}' failed: Expected error, got success",
+                    test_case.name
+                ),
+                (Err(_), Ok(_)) => panic!(
+                    "Test '{}' failed: Expected success, got error",
+                    test_case.name
+                ),
+            }
+        }
+    }
 
     #[tokio::test]
     async fn test_unpack_with_new_top_level() {
         let empty = "".to_owned();
 
-        let s = Source::new_custom(
+        let s = CompatTool::new_custom(
             empty.clone(),
             sources::Forge::GitHub,
             empty.clone(),
             empty.clone(),
+            sources::ToolType::WineBased,
+            None,
             None,
             None,
         );
 
         let d = Download {
+            for_app: AppInstallations::Steam,
             version: "new_top_123".to_owned(),
             hash_sum: None,
             download_url: "test.tar".to_owned(),
@@ -281,7 +420,7 @@ mod test {
 
         let file = File::open(tar_path).await.unwrap();
 
-        unpack_file(s, d, file, output_dir.to_str().unwrap())
+        unpack_file(&s, &d, file, output_dir.as_path())
             .await
             .expect("Unpacking failed");
 
