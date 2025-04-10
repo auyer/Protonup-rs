@@ -112,7 +112,7 @@ pub async fn list_releases(compat_tool: &CompatTool) -> Result<ReleaseList, reqw
 pub struct Download {
     /// file name should be used to verify checksums if available
     pub file_name: String,
-    /// for what app this dowload is
+    /// for what app this download is
     pub for_app: apps::AppInstallations,
     /// the tag from the Forge
     pub version: String,
