@@ -34,4 +34,15 @@
         compatible_applications: [Steam],
         file_name_template: Some("Boxtron-{version}")
     ),
+    (
+        name: "Lutris-VKD3D",
+        forge: GitHub,
+        repository_account: "lutris",
+        repository_name: "vkd3d",
+	    tool_type: Runtime,
+        compatible_applications: [Lutris],
+        file_name_replacement: Some(("Proton","Wine")),
+	    subfolder: Some("runtime"),
+        file_name_template: Some("VKD3D-Lutris-{version}")
+    ),
 ]
