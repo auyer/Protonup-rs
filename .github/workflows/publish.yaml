@@ -69,6 +69,12 @@ jobs:
           # move all artifacts to the release folder
           mv *.deb *.rpm ../release/
 
+      - name: Compress binary release artifacts
+        run: |
+          cd ./target/release
+          zip protonup-rs-linux-amd64.zip protonup-rs
+          tar -czvf protonup-rs-linux-amd64.tar.gz protonup-rs
+
       - name: Upload Zipped,Tar gzed, DEB and RPM binaries to release
         uses: svenstaro/upload-release-action@04733e069f2d7f7f0b4aebc4fbdbce8613b03ccd #v2.9.0
         with:
@@ -88,12 +94,6 @@ jobs:
           overwrite: true
           file_glob: true
           draft: true
-
-      - name: Compress binary release artifacts
-        run: |
-          cd ./target/release
-          zip protonup-rs-linux-amd64.zip protonup-rs
-          tar -czvf protonup-rs-linux-amd64.tar.gz protonup-rs
 
       - name: Run cargo publish binary
         env:
@@ -124,9 +124,7 @@ jobs:
       - name: Generate hashes
         id: hash
         run: |
-          set -euo pipefail
-          shopt -s globstar extglob
-          echo "hashes=$(sha256sum $(ls protonup-rs**.@(zip|deb|rpm|gz) ) | base64 -w0)" >> "$GITHUB_OUTPUT"
+          echo "hashes=$(sha256sum $(echo *.zip *.deb *.rpm *.gz ) | base64 -w0)" >> "$GITHUB_OUTPUT"
 
   provenance:
     needs: [release]
@@ -136,6 +134,6 @@ jobs:
       contents: write # To add assets to a release.
     uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@f7dd8c54c2067bafc12ca7a55595d5ee9b75204a # v2.1.0
     with:
-      base64-subjects: "${{ needs.build.outputs.hashes }}"
+      base64-subjects: "${{ needs.release.outputs.hashes }}"
       upload-assets: true
-      upload-tag-name: ${{ needs.build.outputs.published_version }}
+      upload-tag-name: ${{ needs.release.outputs.published_version }}
