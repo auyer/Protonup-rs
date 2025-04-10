@@ -59,14 +59,6 @@ jobs:
       - name: Run cargo build
         run: cargo build --release
 
-      # Generate the hashes for Provenance
-      - name: Generate hashes
-        id: hash
-        run: |
-          set -euo pipefail
-          echo "hashes=$(sha256sum ./target/release/protonup-rs | base64 -w0)" >> "$GITHUB_OUTPUT"
-
-
       - name: Run cargo-deb to build a debian package
         run: cargo-deb -p protonup-rs --compress-type gzip --deb-version $CURRENT_VERSION
 
@@ -74,18 +66,14 @@ jobs:
         run: |
           cd target/debian
           alien -k --to-rpm protonup-rs_${{ env.CURRENT_VERSION }}_amd64.deb
+          # move all artifacts to the release folder
+          mv *.deb *.rpm ../release/
 
-      - name: Compress binary release artefacts
-        run: |
-          cd ./target/release
-          zip protonup-rs-linux-amd64.zip protonup-rs
-          tar -czvf protonup-rs-linux-amd64.tar.gz protonup-rs
-
-      - name: Upload Ziped,Tar gzed, DEB and RPM binaries to release
+      - name: Upload Zipped,Tar gzed, DEB and RPM binaries to release
         uses: svenstaro/upload-release-action@04733e069f2d7f7f0b4aebc4fbdbce8613b03ccd #v2.9.0
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: 'target/{release,debian}/protonup-rs**.{gz,zip,rpm,deb}'
+          file: 'target/release/protonup-rs**.{gz,zip,rpm,deb}'
           tag: v${{ env.CURRENT_VERSION }}
           overwrite: true
           file_glob: true
@@ -100,6 +88,12 @@ jobs:
           overwrite: true
           file_glob: true
           draft: true
+
+      - name: Compress binary release artifacts
+        run: |
+          cd ./target/release
+          zip protonup-rs-linux-amd64.zip protonup-rs
+          tar -czvf protonup-rs-linux-amd64.tar.gz protonup-rs
 
       - name: Run cargo publish binary
         env:
@@ -126,6 +120,13 @@ jobs:
           set -euo pipefail
           echo "published_version=v$CURRENT_VERSION" >> "$GITHUB_OUTPUT"
 
+      # Generate the hashes for Provenance
+      - name: Generate hashes
+        id: hash
+        run: |
+          set -euo pipefail
+          shopt -s globstar extglob
+          echo "hashes=$(sha256sum $(ls protonup-rs**.@(zip|deb|rpm|gz) ) | base64 -w0)" >> "$GITHUB_OUTPUT"
 
   provenance:
     needs: [release]
