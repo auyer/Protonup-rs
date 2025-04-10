@@ -64,4 +64,14 @@
         release_asset_filter : Some(r"^dxvk-\d+\.\d+(?:\.\d+)?\.tar\.gz$"),
         file_name_template: Some("DXVK-{version}")
     ),
+    (
+        name: "Kron4ek Wine",
+        forge: GitHub,
+        repository_account: "kron4ek",
+        repository_name: "Wine-Builds",
+        tool_type: Runtime,
+        compatible_applications: [Lutris],
+        release_asset_filter : Some(r"^wine-\d+\.\d+(?:\.\d+)?-amd64\.tar\.xz$"),
+        file_name_template: Some("kron4ek-wine-{version}")
+    ),
 ]
