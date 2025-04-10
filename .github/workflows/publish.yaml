@@ -60,11 +60,12 @@ jobs:
         run: cargo build --release
 
       # Generate the hashes for Provenance
-      - name: Generate subject
+      - name: Generate hashes
         id: hash
         run: |
           set -euo pipefail
           echo "hashes=$(sha256sum ./target/release/protonup-rs | base64 -w0)" >> "$GITHUB_OUTPUT"
+
 
       - name: Run cargo-deb to build a debian package
         run: cargo-deb -p protonup-rs --compress-type gzip --deb-version $CURRENT_VERSION
@@ -118,8 +119,16 @@ jobs:
             cargo publish -p protonup-rs
           fi
 
+      # outputs version
+      - name: Output Tag Name
+        id: published_version
+        run: |
+          set -euo pipefail
+          echo "published_version=v$CURRENT_VERSION" >> "$GITHUB_OUTPUT"
+
+
   provenance:
-    needs: [build]
+    needs: [release]
     permissions:
       actions: read # To read the workflow path.
       id-token: write # To sign the provenance.
@@ -128,4 +137,4 @@ jobs:
     with:
       base64-subjects: "${{ needs.build.outputs.hashes }}"
       upload-assets: true
-      upload-tag-name: v${{ env.CURRENT_VERSION }}
+      upload-tag-name: ${{ needs.build.outputs.published_version }}
