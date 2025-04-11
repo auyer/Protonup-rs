@@ -12,10 +12,12 @@ use crate::{
     sources::CompatTool,
 };
 
+/// App defines all app specific functions
 #[derive(Debug, PartialEq, Eq, Clone, Deserialize, Serialize)]
 pub enum App {
     Steam,
     Lutris,
+    /// Custom app used for user provided path
     Custom(String),
     // TODO:  HeroicGamesLauncher,
 }
