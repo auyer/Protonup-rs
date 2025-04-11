@@ -6,21 +6,17 @@ use std::task::Poll;
 
 use anyhow::{Context, Error, Result, anyhow};
 use async_compression::tokio::bufread::{GzipDecoder, XzDecoder, ZstdDecoder};
-use futures_util::{StreamExt, TryStreamExt};
+use futures_util::StreamExt;
 use pin_project::pin_project;
-use reqwest::header::USER_AGENT;
 use tokio::fs::File;
-use tokio::io::{AsyncBufRead, AsyncRead, AsyncWrite, BufReader, ReadBuf};
+use tokio::io::{AsyncBufRead, AsyncRead, BufReader, ReadBuf};
 use tokio::{fs, io, pin};
 use tokio_stream::wrappers::ReadDirStream;
 use tokio_tar::Archive;
-use tokio_util::io::StreamReader;
 
 use crate::downloads::Download;
 use crate::sources::CompatTool;
 use crate::utils;
-
-use super::constants;
 
 #[pin_project(project = DecompressorProject)]
 pub enum Decompressor<R: AsyncBufRead + Unpin> {
@@ -197,46 +193,6 @@ pub async fn remove_dir_all(path: &PathBuf) -> Result<()> {
     Ok(())
 }
 
-pub async fn download_to_async_write<W: AsyncWrite + Unpin>(
-    url: &str,
-    write: &mut W,
-) -> Result<()> {
-    let client = reqwest::Client::new();
-    let res = client
-        .get(url)
-        .header(USER_AGENT, format!("protonup-rs {}", constants::VERSION))
-        .send()
-        .await
-        .with_context(|| format!("[Download] Failed to call remote server on URL : {}", &url))?;
-
-    io::copy(
-        &mut StreamReader::new(res.bytes_stream().map_err(io::Error::other)),
-        write,
-    )
-    .await?;
-    Ok(())
-}
-
-/// Downloads and returns the text response
-pub async fn download_file_into_memory(url: &String) -> Result<String> {
-    let client = reqwest::Client::new();
-    let res = client
-        .get(url)
-        .header(USER_AGENT, format!("protonup-rs {}", constants::VERSION))
-        .send()
-        .await
-        .with_context(|| {
-            format!(
-                "[Download SHA] Failed to call remote server on URL : {}",
-                &url
-            )
-        })?;
-
-    res.text()
-        .await
-        .with_context(|| format!("[Download SHA] Failed to read response from URL : {}", &url))
-}
-
 /// Folder structure is a helper to Display a combo of Path and subpath
 pub struct Folder(pub (PathBuf, String));
 
@@ -247,7 +203,7 @@ impl fmt::Display for Folder {
     }
 }
 
-/// Folders is just an alias of Vec<Folder> to implement Display
+/// Folders is just an alias of `Vec<Folder>` to implement Display
 pub struct Folders(pub Vec<Folder>);
 
 impl fmt::Display for Folders {

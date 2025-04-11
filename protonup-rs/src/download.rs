@@ -89,7 +89,7 @@ pub(crate) async fn download_file(
     let download_progress_bar =
         init_download_progress(download, &output_dir, multi_progress.clone()).await;
 
-    files::download_to_async_write(
+    downloads::download_to_async_write(
         &download.download_url,
         &mut download_progress_bar.wrap_async_write(file),
     )
@@ -357,7 +357,7 @@ async fn download_validate_unpack(
         })?;
     match download.hash_sum {
         Some(git_hash_sum) => {
-            let hash_content = &files::download_file_into_memory(&git_hash_sum.sum_content)
+            let hash_content = &downloads::download_file_into_memory(&git_hash_sum.sum_content)
                 .await
                 .with_context(|| {
                     format!(
