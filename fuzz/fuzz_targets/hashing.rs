@@ -23,6 +23,7 @@ fuzz_target!(|data: &[u8]| {
 
         // SHA512
         let check512 = hash_check_file(
+            "",
             &mut test_data_cursor,
             HashSums {
                 sum_content: hash512,
@@ -31,6 +32,7 @@ fuzz_target!(|data: &[u8]| {
         );
         // SHA256
         let check256 = hash_check_file(
+            "",
             &mut test_data_cursor2,
             HashSums {
                 sum_content: hash256,
