@@ -106,6 +106,7 @@ pub(crate) async fn download_file(
 }
 
 pub(crate) async fn validate_file(
+    file_name: &str,
     path: &Path,
     hash: hashing::HashSums,
     multi_progress: MultiProgress,
@@ -117,6 +118,7 @@ pub(crate) async fn validate_file(
     let hash_progress_bar = init_hash_progress(path, multi_progress).await?;
 
     if !hashing::hash_check_file(
+        file_name,
         &mut hash_progress_bar.wrap_async_read(BufReader::new(file)),
         hash,
     )
@@ -368,7 +370,7 @@ async fn download_validate_unpack(
                 sum_type: git_hash_sum.sum_type,
             };
 
-            validate_file(&file, hash_sum, multi_progress.clone()).await?;
+            validate_file(&download.file_name, &file, hash_sum, multi_progress.clone()).await?;
         }
         None => {
             println!("No sum files available, skipping");

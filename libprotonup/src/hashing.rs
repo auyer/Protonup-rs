@@ -17,14 +17,21 @@ pub enum HashSumType {
 
 /// Checks the downloaded file integrity with the sha512sum
 pub async fn hash_check_file<R: AsyncRead + Unpin + ?Sized>(
+    file_name: &str,
     reader: &mut R,
     git_hash: HashSums,
 ) -> Result<bool> {
-    // TODO: this assumes there is only one file in the checksum
-    let (expected_hash, _) = git_hash
+    // find line with the file name
+    let expeted_hash_line = git_hash
         .sum_content
-        .as_str()
+        .lines()
+        .find(|line| line.contains(file_name));
+
+    let (expected_hash, _) = expeted_hash_line
+        // if no line found with the file name, assume the content is only the sum
+        .unwrap_or(&git_hash.sum_content)
         .rsplit_once(' ')
+        // if the split fails, assume the content is only the sum without any spaces
         .unwrap_or((&git_hash.sum_content, ""));
 
     match git_hash.sum_type {
@@ -88,6 +95,7 @@ mod test {
 
         assert!(
             super::hash_check_file(
+                "",
                 &mut &test_data[..],
                 HashSums {
                     sum_content: hash,
@@ -103,6 +111,7 @@ mod test {
 
         assert!(
             super::hash_check_file(
+                "",
                 &mut &test_data[..],
                 HashSums {
                     sum_content: hash,
