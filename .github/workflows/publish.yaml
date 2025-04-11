@@ -14,6 +14,7 @@ jobs:
       actions: read # To read the workflow path.
       id-token: write # To sign the provenance.
       contents: write # To add assets to a release.
+      attestations: write # add slsa attestations
     name: "Build and Publish Release"
     outputs:
       hashes: ${{ steps.hash.outputs.hashes }}
@@ -59,13 +60,6 @@ jobs:
       - name: Run cargo build
         run: cargo build --release
 
-      # Generate the hashes for Provenance
-      - name: Generate subject
-        id: hash
-        run: |
-          set -euo pipefail
-          echo "hashes=$(sha256sum ./target/release/protonup-rs | base64 -w0)" >> "$GITHUB_OUTPUT"
-
       - name: Run cargo-deb to build a debian package
         run: cargo-deb -p protonup-rs --compress-type gzip --deb-version $CURRENT_VERSION
 
@@ -73,18 +67,20 @@ jobs:
         run: |
           cd target/debian
           alien -k --to-rpm protonup-rs_${{ env.CURRENT_VERSION }}_amd64.deb
+          # move all artifacts to the release folder
+          mv *.deb *.rpm ../release/
 
-      - name: Compress binary release artefacts
+      - name: Compress binary release artifacts
         run: |
           cd ./target/release
           zip protonup-rs-linux-amd64.zip protonup-rs
           tar -czvf protonup-rs-linux-amd64.tar.gz protonup-rs
 
-      - name: Upload Ziped,Tar gzed, DEB and RPM binaries to release
+      - name: Upload Zipped,Tar gzed, DEB and RPM binaries to release
         uses: svenstaro/upload-release-action@04733e069f2d7f7f0b4aebc4fbdbce8613b03ccd #v2.9.0
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: 'target/{release,debian}/protonup-rs**.{gz,zip,rpm,deb}'
+          file: 'target/release/protonup-rs**.{gz,zip,rpm,deb}'
           tag: v${{ env.CURRENT_VERSION }}
           overwrite: true
           file_glob: true
@@ -118,14 +114,48 @@ jobs:
             cargo publish -p protonup-rs
           fi
 
-provenance:
-  needs: [build]
-  permissions:
-    actions: read # To read the workflow path.
-    id-token: write # To sign the provenance.
-    contents: write # To add assets to a release.
-  uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@f7dd8c54c2067bafc12ca7a55595d5ee9b75204a # v2.1.0
-  with:
-    base64-subjects: "${{ needs.build.outputs.hashes }}"
-    upload-assets: true
-    upload-tag-name: v${{ env.CURRENT_VERSION }}
+      # outputs version
+      - name: Output Tag Name
+        id: published_version
+        run: |
+          set -euo pipefail
+          echo "published_version=v$CURRENT_VERSION" >> "$GITHUB_OUTPUT"
+
+      # Generate the hashes for Provenance
+      - name: Generate hashes
+        id: hash
+        run: |
+          cd target/release/
+          sha256sum $(echo *.zip *.deb *.rpm *.gz ) | base64 -w0 > sha256sums.txt
+          echo "hashes=$(cat sha256sums.txt )" >> "$GITHUB_OUTPUT"
+
+      - name: Upload sha256sums
+        uses: svenstaro/upload-release-action@04733e069f2d7f7f0b4aebc4fbdbce8613b03ccd #v2.9.0
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: 'target/release/sha256sums.txt'
+          tag: v${{ env.CURRENT_VERSION }}
+          overwrite: true
+          file_glob: true
+          draft: true
+
+      - uses: actions/attest-build-provenance@c074443f1aee8d4aeeae555aebba3282517141b2 # v2.2.3
+        with:
+          subject-path: |
+            target/release/protonup-rs*.gz
+            target/release/protonup-rs*.zip
+            target/release/protonup-rs*.deb
+            target/release/protonup-rs*.rpm
+
+  provenance:
+    needs: [release]
+    permissions:
+      actions: read # To read the workflow path.
+      id-token: write # To sign the provenance.
+      contents: write # To add assets to a release.
+      attestations: write # add slsa attestations
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0
+    with:
+      base64-subjects: "${{ needs.release.outputs.hashes }}"
+      upload-assets: true
+      upload-tag-name: ${{ needs.release.outputs.published_version }}

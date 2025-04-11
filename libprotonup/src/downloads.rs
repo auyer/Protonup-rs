@@ -1,12 +1,17 @@
 use std::path::PathBuf;
 
+use super::constants;
 use crate::apps;
-use crate::constants;
 use crate::files;
 use crate::hashing;
 use crate::sources::CompatTool;
-use anyhow::Result;
+use anyhow::{self, Context, Result};
+use futures_util::TryStreamExt;
+use reqwest::header::USER_AGENT;
 use serde::{Deserialize, Serialize};
+use tokio::io::{self, AsyncWrite};
+use tokio_util::io::StreamReader;
+
 pub type ReleaseList = Vec<Release>;
 
 pub const GITHUB_URL: &str = "https://api.github.com/repos";
@@ -54,7 +59,7 @@ impl Release {
                     sum_content: asset.browser_download_url.clone(),
                     sum_type: hashing::HashSumType::Sha256,
                 })
-            } else if compat_tool.filter_asset(asset.dowload_file_name().as_str())
+            } else if compat_tool.filter_asset(asset.download_file_name().as_str())
                 && files::check_supported_extension(asset.name.clone()).is_ok()
             {
                 download.file_name = asset.name.clone();
@@ -82,13 +87,54 @@ pub struct Asset {
 }
 
 impl Asset {
-    pub fn dowload_file_name(&self) -> String {
+    pub fn download_file_name(&self) -> String {
         self.browser_download_url
             .split('/')
             .next_back()
             .unwrap_or(&self.browser_download_url)
             .to_owned()
     }
+}
+
+/// Downloads and returns the text response
+pub async fn download_file_into_memory(url: &String) -> Result<String> {
+    let client = reqwest::Client::new();
+    let res = client
+        .get(url)
+        .header(USER_AGENT, format!("protonup-rs {}", constants::VERSION))
+        .send()
+        .await
+        .with_context(|| {
+            format!(
+                "[Download SHA] Failed to call remote server on URL : {}",
+                &url
+            )
+        })?;
+
+    res.text()
+        .await
+        .with_context(|| format!("[Download SHA] Failed to read response from URL : {}", &url))
+}
+
+/// Downloads to a AsyncWrite buffer, where hooks and Wrappers can be used to report progress
+pub async fn download_to_async_write<W: AsyncWrite + Unpin>(
+    url: &str,
+    write: &mut W,
+) -> Result<()> {
+    let client = reqwest::Client::new();
+    let res = client
+        .get(url)
+        .header(USER_AGENT, format!("protonup-rs {}", constants::VERSION))
+        .send()
+        .await
+        .with_context(|| format!("[Download] Failed to call remote server on URL : {}", &url))?;
+
+    io::copy(
+        &mut StreamReader::new(res.bytes_stream().map_err(io::Error::other)),
+        write,
+    )
+    .await?;
+    Ok(())
 }
 
 /// Returns a Vec of Releases from a GitHub repository, the URL used for the request is built from the passed in VariantParameters
@@ -112,7 +158,7 @@ pub async fn list_releases(compat_tool: &CompatTool) -> Result<ReleaseList, reqw
 pub struct Download {
     /// file name should be used to verify checksums if available
     pub file_name: String,
-    /// for what app this dowload is
+    /// for what app this download is
     pub for_app: apps::AppInstallations,
     /// the tag from the Forge
     pub version: String,

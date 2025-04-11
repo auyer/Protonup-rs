@@ -1,17 +1,32 @@
 # Protonup-rs
 
-Lib, CLI and GUI(wip) program to automate the installation and update of Proton-GE
+Lib, CLI and GUI(wip) program to automate the installation and update of Linux Gaming Compatibility tools, like ProtonGE, Luxtorpeda, Boxtron and others.
 
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/10372/badge)](https://www.bestpractices.dev/projects/10372)
 
-> **NOTE**: This has no relations with the original ProtonUp project, and I am glad it was created.
-> ~~This is not nearly as feature complete as the original Protonup~~.
+> **NOTE**: This has no relations with the original ProtonUp project, and I thankful for the original author.
 >
 > I've create it because the original project had a few issues with its Python dependencies (that most likely got fixed already).
 > I wanted to to re-create it in rust, in a way it could be used as a lib and a CLI.
-> ~~If this repo gets to a stable and feature rich state, I will publish it to Cargo and other repositories.~~ I guess it got there! Thanks!
 
 [![asciicast](https://asciinema.org/a/QZ97c4yRwQ6YczTliB1ziZy5Z.svg)](https://asciinema.org/a/QZ97c4yRwQ6YczTliB1ziZy5Z)
+
+## Currently supported tools
+
+These are the tools that are currently supported by this project.
+
+| Project Name      | GitHub Repository |
+|-------------------|-------------------|
+| GEProton          | [GloriousEggroll/proton-ge-custom](https://github.com/GloriousEggroll/proton-ge-custom) |
+| WineGE            | [GloriousEggroll/wine-ge-custom](https://github.com/GloriousEggroll/wine-ge-custom) |
+| Luxtorpeda        | [luxtorpeda-dev/luxtorpeda](https://github.com/luxtorpeda-dev/luxtorpeda) |
+| Boxtron           | [dreamer/boxtron](https://github.com/dreamer/boxtron) |
+| VKD3D-Proton      | [HansKristian-Work/vkd3d-proton](https://github.com/HansKristian-Work/vkd3d-proton) |
+| Lutris-VKD3D      | [lutris/vkd3d](https://github.com/lutris/vkd3d) |
+| DXVK              | [doitsujin/dxvk](https://github.com/doitsujin/dxvk) |
+| Kron4ek Wine      | [kron4ek/Wine-Builds](https://github.com/kron4ek/Wine-Builds) |
+
+Adding new tools should be a simple process, check the docs section below!
 
 ## Usage
 
@@ -88,18 +103,29 @@ cargo build -p protonup-rs --release
 mv ./target/release/protonup-rs "your path"
 ```
 
-## GUI
+## Docs
 
-Not ready for usage.
+Code docs available in the [docs/docs.md](./docs/docs.md) file, and default generated docs in [docs.rs/libprotonup](https://docs.rs/libprotonup/latest/libprotonup/).
 
-The GUI is in its [early stages](https://github.com/auyer/Protonup-rs/tree/feature/gui). My current plan is to develop it in the iced framework, but GUI development is not my forte.
+### Roadmap
+
+1. GUI:
+  Not ready for usage. I made a few experiments with different libs, and decided to use the iced/cosmic framework.
+  I left the [base structure](https://github.com/auyer/Protonup-rs/tree/feature/gui), and hope to get to it someday or to receive contributions.
 
 ## Feedbacks & Contributing
 
 This project accepts contributions and feedbacks from anyone.
-For feedbacks, please use GitHub Issues or Discussions. Please be polite!
+For feedbacks, please use GitHub Issues or Discussions. Please be polite ([code-of-conduct](https://www.rust-lang.org/policies/code-of-conduct)).
 
 For contributions, there aren't many rules.
 Just try to justify your changes, and try to make the pull request easy to review.
 Is is very recommended to add tests, specially for complex code.
 Thanks!
+
+### Roles and Maintainers
+
+This project is maintained only by the creator [@auyer](https://rcpassos.me)
+
+Maintaining this project does not take a lot of effort.
+The project is open to having other contributors, specially if implementing a GUI.
