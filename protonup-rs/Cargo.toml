@@ -1,6 +1,6 @@
 [package]
 name = "protonup-rs"
-version = "0.9.0-rc2"
+version = "0.9.0-rc3"
 edition = "2024"
 authors = ["Auyer <auyer@rcpassos.me>"]
 repository = "https://github.com/auyer/protonup-rs"
@@ -26,7 +26,7 @@ assets = [
 anyhow = "1.0"
 arcstr = "1.2"
 futures-util = "0.3"
-libprotonup = { path = "../libprotonup", version = "0.9.0-rc2" }
+libprotonup = { path = "../libprotonup", version = "0.9.0-rc3" }
 inquire = { version = "0.7", default-features = false, features = ["termion"] }
 indicatif = { version = "0.17", features = [
   "improved_unicode",
