@@ -43,11 +43,13 @@ impl Release {
         };
         for asset in &self.assets {
             if asset.name.contains("sha512") {
+                download.file_name = asset.name.clone();
                 download.hash_sum = Some(hashing::HashSums {
                     sum_content: asset.browser_download_url.clone(),
                     sum_type: hashing::HashSumType::Sha512,
                 })
             } else if asset.name.contains("sha256") {
+                download.file_name = asset.name.clone();
                 download.hash_sum = Some(hashing::HashSums {
                     sum_content: asset.browser_download_url.clone(),
                     sum_type: hashing::HashSumType::Sha256,
@@ -55,6 +57,7 @@ impl Release {
             } else if compat_tool.filter_asset(asset.dowload_file_name().as_str())
                 && files::check_supported_extension(asset.name.clone()).is_ok()
             {
+                download.file_name = asset.name.clone();
                 download
                     .download_url
                     .clone_from(&asset.browser_download_url);
@@ -107,6 +110,8 @@ pub async fn list_releases(compat_tool: &CompatTool) -> Result<ReleaseList, reqw
 /// Contains all the information needed to download the corresponding release from GitHub
 #[derive(Default, Debug, PartialEq, Clone)]
 pub struct Download {
+    /// file name should be used to verify checksums if available
+    pub file_name: String,
     /// for what app this dowload is
     pub for_app: apps::AppInstallations,
     /// the tag from the Forge
@@ -233,6 +238,7 @@ mod tests {
             // "GE-Proton
             (
                 Download {
+                    file_name: "GE-Proton9-27.tar.gz".to_owned(),
                     version: "GE-Proton9-27".to_owned(),
                     hash_sum: None,
                     for_app: apps::AppInstallations::Steam,
@@ -245,6 +251,7 @@ mod tests {
             // WineGE
             (
                 Download {
+                    file_name: "wine-lutris-GE-Proton8-26-x86_64.tar.xz".to_owned(),
                     version: "GE-Proton8-26".to_owned(),
                     for_app: apps::AppInstallations::Steam,
                     hash_sum: None,

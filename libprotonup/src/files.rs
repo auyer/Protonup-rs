@@ -390,6 +390,7 @@ mod test {
         );
 
         let d = Download {
+            file_name: "test".to_owned(),
             for_app: AppInstallations::Steam,
             version: "new_top_123".to_owned(),
             hash_sum: None,
