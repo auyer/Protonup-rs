@@ -697,7 +697,7 @@ dependencies = [
 
 [[package]]
 name = "libprotonup"
-version = "0.9.0-rc4"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "arcstr",
