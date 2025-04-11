@@ -54,7 +54,7 @@ impl Decompressor<BufReader<File>> {
             )
         })?;
 
-        // TODO: implement this using the same validation fuction
+        // TODO: implement this using the same validation function
         if path_str.ends_with("tar.gz") {
             Ok(Decompressor::Gzip(GzipDecoder::new(BufReader::new(file))))
         } else if path_str.ends_with("tar.xz") {

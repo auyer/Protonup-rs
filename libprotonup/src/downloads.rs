@@ -54,7 +54,7 @@ impl Release {
                     sum_content: asset.browser_download_url.clone(),
                     sum_type: hashing::HashSumType::Sha256,
                 })
-            } else if compat_tool.filter_asset(asset.dowload_file_name().as_str())
+            } else if compat_tool.filter_asset(asset.download_file_name().as_str())
                 && files::check_supported_extension(asset.name.clone()).is_ok()
             {
                 download.file_name = asset.name.clone();
@@ -82,7 +82,7 @@ pub struct Asset {
 }
 
 impl Asset {
-    pub fn dowload_file_name(&self) -> String {
+    pub fn download_file_name(&self) -> String {
         self.browser_download_url
             .split('/')
             .next_back()
