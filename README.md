@@ -103,22 +103,29 @@ cargo build -p protonup-rs --release
 mv ./target/release/protonup-rs "your path"
 ```
 
-## GUI
-
-Not ready for usage.
-
-The GUI is in its [early stages](https://github.com/auyer/Protonup-rs/tree/feature/gui). My current plan is to develop it in the iced framework, but GUI development is not my forte.
-
 ## Docs
 
 Code docs available in the [docs/docs.md](./docs/docs.md) file, and default generated docs in [docs.rs/libprotonup](https://docs.rs/libprotonup/latest/libprotonup/).
 
+### Roadmap
+
+1. GUI:
+  Not ready for usage. I made a few experiments with different libs, and decided to use the iced/cosmic framework.
+  I left the [base structure](https://github.com/auyer/Protonup-rs/tree/feature/gui), and hope to get to it someday or to receive contributions.
+
 ## Feedbacks & Contributing
 
 This project accepts contributions and feedbacks from anyone.
-For feedbacks, please use GitHub Issues or Discussions. Please be polite!
+For feedbacks, please use GitHub Issues or Discussions. Please be polite ([code-of-conduct](https://www.rust-lang.org/policies/code-of-conduct)).
 
 For contributions, there aren't many rules.
 Just try to justify your changes, and try to make the pull request easy to review.
 Is is very recommended to add tests, specially for complex code.
 Thanks!
+
+### Roles and Maintainers
+
+This project is maintained only by the creator [@auyer](https://rcpassos.me)
+
+Maintaining this project does not take a lot of effort.
+The project is open to having other contributors, specially if implementing a GUI.
