@@ -1,110 +1,199 @@
-# Protonup-rs Documentation
+# Protonup-rs/libprotonup Documentation
+
+## High Level Architectural Overview
+
+![svg drawing, made in excalidraw](./high-level-architectural-drawing.excalidraw.svg)
 
 ## Overview
 
-Protonup-rs is a Rust application that helps install and update:
+ProtonUp-rs is a tool for managing compatibility tools (like Proton, WineGE) for apps like Steam and Lutris. It handles downloading, verifying, and installing tools from GitHub repositories.
 
-- GE-Proton for Steam
-- Wine-GE for Lutris
+---
 
-It provides both a command-line interface (CLI) and a work-in-progress graphical interface (GUI).
+## Core Components
 
-## Features
+### 1. Applications (`apps` Module)
 
-- Automatic detection of Steam/Lutris installations
-- Quick update mode for automated updates
-- Management of existing Proton installations
-- Support for both native and Flatpak versions
-- Custom installation locations
+#### `App` Enum
 
-## Installation
+Represents supported applications:
 
-### Quick Install Methods
-
-1. **Desktop Installer**:
-   - Download the [installer .desktop file](https://github.com/auyer/protonup-rs/releases/latest/download/protonup-rs-install.desktop)
-   - Run the .desktop as executable
-   - Open a terminal to use `protonup-rs`
-
-2. **Command Line**:
-
-```bash
-   sh -c 'if curl -S -s -L -O --output-dir /tmp/ --connect-timeout 60 https://github.com/auyer/Protonup-rs/releases/latest/download/protonup-rs-linux-amd64.tar.gz ; then tar -xvzf /tmp/protonup-rs-linux-amd64.tar.gz -C /tmp/ && mv /tmp/protonup-rs ${HOME}/.local/bin/ && [[ "$SHELL" == *"bash"* ]] && [ "$SHELL" = "/bin/bash" ] && echo "export PATH=\"$PATH:${HOME}/.local/bin\"" >> ${HOME}/.bashrc || ([ "$SHELL" = "/bin/zsh" ] && echo "export PATH=\"$PATH:${HOME}/.local/bin\"" >> ${HOME}/.zshrc ) && rm /tmp/protonup-rs-linux-amd64.tar.gz; else echo "Something went wrong, please report this if it is a bug"; read; fi'   ```
-
-### Manual Installation
-
-1. Download the latest binary from [Releases](https://github.com/auyer/Protonup-rs/releases/latest/download/protonup-rs-linux-amd64.zip)
-2. Unzip and move to your PATH:
-
-```bash
-unzip protonup-rs-linux-amd64.zip -d /usr/local/bin #(or any other path location)
+```rust
+pub enum App {
+    Steam,
+    Lutris,
+    Custom(String)  // User-provided path
+}
 ```
 
-### From Source
+- **Key Methods**:
+  - `default_compatibility_tool()`: Returns default tool (e.g., GEProton for Steam)
+  - `detect_installation_method()`: Checks for Native/Flatpak installations
+  - `subfolder_for_tool()`: Gets tool-specific subfolder (e.g., "runners/wine" for Lutris Wine tools)
 
-```bash
-# From crates.io
-cargo install protonup-rs
+#### `AppInstallations` Enum
 
-# From repository
-git clone https://github.com/auyer/protonup-rs
-cd protonup-rs
-cargo build -p protonup-rs --release
-mv ./target/release/protonup-rs /usr/local/bin #(or any other path location)
+Tracks installation variants:
+
+```rust
+pub enum AppInstallations {
+    Steam, SteamFlatpak,
+    Lutris, LutrisFlatpak,
+    Custom(String)
+}
 ```
 
-## Usage
+- **Key Methods**:
+  - `installation_dir()`: Builds full path for tool installation
+  - `list_installed_versions()`: Lists installed tool versions
+  - `app_base_dir()`: Returns root directory (e.g., `~/.steam/steam`)
 
-### Basic Usage
 
-Run the interactive menu:
+Adding support to new tools should be a simple process.
+If it has a default installation folder, the existing methods should work to detect it.
 
-```bash
-protonup-rs
+---
+
+### 2. Compatibility Tools (`sources` Module)
+
+#### `CompatTool` Struct
+
+Defines compatibility tool sources:
+
+```rust
+pub struct CompatTool {
+    pub name: String,               // e.g., "GEProton"
+    pub forge: Forge,               // Source (GitHub)
+    pub repository_account: String, // "GloriousEggroll"
+    pub repository_name: String,    // "proton-ge-custom"
+    pub tool_type: ToolType,        // WineBased/Runtime
+    // ... other fields
+}
 ```
 
-### Quick Update Mode
+- **Key Methods**:
+  - `installation_name()`: Processes version strings (e.g., "v1.5" → "dxvk-1.5")
+  - `filter_asset()`: Matches release assets using regex
 
-Automatically detect apps and download updates:
+**Preconfigured Tools**:
 
-```bash
-protonup-rs -q
+- GEProton, WineGE, Luxtorpeda, Boxtron, DXVK, etc.
+
+Adding new tools should be a simple process. All data related to them are stored in the `sources.ron` file.
+Functionality like templating is optional, and not necessary for all tools.
+
+---
+
+### 3. Release Handling (`downloads` Module)
+
+#### `Release` Struct
+
+```rust
+pub struct Release {
+    pub tag_name: String,  // Version tag
+    pub assets: Vec<Asset> // Downloadable files
+}
 ```
 
-Force install existing apps during quick downloads:
+- `get_download_info()`: Creates `Download` object with URLs and hashes
 
-```bash
-protonup-rs -q --force
+#### `Download` Struct
+
+```rust
+pub struct Download {
+    pub file_name: String,
+    pub download_url: String,
+    pub hash_sum: Option<HashSums>, // SHA256/512
+    // ... other fields
+}
 ```
 
-### Menu Options
+**Key Functions**:
 
-1. **Quick Update**: Auto-detect apps and download
-2. **Download for Steam**: Install GE-Proton specifically for Steam
-3. **Download for Lutris**: Install Wine-GE/GE-Proton for Lutris
-4. **Custom Location**: Install to a custom directory
-5. **Manage Installations**: View and manage existing Proton versions
+- `list_releases()`: Fetches GitHub releases
+- `download_to_async_write()`: Downloads with progress tracking
 
-## External Interactions
+---
 
-This software relies on the [github.com/GloriousEggroll/proton-ge-custom](https://github.com/GloriousEggroll/proton-ge-custom) project repository to be available.
-We should make it possible to add custom repositories, but this is not necessary at the moment.
+### 4. File Operations (`files` Module)
 
-## Development
+**Key Features**:
 
-### Building
+- **Decompression**: Supports `.tar.gz`, `.tar.xz`, `.tar.zst`
+- **Directory Management**:
 
-1. Clone the repository
-2. Build with Cargo:
+  ```rust
+  async fn list_folders_in_path(path: &PathBuf) -> Result<Vec<String>>
+  async fn remove_dir_all(path: &PathBuf) -> Result<()>
+  ```
 
-   ```bash
-   cargo build --release -p protonup-rs
+- **Installation**:
+
+  ```rust
+  async fn unpack_file(reader: impl AsyncRead, install_path: &Path)
+  ```
+
+---
+
+### 5. Security (`hashing` Module)
+
+**Hash Verification**:
+
+```rust
+pub async fn hash_check_file(
+    file_name: &str,
+    file: &mut impl AsyncRead,
+    git_hash: HashSums
+) -> Result<bool>
+```
+
+- Supports SHA-256 and SHA-512
+- Automatically verifies against checksum files from GitHub
+
+---
+
+## Utilities
+
+### Path Expansion
+
+```rust
+utils::expand_tilde("~/.steam") // => "/home/user/.steam"
+```
+
+### Constants
+
+```rust
+pub const DEFAULT_STEAM_TOOL: &str = "GEProton";
+pub const DEFAULT_LUTRIS_TOOL: &str = "WineGE";
+pub const USER_AGENT: &str = "protoup-rs/vX.Y.Z";
+```
+
+---
+
+## Workflow Example
+
+1. **Detect Installed Apps**:
+
+   ```rust
+   let installed = list_installed_apps().await;
+   // e.g., [AppInstallations::Steam]
    ```
 
-### GUI Development
+2. **Fetch Releases**:
 
-The GUI is currently in early development using the Iced framework. Contributions are welcome!
+   ```rust
+   let releases = list_releases(&compat_tool).await?;
+   ```
 
-## Contributing
+3. **Download & Verify**:
 
-Contributions are welcome! Please open issues or pull requests on GitHub.
+   ```rust
+   download_to_async_write(&url, &mut file).await?;
+   hash_check_file(file_name, &mut file, expected_hash).await?;
+   ```
+
+4. **Install**:
+
+   ```rust
+   unpack_file(reader, install_path).await?;
+   ```

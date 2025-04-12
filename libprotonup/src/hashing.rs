@@ -22,12 +22,12 @@ pub async fn hash_check_file<R: AsyncRead + Unpin + ?Sized>(
     git_hash: HashSums,
 ) -> Result<bool> {
     // find line with the file name
-    let expeted_hash_line = git_hash
+    let expected_hash_line = git_hash
         .sum_content
         .lines()
         .find(|line| line.contains(file_name));
 
-    let (expected_hash, _) = expeted_hash_line
+    let (expected_hash, _) = expected_hash_line
         // if no line found with the file name, assume the content is only the sum
         .unwrap_or(&git_hash.sum_content)
         .rsplit_once(' ')

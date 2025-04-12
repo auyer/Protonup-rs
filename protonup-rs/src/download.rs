@@ -89,7 +89,7 @@ pub(crate) async fn download_file(
     let download_progress_bar =
         init_download_progress(download, &output_dir, multi_progress.clone()).await;
 
-    files::download_to_async_write(
+    downloads::download_to_async_write(
         &download.download_url,
         &mut download_progress_bar.wrap_async_write(file),
     )
@@ -296,17 +296,17 @@ pub async fn download_to_selected_app(app: Option<apps::App>) -> Result<Vec<Rele
                 vec![]
             }),
         )
-        .filter_map(|relese| async {
+        .filter_map(|release| async {
             if should_download(
-                &relese,
+                &release,
                 &mut app_inst
                     .installation_dir(&selected_tool)
                     .unwrap()
-                    .join(selected_tool.installation_name(&relese.tag_name)),
+                    .join(selected_tool.installation_name(&release.tag_name)),
             )
             .await
             {
-                Some(relese)
+                Some(release)
             } else {
                 None
             }
@@ -357,7 +357,7 @@ async fn download_validate_unpack(
         })?;
     match download.hash_sum {
         Some(git_hash_sum) => {
-            let hash_content = &files::download_file_into_memory(&git_hash_sum.sum_content)
+            let hash_content = &downloads::download_file_into_memory(&git_hash_sum.sum_content)
                 .await
                 .with_context(|| {
                     format!(

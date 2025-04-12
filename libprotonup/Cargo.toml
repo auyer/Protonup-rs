@@ -1,11 +1,11 @@
 [package]
 name = "libprotonup"
-version = "0.8.6"
+version = "0.9.0"
 edition = "2024"
 authors = ["Auyer <auyer@rcpassos.me>"]
 repository = "https://github.com/auyer/protonup-rs"
 license = "Apache-2.0"
-readme = "../README.md"
+readme = "../docs/docs.md"
 
 description = "Library for Custom Proton Download and installation"
 
@@ -28,14 +28,14 @@ sha2 = "0.10"
 tokio = { version = "1.44", features = ["macros"] }
 tokio-stream = { version = "0.1", features = ["fs"] }
 tokio-util = "0.7"
-ron = "0.9.0"
+ron = "0.10"
 lazy_static = "1.5.0"
 # decompression
 tokio-tar = "0.3"
 async-compression = { version = "0.4", features = ['gzip', 'xz', 'zstd', 'tokio'] }
 tempfile = "3.19"
-regex = "1.11.1"
+regex = "1.11"
 
 [dev-dependencies]
-tar = "0.4.44"
+tar = "0.4"
 tokio = { version = "1.44", features = ["macros", "rt"] }

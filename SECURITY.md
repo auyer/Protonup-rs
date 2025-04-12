@@ -8,7 +8,7 @@ Due to its low risk nature, there are very few attack vectors that could take pl
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 0.8.x   | :white_check_mark: |
+| 0.9.x   | :white_check_mark: |
 
 ## Reporting a Vulnerability
 
