@@ -132,8 +132,8 @@ jobs:
         id: hash
         run: |
           cd target/release/
-          sha256sum $(echo *.zip *.deb *.rpm *.gz ) | base64 -w0 > sha256sums.txt
-          echo "hashes=$(cat sha256sums.txt )" >> "$GITHUB_OUTPUT"
+          sha256sum $(echo *.zip *.deb *.rpm *.gz ) > sha256sums.txt
+          echo "hashes=$(cat sha256sums.txt | base64 -w0 )" >> "$GITHUB_OUTPUT"
 
       - name: Upload sha256sums
         uses: svenstaro/upload-release-action@04733e069f2d7f7f0b4aebc4fbdbce8613b03ccd #v2.9.0
