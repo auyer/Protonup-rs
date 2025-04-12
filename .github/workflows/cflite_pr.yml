@@ -2,7 +2,12 @@ name: ClusterFuzzLite PR fuzzing
 on:
   pull_request:
     paths:
-      - '**'
+      - 'protonup-rs/**'
+      - 'libprotonup/**'
+      - 'fuzz/**'
+      - 'Cargo.lock'
+      - 'Cargo.toml'
+
 permissions: read-all
 jobs:
   PR:
