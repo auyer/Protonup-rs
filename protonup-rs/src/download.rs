@@ -409,7 +409,7 @@ async fn download_validate_unpack(
 
     unpack_progress_bar.set_style(get_message_bar_style().await);
     unpack_progress_bar.finish_with_message(format!(
-        "Done! {} installed in {}{}\nYour app might require a restart to detect {}",
+        "Done! {} installed in {}/{}\nYour app might require a restart to detect {}",
         compat_tool,
         download
             .for_app
