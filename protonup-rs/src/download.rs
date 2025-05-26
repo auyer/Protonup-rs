@@ -1,9 +1,9 @@
-use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, anyhow, bail};
 use futures_util::stream::FuturesUnordered;
 use futures_util::{StreamExt, future, stream};
 use indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle};
 use inquire::{Select, Text};
+use std::path::{Path, PathBuf};
 use tokio::fs;
 use tokio::fs::{File, OpenOptions};
 use tokio::io::BufReader;
@@ -318,12 +318,16 @@ pub async fn download_to_selected_app(app: Option<apps::App>) -> Result<Vec<Rele
         let progress = multi_progress.clone();
         let tool = selected_tool.clone();
         let app_inst = app_inst.clone();
-        tokio::spawn(async move {
-            download_validate_unpack(release, app_inst, tool, progress).await
-        })
+        tokio::spawn(
+            async move { download_validate_unpack(release, app_inst, tool, progress).await },
+        )
     });
 
-    for task in tasks.collect::<FuturesUnordered<_>>().collect::<Vec<_>>().await {
+    for task in tasks
+        .collect::<FuturesUnordered<_>>()
+        .collect::<Vec<_>>()
+        .await
+    {
         let err: Option<anyhow::Error> = match task {
             Ok(Ok(())) => None,
             Ok(Err(e)) => Some(e),
