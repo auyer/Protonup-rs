@@ -2,7 +2,7 @@ use clap::Parser;
 
 use inquire::Select;
 
-use std::fmt;
+use std::{fmt, process::exit};
 
 use libprotonup::apps::App;
 
@@ -99,9 +99,15 @@ async fn main() {
         }
     };
 
-    if let Ok(releases) = releases {
-        for release in releases {
-            println!("Installed {}", release.tag_name);
+    match releases {
+        Ok(releases) => {
+            for release in releases {
+                println!("Installed {}", release.tag_name);
+            }
+        }
+        Err(e) => {
+            eprintln!("{}", e);
+            exit(1);
         }
     }
 }

@@ -67,6 +67,7 @@ impl Release {
                     .download_url
                     .clone_from(&asset.browser_download_url);
                 download.size = asset.size as u64;
+                break;
             }
         }
         download
