@@ -133,10 +133,10 @@ impl AppInstallations {
     pub fn default_install_dir(&self) -> ArcStr {
         match self {
             Self::Steam => {
-                arcstr::ArcStr::from(format!("{}/compatibilitytools.d/", self.app_base_dir()))
+                arcstr::ArcStr::from(format!("{}compatibilitytools.d/", self.app_base_dir()))
             }
             Self::SteamFlatpak => {
-                arcstr::ArcStr::from(format!("{}/compatibilitytools.d/", self.app_base_dir()))
+                arcstr::ArcStr::from(format!("{}compatibilitytools.d/", self.app_base_dir()))
             }
             Self::Lutris => self.app_base_dir(),
             Self::LutrisFlatpak => self.app_base_dir(),

@@ -1,10 +1,9 @@
-use std::path::{Path, PathBuf};
-
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Context, Result, anyhow, bail};
 use futures_util::stream::FuturesUnordered;
 use futures_util::{StreamExt, future, stream};
 use indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle};
 use inquire::{Select, Text};
+use std::path::{Path, PathBuf};
 use tokio::fs;
 use tokio::fs::{File, OpenOptions};
 use tokio::io::BufReader;
@@ -124,10 +123,7 @@ pub(crate) async fn validate_file(
     )
     .await?
     {
-        return Err(anyhow::Error::msg(format!(
-            "{} failed validation",
-            path.display()
-        )));
+        bail!("{} failed validation", path.display());
     }
 
     hash_progress_bar.set_style(get_message_bar_style().await);
@@ -317,24 +313,32 @@ pub async fn download_to_selected_app(app: Option<apps::App>) -> Result<Vec<Rele
 
     let multi_progress = MultiProgress::with_draw_target(ProgressDrawTarget::stderr_with_hz(20));
 
-    stream::iter(releases.clone())
-        .map(|release| {
-            let progress = multi_progress.clone();
-            let tool = selected_tool.clone();
-            let app_inst = app_inst.clone();
-            tokio::spawn(async move {
-                download_validate_unpack(release, app_inst, tool, progress).await
-            })
-        })
+    let tasks = releases.iter().map(|release| {
+        let release = release.clone();
+        let progress = multi_progress.clone();
+        let tool = selected_tool.clone();
+        let app_inst = app_inst.clone();
+        tokio::spawn(
+            async move { download_validate_unpack(release, app_inst, tool, progress).await },
+        )
+    });
+
+    for task in tasks
         .collect::<FuturesUnordered<_>>()
+        .collect::<Vec<_>>()
         .await
-        .for_each(|res| {
-            if let Err(e) = res {
-                multi_progress.println(format!("{}", e)).unwrap();
-            }
-            future::ready(())
-        })
-        .await;
+    {
+        let err: Option<anyhow::Error> = match task {
+            Ok(Ok(())) => None,
+            Ok(Err(e)) => Some(e),
+            Err(join_err) => Some(anyhow!(join_err)),
+        };
+
+        if let Some(e) = err {
+            eprintln!("{}", e);
+            return Err(anyhow!("Installation failed with Error"));
+        }
+    }
 
     Ok(releases)
 }
@@ -409,7 +413,7 @@ async fn download_validate_unpack(
 
     unpack_progress_bar.set_style(get_message_bar_style().await);
     unpack_progress_bar.finish_with_message(format!(
-        "Done! {} installed in {}{}\nYour app might require a restart to detect {}",
+        "Done! {} installed in {}/{}\nYour app might require a restart to detect {}",
         compat_tool,
         download
             .for_app
