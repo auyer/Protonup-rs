@@ -189,8 +189,7 @@ mod tests {
             let actual = s.filter_asset(input.to_owned());
             assert_eq!(
                 actual, *expected,
-                "Regex test failed for input: '{}'. Expected {}, got {}",
-                input, expected, actual
+                "Regex test failed for input: '{input}'. Expected {expected}, got {actual}"
             );
         }
     }

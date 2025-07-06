@@ -218,16 +218,14 @@ mod tests {
 
             assert!(
                 result.is_ok(),
-                "case : '{}' test: list_releases returned error",
-                desc
+                "case : '{desc}' test: list_releases returned error"
             );
 
             let result = result.unwrap();
 
             assert!(
                 result.len() > 1,
-                "case : '{}' test: test_list_releases returned an empty list",
-                desc
+                "case : '{desc}' test: test_list_releases returned an empty list"
             );
         }
     }
@@ -239,7 +237,7 @@ mod tests {
         let client = match reqwest::Client::builder().user_agent(agent).build() {
             Ok(client) => client,
             Err(e) => {
-                eprintln!("Error: {}", e);
+                eprintln!("Error: {e}");
                 std::process::exit(1)
             }
         };
@@ -263,7 +261,7 @@ mod tests {
             let rel = match client.get(url).send().await {
                 Ok(res) => res,
                 Err(e) => {
-                    panic!("Error: {}", e);
+                    panic!("Error: {e}");
                 }
             }
             .json::<Release>()
@@ -271,8 +269,7 @@ mod tests {
 
             assert!(
                 rel.is_ok(),
-                "case : '{}' test: test_get_release wrong",
-                desc
+                "case : '{desc}' test: test_get_release wrong"
             );
         }
     }
@@ -312,10 +309,10 @@ mod tests {
 
         for (input, compat_tool, expected) in test_cases {
             let output = compat_tool.installation_name(&input.version);
-            println!("Input: {:#?}", input);
-            println!("Output: {:?}", output);
-            println!("Expected: {:?}", expected);
-            assert!(output == expected, "{} Should match: {}", output, expected);
+            println!("Input: {input:#?}");
+            println!("Output: {output:?}");
+            println!("Expected: {expected:?}");
+            assert!(output == expected, "{output} Should match: {expected}");
         }
     }
 }

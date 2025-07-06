@@ -26,7 +26,7 @@ impl fmt::Display for ManageAppsMenuOptions {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match &self {
             Self::DetectAll => write!(f, "Detect All"),
-            Self::AppInstallations(app_inst) => write!(f, "{}", app_inst),
+            Self::AppInstallations(app_inst) => write!(f, "{app_inst}"),
         }
     }
 }
@@ -67,28 +67,28 @@ pub(crate) async fn manage_apps_routine() {
         let versions = match app.list_installed_versions().await {
             Ok(versions) => versions,
             Err(_) => {
-                println!("App {} not found in your system, skipping... ", app);
+                println!("App {app} not found in your system, skipping... ");
                 continue;
             }
         };
         if versions.is_empty() {
-            println!("No versions found for {}, skipping... ", app);
+            println!("No versions found for {app}, skipping... ");
             continue;
         }
         let delete_versions = multiple_select_menu(
-            &format!("Select the versions you want to DELETE from {}", app),
+            &format!("Select the versions you want to DELETE from {app}"),
             versions,
         )
         .unwrap_or_else(|_| vec![]);
 
         if delete_versions.is_empty() {
-            println!("Zero versions selected for {}, skipping...\n", app);
+            println!("Zero versions selected for {app}, skipping...\n");
             continue;
         }
         let delete_versions = Folders(delete_versions);
         if confirm_menu(
-            format!("Are you sure you want to delete {} ?", delete_versions),
-            format!("If you choose yes, you will them from {}", app),
+            format!("Are you sure you want to delete {delete_versions} ?"),
+            format!("If you choose yes, you will them from {app}"),
             true,
         ) {
             for version in delete_versions.0 {

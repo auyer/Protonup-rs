@@ -111,7 +111,7 @@ impl fmt::Display for AppInstallations {
             Self::SteamFlatpak => write!(f, "Steam Flatpak"),
             Self::Lutris => write!(f, "Lutris \"Native\""),
             Self::LutrisFlatpak => write!(f, "Lutris Flatpak"),
-            Self::Custom(path) => write!(f, "Custom: {}", path),
+            Self::Custom(path) => write!(f, "Custom: {path}"),
         }
     }
 }
