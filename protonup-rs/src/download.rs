@@ -167,8 +167,7 @@ pub async fn run_quick_downloads(force: bool) -> Result<Vec<Release>> {
             Ok(mut release_list) => release_list.remove(0),
             Err(e) => {
                 eprintln!(
-                    "Failed to fetch data, make sure you're connected to the internet.\nError: {}",
-                    e
+                    "Failed to fetch data, make sure you're connected to the internet.\nError: {e}"
                 );
                 std::process::exit(1)
             }
@@ -194,7 +193,7 @@ pub async fn run_quick_downloads(force: bool) -> Result<Vec<Release>> {
     joins
         .for_each(|res| {
             if let Err(e) = res {
-                multi_progress.println(format!("{}", e)).unwrap();
+                multi_progress.println(format!("{e}")).unwrap();
             }
             future::ready(())
         })
@@ -274,8 +273,7 @@ pub async fn download_to_selected_app(app: Option<apps::App>) -> Result<Vec<Rele
             Ok(data) => data,
             Err(e) => {
                 eprintln!(
-                    "Failed to fetch data, make sure you're connected to the internet.\nError: {}",
-                    e
+                    "Failed to fetch data, make sure you're connected to the internet.\nError: {e}"
                 );
                 std::process::exit(1)
             }
@@ -288,7 +286,7 @@ pub async fn download_to_selected_app(app: Option<apps::App>) -> Result<Vec<Rele
                 release_list,
             )
             .unwrap_or_else(|e| {
-                eprintln!("The tag list could not be processed.\nError: {}", e);
+                eprintln!("The tag list could not be processed.\nError: {e}");
                 vec![]
             }),
         )
@@ -335,7 +333,7 @@ pub async fn download_to_selected_app(app: Option<apps::App>) -> Result<Vec<Rele
         };
 
         if let Some(e) = err {
-            eprintln!("{}", e);
+            eprintln!("{e}");
             return Err(anyhow!("Installation failed with Error"));
         }
     }

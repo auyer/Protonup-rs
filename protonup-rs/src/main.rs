@@ -106,7 +106,7 @@ async fn main() {
             }
         }
         Err(e) => {
-            eprintln!("{}", e);
+            eprintln!("{e}");
             exit(1);
         }
     }

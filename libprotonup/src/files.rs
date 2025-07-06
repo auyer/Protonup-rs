@@ -212,7 +212,7 @@ impl fmt::Display for Folders {
             if i > 0 {
                 write!(f, ", ")?;
             }
-            write!(f, "{}", folder)?;
+            write!(f, "{folder}")?;
         }
         Ok(())
     }
