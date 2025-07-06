@@ -267,10 +267,7 @@ mod tests {
             .json::<Release>()
             .await;
 
-            assert!(
-                rel.is_ok(),
-                "case : '{desc}' test: test_get_release wrong"
-            );
+            assert!(rel.is_ok(), "case : '{desc}' test: test_get_release wrong");
         }
     }
 
