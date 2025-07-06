@@ -5,6 +5,7 @@
         repository_account: "GloriousEggroll",
         repository_name: "proton-ge-custom",
         tool_type: WineBased,
+        release_asset_filter : Some(r"^(GE-Proton|Proton-)[0-9]+(-[0-9]+)?(\.\d+(\.\d+)?)?(-GE-\d+)?\.(tar\.gz|tar\.zst)$"),
         compatible_applications: [Steam, Lutris],
     ),
     (

@@ -193,4 +193,49 @@ mod tests {
             );
         }
     }
+
+    const TEST_CASES_PROTONGE: &[(&str, bool)] = &[
+        // --- Valid Cases ---
+        ("GE-Proton10-8.tar.gz", true),
+        ("GE-Proton10-8.tar.zst", true),
+        ("GE-Proton9-24.tar.gz", true),
+        ("GE-Proton-2.tar.gz", false), // not a real version, but should be flexible
+        ("Proton-4.20-GE-1.tar.gz", true),
+        ("Proton-6.1-GE-2.tar.gz", true),
+        // --- Invalid Cases ---
+        ("", false),                         // Empty string
+        ("GE-Proton-1.2.3.4.tar.gz", false), // Too many version parts
+        ("GE-Proton-1.2 .tar.gz", false),    // Space in version part
+        ("GE-Proton-1..tar.gz", false),      // Double dot variant
+        ("GE-Proton-1.2.", false),           // Wrong suffix / incomplete
+        (".tar.gz", false),                  // Missing prefix and version
+        ("GE-Proton-", false),               // Missing version and suffix
+        ("GE-Proton9-24.sha512sum", false),  // checksum file
+    ];
+
+    #[test]
+    fn test_is_protonge_archive_name_regex_table() {
+        let empty = "".to_owned();
+        // example regex for GE-Proton
+        let regex =
+            r"^(GE-Proton|Proton-)[0-9]+(-[0-9]+)?(\.\d+(\.\d+)?)?(-GE-\d+)?\.(tar\.gz|tar\.zst)$";
+
+        for (input, expected) in TEST_CASES_PROTONGE {
+            let s = CompatTool::new_custom(
+                empty.clone(),
+                Forge::GitHub,
+                empty.clone(),
+                empty.clone(),
+                ToolType::Runtime,
+                Some(regex.to_owned()),
+                None,
+                None,
+            );
+            let actual = s.filter_asset(input.to_owned());
+            assert_eq!(
+                actual, *expected,
+                "Regex test failed for input: '{input}'. Expected {expected}, got {actual}"
+            );
+        }
+    }
 }
