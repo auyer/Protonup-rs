@@ -176,7 +176,7 @@ impl Download {
     pub fn download_dir(&self) -> Result<PathBuf> {
         let mut output_dir = tempfile::tempdir()
             .expect("Failed to create tempdir")
-            .into_path();
+            .keep();
 
         match files::check_supported_extension(self.download_url.clone()) {
             Ok(ext) => {
