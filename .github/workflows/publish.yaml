@@ -49,7 +49,7 @@ jobs:
         run: |
           set -o pipefail
           # retrieve available versions in crates.io api to skip upload if it was published already
-          published_versions=$( curl -s --fail 'https://crates.io/api/v1/crates/libprotonup' -H 'Accept: */*' |  jq '.versions[].num' )
+          published_versions=$( curl -s --fail -A "github.com/auyer/Protonup-rs curl release workflow" 'https://crates.io/api/v1/crates/libprotonup' -H 'Accept: */*' |  jq '.versions[].num' )
           exists=false
           echo "known versions:"
           echo $published_versions
@@ -113,7 +113,7 @@ jobs:
         run: |
           set -o pipefail
           # retrieve available versions in crates.io api to skip upload if it was published already
-          published_versions=$( curl -s --fail 'https://crates.io/api/v1/crates/Protonup-rs'  -H 'Accept: */*' |  jq '.versions[].num' )
+          published_versions=$( curl -s --fail -A "github.com/auyer/Protonup-rs curl release workflow" 'https://crates.io/api/v1/crates/Protonup-rs'  -H 'Accept: */*' |  jq '.versions[].num' )
           exists=false
           echo "known versions:"
           echo $published_versions
