@@ -1,6 +1,6 @@
 [package]
 name = "protonup-rs"
-version = "0.9.1"
+version = "0.9.2"
 edition = "2024"
 authors = ["Auyer <auyer@rcpassos.me>"]
 repository = "https://github.com/auyer/protonup-rs"
@@ -26,12 +26,12 @@ assets = [
 anyhow = "1.0"
 arcstr = "1.2"
 futures-util = "0.3"
-libprotonup = { path = "../libprotonup", version = "0.9.1" }
-inquire = { version = "0.7", default-features = false, features = ["termion"] }
+libprotonup = { path = "../libprotonup", version = "0.9.2" }
+inquire = { version = "0.9", default-features = false, features = ["termion"] }
 indicatif = { version = "0.18", features = [
   "improved_unicode",
   "unicode-segmentation",
   "tokio",
 ] }
-tokio = { version = "1.46", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1.48", features = ["macros", "rt-multi-thread"] }
 clap = { version = "4.5", features = ["derive"] }
