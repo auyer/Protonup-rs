@@ -140,25 +140,36 @@ async fn decompress_with_new_top_level<R: AsyncRead + Unpin>(
         // Create the new path by replacing the top level
         let new_path = if path.parent().is_some() {
             let components: Vec<_> = path.components().collect();
-            // skip len 1, it corresponds to the top level itself
+
             if components.len() > 1 {
                 let mut new_path = PathBuf::from(destination_path).join(new_top_level);
+                // skip len 1, it corresponds to the top level itself
+                // we will provide a new top level
                 for component in components.iter().skip(1) {
                     new_path.push(component);
                 }
                 new_path
             } else {
-                PathBuf::from(destination_path)
-                    .join(new_top_level)
-                    .join(path.file_name().unwrap())
+                // if the file name is the new top-level, ignore it
+                if path.starts_with(new_top_level) {
+                    PathBuf::from(destination_path).join(path.file_name().unwrap())
+                } else {
+                    PathBuf::from(destination_path)
+                        .join(new_top_level)
+                        .join(path.file_name().unwrap())
+                }
             }
         } else {
             PathBuf::from(destination_path)
                 .join(new_top_level)
-                .join(path)
+                .join(&path)
         };
 
-        // Create parent directories if needed
+        if path.is_dir() {
+            fs::create_dir_all(&new_path).await?;
+            continue;
+        }
+
         if let Some(parent) = new_path.parent() {
             fs::create_dir_all(parent).await?;
         }
