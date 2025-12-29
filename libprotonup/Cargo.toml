@@ -28,12 +28,12 @@ sha2 = "0.10"
 tokio = { version = "1.48", features = ["macros"] }
 tokio-stream = { version = "0.1", features = ["fs"] }
 tokio-util = "0.7"
-ron = "0.11"
+ron = "0.12"
 lazy_static = "1.5.0"
 # decompression
 astral-tokio-tar = "0.5.6"
 async-compression = { version = "0.4", features = ['gzip', 'xz', 'zstd', 'tokio'] }
-tempfile = "3.23"
+tempfile = "3.24"
 regex = "1.12"
 
 [dev-dependencies]
