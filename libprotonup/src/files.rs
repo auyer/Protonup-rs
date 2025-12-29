@@ -12,7 +12,7 @@ use tokio::fs::File;
 use tokio::io::{AsyncBufRead, AsyncRead, BufReader, ReadBuf};
 use tokio::{fs, io, pin};
 use tokio_stream::wrappers::ReadDirStream;
-use tokio_tar::Archive;
+use tokio_tar::ArchiveBuilder;
 
 use crate::downloads::Download;
 use crate::sources::CompatTool;
@@ -120,7 +120,13 @@ async fn decompress_with_new_top_level<R: AsyncRead + Unpin>(
     destination_path: &Path,
     new_top_level: &str,
 ) -> Result<()> {
-    let mut archive = Archive::new(reader);
+    let mut archive = ArchiveBuilder::new(reader)
+        .set_unpack_xattrs(false)
+        .set_preserve_permissions(true)
+        .set_preserve_mtime(true)
+        .set_overwrite(true)
+        .set_ignore_zeros(false)
+        .build();
 
     // Get the entries from the archive
     let mut entries = archive.entries()?;
