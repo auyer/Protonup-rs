@@ -75,4 +75,13 @@
         release_asset_filter : Some(r"^wine-\d+\.\d+(?:\.\d+)?-amd64\.tar\.xz$"),
         file_name_template: Some("kron4ek-wine-{version}")
     ),
+    (
+        name: "GEProton RTSP",
+        forge: GitHub,
+        repository_account: "SpookySkeletons",
+        repository_name: "proton-ge-rtsp",
+        tool_type: WineBased,
+        release_asset_filter : Some(r"^(GE-Proton|Proton-)[0-9]+(-[0-9]+)?-(rtsp)-?(\d+(-\d+)?)?\.(tar\.gz|tar\.zst)$"),
+        compatible_applications: [Steam],
+    ),
 ]
