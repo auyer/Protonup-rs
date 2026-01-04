@@ -25,6 +25,7 @@ These are the tools that are currently supported by this project.
 | Lutris-VKD3D      | [lutris/vkd3d](https://github.com/lutris/vkd3d) |
 | DXVK              | [doitsujin/dxvk](https://github.com/doitsujin/dxvk) |
 | Kron4ek Wine      | [kron4ek/Wine-Builds](https://github.com/kron4ek/Wine-Builds) |
+| GEProton-rtsp     | [SpookySkeletons/proton-ge-rtsp](https://github.com/SpookySkeletons/proton-ge-rtsp) |
 
 Adding new tools should be a simple process, check the docs section below!
 
