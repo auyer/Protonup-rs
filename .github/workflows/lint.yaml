@@ -39,6 +39,6 @@ jobs:
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
 
       - name: Writes changes in the local checkout
-        uses: crate-ci/1a319b54cc9e3b333fed6a5c88ba1a90324da514 # v1.40.1
+        uses: crate-ci/typos@1a319b54cc9e3b333fed6a5c88ba1a90324da514 # v1.40.1
         with:
           write_changes: true
