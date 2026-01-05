@@ -48,7 +48,6 @@ pub enum AppInstallations {
   - `list_installed_versions()`: Lists installed tool versions
   - `app_base_dir()`: Returns root directory (e.g., `~/.steam/steam`)
 
-
 Adding support to new tools should be a simple process.
 If it has a default installation folder, the existing methods should work to detect it.
 
@@ -79,7 +78,7 @@ pub struct CompatTool {
 
 - GEProton, WineGE, Luxtorpeda, Boxtron, DXVK, etc.
 
-Adding new tools should be a simple process. All data related to them are stored in the `sources.ron` file.
+Adding new tools should be a simple process. All data related to them are stored in the [sources.ron](libprotonup/src/sources.ron) file.
 Functionality like templating is optional, and not necessary for all tools.
 
 ---
