@@ -60,7 +60,7 @@ impl Release {
                     sum_type: hashing::HashSumType::Sha256,
                 })
             } else if compat_tool.filter_asset(asset.download_file_name().as_str())
-                && files::check_supported_extension(asset.name.clone()).is_ok()
+                && files::check_supported_extension(&asset.name).is_ok()
             {
                 download.file_name = asset.name.clone();
                 download
@@ -151,6 +151,19 @@ pub async fn list_releases(compat_tool: &CompatTool) -> Result<ReleaseList, reqw
 
     let r_list: ReleaseList = client.get(url).send().await?.json().await?;
 
+    // filter releases without assets
+    let r_list: ReleaseList = r_list
+        .into_iter()
+        .filter(|rel| {
+            !rel.assets.is_empty()
+                // same logic used when creating the Release object
+                && (rel.assets.iter().any(|asset| {
+                    compat_tool.filter_asset(asset.download_file_name().as_str())
+                        && files::check_supported_extension(&asset.name).is_ok()
+                }))
+        })
+        .collect();
+
     Ok(r_list)
 }
 
@@ -178,7 +191,7 @@ impl Download {
             .expect("Failed to create tempdir")
             .keep();
 
-        match files::check_supported_extension(self.download_url.clone()) {
+        match files::check_supported_extension(&self.download_url) {
             Ok(ext) => {
                 output_dir.push(format!("{}.{}", &self.version, ext));
                 Ok(output_dir)
