@@ -48,6 +48,17 @@ pub struct CompatTool {
 /// in a not yet supported forge
 pub enum Forge {
     GitHub,
+    Custom(String),
+}
+
+impl Forge {
+    // A method to get the static string slice for the enum variant
+    pub fn get_url(&self) -> &str {
+        match self {
+            Forge::GitHub => "https://api.github.com/repos",
+            Forge::Custom(url) => url,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

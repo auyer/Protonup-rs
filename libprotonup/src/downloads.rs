@@ -14,8 +14,6 @@ use tokio_util::io::StreamReader;
 
 pub type ReleaseList = Vec<Release>;
 
-pub const GITHUB_URL: &str = "https://api.github.com/repos";
-
 /// Contains the information from one of the releases on GitHub
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Release {
@@ -144,7 +142,9 @@ pub async fn list_releases(compat_tool: &CompatTool) -> Result<ReleaseList, reqw
 
     let url = format!(
         "{}/{}/{}/releases",
-        GITHUB_URL, compat_tool.repository_account, compat_tool.repository_name,
+        compat_tool.forge.get_url(),
+        compat_tool.repository_account,
+        compat_tool.repository_name,
     );
 
     let client = reqwest::Client::builder().user_agent(agent).build()?;
@@ -268,7 +268,9 @@ mod tests {
         for (source_parameters, desc) in conditions {
             let url = format!(
                 "{}/{}/{}/releases/latest",
-                GITHUB_URL, source_parameters.repository_account, source_parameters.repository_name
+                source_parameters.forge.get_url(),
+                source_parameters.repository_account,
+                source_parameters.repository_name
             );
 
             let rel = match client.get(url).send().await {
