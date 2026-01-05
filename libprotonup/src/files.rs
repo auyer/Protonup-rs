@@ -25,7 +25,7 @@ pub enum Decompressor<R: AsyncBufRead + Unpin> {
     Zstd(#[pin] ZstdDecoder<R>),
 }
 
-pub(crate) fn check_supported_extension(file_name: String) -> Result<String> {
+pub(crate) fn check_supported_extension(file_name: &str) -> Result<String> {
     if file_name.ends_with("tar.gz") || file_name.ends_with("tgz") {
         Ok("tar.gz".to_owned())
     } else if file_name.ends_with("tar.zst") || file_name.ends_with("tar.zstd") {
@@ -322,7 +322,7 @@ mod test {
         ];
 
         for test_case in test_cases {
-            let result = check_supported_extension(test_case.file_name);
+            let result = check_supported_extension(&test_case.file_name);
             match (result, test_case.expected) {
                 (Ok(actual), Ok(expected)) => {
                     assert_eq!(actual, expected, "Test '{}' failed", test_case.name)

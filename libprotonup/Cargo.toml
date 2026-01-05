@@ -39,3 +39,4 @@ regex = "1.12"
 [dev-dependencies]
 tar = "0.4"
 tokio = { version = "1.48", features = ["macros", "rt"] }
+wiremock = "0.6.5"

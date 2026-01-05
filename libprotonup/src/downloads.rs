@@ -14,8 +14,6 @@ use tokio_util::io::StreamReader;
 
 pub type ReleaseList = Vec<Release>;
 
-pub const GITHUB_URL: &str = "https://api.github.com/repos";
-
 /// Contains the information from one of the releases on GitHub
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Release {
@@ -60,7 +58,7 @@ impl Release {
                     sum_type: hashing::HashSumType::Sha256,
                 })
             } else if compat_tool.filter_asset(asset.download_file_name().as_str())
-                && files::check_supported_extension(asset.name.clone()).is_ok()
+                && files::check_supported_extension(&asset.name).is_ok()
             {
                 download.file_name = asset.name.clone();
                 download
@@ -144,12 +142,27 @@ pub async fn list_releases(compat_tool: &CompatTool) -> Result<ReleaseList, reqw
 
     let url = format!(
         "{}/{}/{}/releases",
-        GITHUB_URL, compat_tool.repository_account, compat_tool.repository_name,
+        compat_tool.forge.get_url(),
+        compat_tool.repository_account,
+        compat_tool.repository_name,
     );
 
     let client = reqwest::Client::builder().user_agent(agent).build()?;
 
     let r_list: ReleaseList = client.get(url).send().await?.json().await?;
+
+    // filter releases without assets
+    let r_list: ReleaseList = r_list
+        .into_iter()
+        .filter(|rel| {
+            !rel.assets.is_empty()
+                // same logic used when creating the Release object
+                && (rel.assets.iter().any(|asset| {
+                    compat_tool.filter_asset(asset.download_file_name().as_str())
+                        && files::check_supported_extension(&asset.name).is_ok()
+                }))
+        })
+        .collect();
 
     Ok(r_list)
 }
@@ -178,7 +191,7 @@ impl Download {
             .expect("Failed to create tempdir")
             .keep();
 
-        match files::check_supported_extension(self.download_url.clone()) {
+        match files::check_supported_extension(&self.download_url) {
             Ok(ext) => {
                 output_dir.push(format!("{}.{}", &self.version, ext));
                 Ok(output_dir)
@@ -255,7 +268,9 @@ mod tests {
         for (source_parameters, desc) in conditions {
             let url = format!(
                 "{}/{}/{}/releases/latest",
-                GITHUB_URL, source_parameters.repository_account, source_parameters.repository_name
+                source_parameters.forge.get_url(),
+                source_parameters.repository_account,
+                source_parameters.repository_name
             );
 
             let rel = match client.get(url).send().await {
@@ -311,5 +326,122 @@ mod tests {
             println!("Expected: {expected:?}");
             assert!(output == expected, "{output} Should match: {expected}");
         }
+    }
+
+    use serde_json::json;
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    #[tokio::test]
+    async fn test_list_releases_mocked() {
+        let mock_server = MockServer::start().await;
+
+        let owner = "test-owner";
+        let repo_valid = "test-repo-with-valid-asset";
+        let expected_path_valid = format!("/{}/{}/releases", owner, repo_valid);
+
+        // mock data
+        let mock_response_valid = json!([
+            {
+                "tag_name": "GE-Proton9-10-rtsp12",
+                "name": "GE-Proton9-10-rtsp12",
+                "assets": [
+                    {
+                        "url": "https://api.github.com/asset1",
+                        "id": 1,
+                        "name": "GE-Proton9-10-rtsp13.tar.gz",
+                        "size": 1024,
+                        "updated_at": "2024-01-01T00:00:00Z",
+                        "browser_download_url": format!("{}/releases/download/GE-Proton9-10-rtsp13/GE-Proton9-10-rtsp13.tar.gz", mock_server.uri())
+                    },
+                    {
+                        "url": "https://api.github.com/asset1",
+                        "id": 1,
+                        "name": "Source Code",
+                        "size": 1024,
+                        "updated_at": "2024-01-01T00:00:00Z",
+                        "browser_download_url": format!("{}/releases/download/some-other-asset-hotfix.tar.gz", mock_server.uri())
+                    }
+                ]
+            }
+        ]);
+
+        // Setup the mock behavior
+        Mock::given(method("GET"))
+            .and(path(expected_path_valid)) // Ensure this matches the tool below
+            .respond_with(ResponseTemplate::new(200).set_body_json(mock_response_valid))
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        let repo_no_asset = "test-repo-no-asset";
+        let expected_path_invalid = format!("/{}/{}/releases", owner, repo_no_asset);
+
+        // mock data
+        let mock_response_invalid = json!([
+            {
+                "tag_name": "GE-Proton9-10-rtsp12",
+                "name": "GE-Proton9-10-rtsp12",
+                "assets": [
+                    {
+                        "url": "https://api.github.com/asset1",
+                        "id": 1,
+                        "name": "Source Code",
+                        "size": 1024,
+                        "updated_at": "2024-01-01T00:00:00Z",
+                        "browser_download_url": format!("{}/releases/download/some-other-asset-hotfix.tar.gz", mock_server.uri())
+                    }
+                ]
+            }
+        ]);
+
+        Mock::given(method("GET"))
+            .and(path(expected_path_invalid)) // Ensure this matches the tool below
+            .respond_with(ResponseTemplate::new(200).set_body_json(mock_response_invalid))
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        let regex =
+            r"^(GE-Proton|Proton-)[0-9]+(-[0-9]+)?-(rtsp)-?(\d+(-\d+)?)?\.(tar\.gz|tar\.zst)$";
+
+        // TEST CASE ONE: tool has an asset with expected filename
+        let tool = CompatTool::new_custom(
+            "TestTool".to_string(),
+            sources::Forge::Custom(mock_server.uri()), // Injection point
+            owner.to_string(),
+            repo_valid.to_string(),
+            sources::ToolType::WineBased,
+            Some(regex.to_owned()),
+            None,
+            None,
+        );
+
+        // Call the function pointing to the mock server
+        let result = list_releases(&tool).await.expect("Request failed");
+
+        assert_eq!(result.len(), 1, "Should have assets");
+        assert_eq!(result[0].tag_name, "GE-Proton9-10-rtsp12");
+
+        // TEST CASE TWO: tool has no valid asset
+        let tool = CompatTool::new_custom(
+            "TestTool".to_string(),
+            sources::Forge::Custom(mock_server.uri()), // Injection point
+            owner.to_string(),
+            repo_no_asset.to_string(),
+            sources::ToolType::WineBased,
+            None,
+            None,
+            None,
+        );
+
+        // Call the function pointing to the mock server
+        let result = list_releases(&tool).await.expect("Request failed");
+
+        assert_eq!(
+            result.len(),
+            0,
+            "Should have filtered out the release without assets"
+        );
     }
 }
