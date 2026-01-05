@@ -327,4 +327,121 @@ mod tests {
             assert!(output == expected, "{output} Should match: {expected}");
         }
     }
+
+    use serde_json::json;
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    #[tokio::test]
+    async fn test_list_releases_mocked() {
+        let mock_server = MockServer::start().await;
+
+        let owner = "test-owner";
+        let repo_valid = "test-repo-with-valid-asset";
+        let expected_path_valid = format!("/{}/{}/releases", owner, repo_valid);
+
+        // mock data
+        let mock_response_valid = json!([
+            {
+                "tag_name": "GE-Proton9-10-rtsp12",
+                "name": "GE-Proton9-10-rtsp12",
+                "assets": [
+                    {
+                        "url": "https://api.github.com/asset1",
+                        "id": 1,
+                        "name": "GE-Proton9-10-rtsp13.tar.gz",
+                        "size": 1024,
+                        "updated_at": "2024-01-01T00:00:00Z",
+                        "browser_download_url": format!("{}/releases/download/GE-Proton9-10-rtsp13/GE-Proton9-10-rtsp13.tar.gz", mock_server.uri())
+                    },
+                    {
+                        "url": "https://api.github.com/asset1",
+                        "id": 1,
+                        "name": "Source Code",
+                        "size": 1024,
+                        "updated_at": "2024-01-01T00:00:00Z",
+                        "browser_download_url": format!("{}/releases/download/some-other-asset-hotfix.tar.gz", mock_server.uri())
+                    }
+                ]
+            }
+        ]);
+
+        // Setup the mock behavior
+        Mock::given(method("GET"))
+            .and(path(expected_path_valid)) // Ensure this matches the tool below
+            .respond_with(ResponseTemplate::new(200).set_body_json(mock_response_valid))
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        let repo_no_asset = "test-repo-no-asset";
+        let expected_path_invalid = format!("/{}/{}/releases", owner, repo_no_asset);
+
+        // mock data
+        let mock_response_invalid = json!([
+            {
+                "tag_name": "GE-Proton9-10-rtsp12",
+                "name": "GE-Proton9-10-rtsp12",
+                "assets": [
+                    {
+                        "url": "https://api.github.com/asset1",
+                        "id": 1,
+                        "name": "Source Code",
+                        "size": 1024,
+                        "updated_at": "2024-01-01T00:00:00Z",
+                        "browser_download_url": format!("{}/releases/download/some-other-asset-hotfix.tar.gz", mock_server.uri())
+                    }
+                ]
+            }
+        ]);
+
+        Mock::given(method("GET"))
+            .and(path(expected_path_invalid)) // Ensure this matches the tool below
+            .respond_with(ResponseTemplate::new(200).set_body_json(mock_response_invalid))
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        let regex =
+            r"^(GE-Proton|Proton-)[0-9]+(-[0-9]+)?-(rtsp)-?(\d+(-\d+)?)?\.(tar\.gz|tar\.zst)$";
+
+        // TEST CASE ONE: tool has an asset with expected filename
+        let tool = CompatTool::new_custom(
+            "TestTool".to_string(),
+            sources::Forge::Custom(mock_server.uri()), // Injection point
+            owner.to_string(),
+            repo_valid.to_string(),
+            sources::ToolType::WineBased,
+            Some(regex.to_owned()),
+            None,
+            None,
+        );
+
+        // Call the function pointing to the mock server
+        let result = list_releases(&tool).await.expect("Request failed");
+
+        assert_eq!(result.len(), 1, "Should have assets");
+        assert_eq!(result[0].tag_name, "GE-Proton9-10-rtsp12");
+
+        // TEST CASE TWO: tool has no valid asset
+        let tool = CompatTool::new_custom(
+            "TestTool".to_string(),
+            sources::Forge::Custom(mock_server.uri()), // Injection point
+            owner.to_string(),
+            repo_no_asset.to_string(),
+            sources::ToolType::WineBased,
+            None,
+            None,
+            None,
+        );
+
+        // Call the function pointing to the mock server
+        let result = list_releases(&tool).await.expect("Request failed");
+
+        assert_eq!(
+            result.len(),
+            0,
+            "Should have filtered out the release without assets"
+        );
+    }
 }
