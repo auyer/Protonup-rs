@@ -358,7 +358,7 @@ async fn download_validate_unpack(
             )
         })?;
     match download.hash_sum {
-        Some(git_hash_sum) => {
+        Some(ref git_hash_sum) => {
             let hash_content = &downloads::download_file_into_memory(&git_hash_sum.sum_content)
                 .await
                 .with_context(|| {
@@ -369,7 +369,7 @@ async fn download_validate_unpack(
                 })?;
             let hash_sum = hashing::HashSums {
                 sum_content: hash_content.to_owned(),
-                sum_type: git_hash_sum.sum_type,
+                sum_type: git_hash_sum.sum_type.clone(),
             };
 
             validate_file(&download.file_name, &file, hash_sum, multi_progress.clone()).await?;
@@ -379,8 +379,6 @@ async fn download_validate_unpack(
         }
     }
 
-    let download = release.get_download_info(&for_app, &compat_tool);
-    // download.installation_dir(source: &CompatTool)
     let install_name = compat_tool.installation_name(&download.version);
     let install_path = install_dir.join(install_name.clone());
     if files::check_if_exists(&install_path).await {
