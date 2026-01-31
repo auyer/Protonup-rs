@@ -34,6 +34,7 @@ impl std::fmt::Display for Release {
 
 impl Release {
     /// Returns a Download struct corresponding to the Release
+    /// For most tools, where there is no variation in a single release
     pub fn get_download_info(
         &self,
         for_app: &apps::AppInstallations,
@@ -44,6 +45,7 @@ impl Release {
             version: self.tag_name.clone(),
             ..Download::default()
         };
+
         for asset in &self.assets {
             if asset.name.contains("sha512") {
                 download.file_name = asset.name.clone();
@@ -73,7 +75,7 @@ impl Release {
 
     /// Returns all Download structs corresponding to the Release for tools with multiple asset variations
     /// This is used for tools like ProtonCachyOS that offer builds optimized for different CPU microarchitectures
-    pub fn get_download_variants_cachy(
+    pub fn get_all_download_variants(
         &self,
         for_app: &apps::AppInstallations,
         compat_tool: &CompatTool,
