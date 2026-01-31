@@ -79,20 +79,33 @@ impl Release {
         compat_tool: &CompatTool,
     ) -> Vec<Download> {
         // Create a map from base filename to hash file URL
-        let mut hash_map: std::collections::HashMap<String, String> =
-            std::collections::HashMap::new();
-        let mut hash_type = hashing::HashSumType::Sha512;
+        let mut asset_hashsum_map: std::collections::HashMap<
+            String,
+            (String, hashing::HashSumType),
+        > = std::collections::HashMap::new();
 
         // Build the hash map by matching hash files to their base names
         for asset in &self.assets {
             if asset.name.contains("sha512") {
-                hash_type = hashing::HashSumType::Sha512;
-                let base_name = asset.name.replace(".sha512sum", "");
-                hash_map.insert(base_name, asset.browser_download_url.clone());
+                // hash_type = hashing::HashSumType::Sha512;
+                let base_name = asset.name.split(".sha512").collect::<Vec<&str>>()[0].to_owned();
+                asset_hashsum_map.insert(
+                    base_name,
+                    (
+                        asset.browser_download_url.clone(),
+                        hashing::HashSumType::Sha512,
+                    ),
+                );
             } else if asset.name.contains("sha256") {
-                hash_type = hashing::HashSumType::Sha256;
-                let base_name = asset.name.replace(".sha256sum", "");
-                hash_map.insert(base_name, asset.browser_download_url.clone());
+                // hash_type = hashing::HashSumType::Sha256;
+                let base_name = asset.name.split(".sha256").collect::<Vec<&str>>()[0].to_owned();
+                asset_hashsum_map.insert(
+                    base_name,
+                    (
+                        asset.browser_download_url.clone(),
+                        hashing::HashSumType::Sha256,
+                    ),
+                );
             }
         }
 
@@ -110,10 +123,12 @@ impl Release {
                     .or_else(|| asset.name.strip_suffix(".tar.zst"))
                     .unwrap_or(&asset.name);
 
-                let hash_sum = hash_map.get(base_name).map(|hash_url| hashing::HashSums {
-                    sum_content: hash_url.clone(),
-                    sum_type: hash_type.clone(),
-                });
+                let hash_sum = asset_hashsum_map
+                    .get(base_name)
+                    .map(|(hash_url, hash_type)| hashing::HashSums {
+                        sum_content: hash_url.clone(),
+                        sum_type: hash_type.clone(),
+                    });
 
                 variants.push(Download {
                     file_name: asset.name.clone(),
