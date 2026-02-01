@@ -34,6 +34,7 @@ impl std::fmt::Display for Release {
 
 impl Release {
     /// Returns a Download struct corresponding to the Release
+    /// For most tools, where there is no variation in a single release
     pub fn get_download_info(
         &self,
         for_app: &apps::AppInstallations,
@@ -44,6 +45,7 @@ impl Release {
             version: self.tag_name.clone(),
             ..Download::default()
         };
+
         for asset in &self.assets {
             if asset.name.contains("sha512") {
                 download.file_name = asset.name.clone();
@@ -69,6 +71,79 @@ impl Release {
             }
         }
         download
+    }
+
+    /// Returns all Download structs corresponding to the Release for tools with multiple asset variations
+    /// This is used for tools like ProtonCachyOS that offer builds optimized for different CPU microarchitectures
+    pub fn get_all_download_variants(
+        &self,
+        for_app: &apps::AppInstallations,
+        compat_tool: &CompatTool,
+    ) -> Vec<Download> {
+        // Create a map from base filename to hash file URL
+        let mut asset_hashsum_map: std::collections::HashMap<
+            String,
+            (String, hashing::HashSumType),
+        > = std::collections::HashMap::new();
+
+        // Build the hash map by matching hash files to their base names
+        for asset in &self.assets {
+            if asset.name.contains("sha512") {
+                // hash_type = hashing::HashSumType::Sha512;
+                let base_name = asset.name.split(".sha512").collect::<Vec<&str>>()[0].to_owned();
+                asset_hashsum_map.insert(
+                    base_name,
+                    (
+                        asset.browser_download_url.clone(),
+                        hashing::HashSumType::Sha512,
+                    ),
+                );
+            } else if asset.name.contains("sha256") {
+                // hash_type = hashing::HashSumType::Sha256;
+                let base_name = asset.name.split(".sha256").collect::<Vec<&str>>()[0].to_owned();
+                asset_hashsum_map.insert(
+                    base_name,
+                    (
+                        asset.browser_download_url.clone(),
+                        hashing::HashSumType::Sha256,
+                    ),
+                );
+            }
+        }
+
+        let mut variants = Vec::new();
+
+        // Collect all matching asset variants with their corresponding hash
+        for asset in &self.assets {
+            if compat_tool.filter_asset(asset.download_file_name().as_str())
+                && files::check_supported_extension(&asset.name).is_ok()
+            {
+                let base_name = asset
+                    .name
+                    .strip_suffix(".tar.gz")
+                    .or_else(|| asset.name.strip_suffix(".tar.xz"))
+                    .or_else(|| asset.name.strip_suffix(".tar.zst"))
+                    .unwrap_or(&asset.name);
+
+                let hash_sum = asset_hashsum_map
+                    .get(base_name)
+                    .map(|(hash_url, hash_type)| hashing::HashSums {
+                        sum_content: hash_url.clone(),
+                        sum_type: hash_type.clone(),
+                    });
+
+                variants.push(Download {
+                    file_name: asset.name.clone(),
+                    download_url: asset.browser_download_url.clone(),
+                    size: asset.size as u64,
+                    for_app: for_app.to_owned(),
+                    version: self.tag_name.clone(),
+                    hash_sum,
+                });
+            }
+        }
+
+        variants
     }
 }
 

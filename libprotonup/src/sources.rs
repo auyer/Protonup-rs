@@ -40,6 +40,10 @@ pub struct CompatTool {
     /// The template must contain "{version}"
     /// it is applied after the replacement, if Some()
     pub file_name_template: Option<String>,
+
+    /// if true, a menu to choose the variant to download will be shown (for proton cachyos: x86_64, x86_64_v2, x86_64_v3, x86_64_v4)
+    #[serde(default)]
+    pub has_multiple_asset_variations: bool,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -90,6 +94,7 @@ impl CompatTool {
             release_asset_filter,
             file_name_replacement,
             file_name_template,
+            has_multiple_asset_variations: false,
             compatible_applications: vec![], // TODO: fill this if it becomes helpful
         }
     }

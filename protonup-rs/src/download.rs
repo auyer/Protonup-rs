@@ -16,7 +16,7 @@ use libprotonup::{
     sources::{CompatTool, CompatTools},
 };
 
-use crate::{file_path, helper_menus};
+use crate::{architecture_variants, file_path, helper_menus};
 
 static PROGRESS_BAR_STYLE: OnceCell<ProgressStyle> = OnceCell::const_new();
 static MESSAGE_BAR_STYLE: OnceCell<ProgressStyle> = OnceCell::const_new();
@@ -172,7 +172,14 @@ pub async fn run_quick_downloads(force: bool) -> Result<Vec<Release>> {
                 std::process::exit(1)
             }
         };
-        let download = release.get_download_info(&app_inst, &compat_tool);
+
+        // Handle tools with multiple architecture variants
+        let download = if compat_tool.has_multiple_asset_variations {
+            let variants = release.get_all_download_variants(&app_inst, &compat_tool);
+            architecture_variants::select_architecture_variant(&release.tag_name, variants, true)?
+        } else {
+            release.get_download_info(&app_inst, &compat_tool)
+        };
 
         let mut download_path = PathBuf::from(&app_inst.default_install_dir().as_str());
         download_path.push(compat_tool.installation_name(&download.version));
@@ -309,16 +316,41 @@ pub async fn download_to_selected_app(app: Option<apps::App>) -> Result<Vec<Rele
         .await
     };
 
+    // let tool = selected_tool.clone();
+    // Check if the selected tool has multiple asset variations
+    let downloads: Vec<Download> = if selected_tool.has_multiple_asset_variations {
+        releases
+            .iter()
+            .map(|release| {
+                let variants = release.get_all_download_variants(&app_inst, &selected_tool);
+
+                architecture_variants::select_architecture_variant(
+                    &release.tag_name,
+                    variants,
+                    false,
+                )
+                .unwrap_or_else(|_| std::process::exit(1))
+            })
+            .collect::<Vec<Download>>()
+    } else {
+        releases
+            .iter()
+            .map(|release| release.get_download_info(&app_inst, &selected_tool))
+            .collect()
+    };
+
     let multi_progress = MultiProgress::with_draw_target(ProgressDrawTarget::stderr_with_hz(20));
 
-    let tasks = releases.iter().map(|release| {
-        let release = release.clone();
+    let tasks = downloads.into_iter().map(|download| {
+        // let release = release.clone();
         let progress = multi_progress.clone();
         let tool = selected_tool.clone();
         let app_inst = app_inst.clone();
-        tokio::spawn(
-            async move { download_validate_unpack(release, app_inst, tool, progress).await },
-        )
+
+        // Handle tools with multiple architecture variants
+        tokio::spawn(async move {
+            download_validate_unpack_with_download(download.clone(), app_inst, tool, progress).await
+        })
     });
 
     for task in tasks
@@ -347,14 +379,23 @@ async fn download_validate_unpack(
     compat_tool: CompatTool,
     multi_progress: MultiProgress,
 ) -> Result<()> {
-    let install_dir = for_app.installation_dir(&compat_tool).unwrap();
     let download = release.get_download_info(&for_app, &compat_tool);
+    download_validate_unpack_with_download(download, for_app, compat_tool, multi_progress).await
+}
+
+async fn download_validate_unpack_with_download(
+    download: Download,
+    for_app: apps::AppInstallations,
+    compat_tool: CompatTool,
+    multi_progress: MultiProgress,
+) -> Result<()> {
+    let install_dir = for_app.installation_dir(&compat_tool).unwrap();
     let file = download_file(&download, multi_progress.clone())
         .await
         .with_context(|| {
             format!(
                 "Error downloading {}, make sure you're connected to the internet",
-                release.tag_name
+                download.version
             )
         })?;
     match download.hash_sum {
@@ -364,7 +405,7 @@ async fn download_validate_unpack(
                 .with_context(|| {
                     format!(
                         "Error getting expected download hash for {}",
-                        &release.tag_name
+                        &download.version
                     )
                 })?;
             let hash_sum = hashing::HashSums {

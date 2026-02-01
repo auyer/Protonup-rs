@@ -6,6 +6,7 @@ use std::{fmt, process::exit};
 
 use libprotonup::apps::App;
 
+mod architecture_variants;
 mod download;
 mod file_path;
 mod helper_menus;
