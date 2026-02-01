@@ -75,7 +75,8 @@ fn get_architecture_description(variant_code: u8) -> String {
 }
 
 /// Menu for selecting proton cachyos arch, returns selected or _v2 if in quick mode
-pub async fn select_architecture_variant(
+pub fn select_architecture_variant(
+    release_name: &str,
     variants: Vec<Download>,
     quick_mode: bool,
 ) -> Result<Download> {
@@ -133,9 +134,12 @@ pub async fn select_architecture_variant(
         order(&a.name).cmp(&order(&b.name))
     });
 
-    let selected = Select::new("Select CPU architecture:", sorted_variants)
-        .prompt()
-        .unwrap_or_else(|_| std::process::exit(0));
+    let selected = Select::new(
+        format!("Select CPU architecture for release '{}' :", release_name).as_str(),
+        sorted_variants,
+    )
+    .prompt()
+    .unwrap_or_else(|_| std::process::exit(0));
 
     Ok(selected.download)
 }
@@ -298,7 +302,7 @@ pub async fn run_quick_downloads(force: bool) -> Result<Vec<Release>> {
         // Handle tools with multiple architecture variants
         let download = if compat_tool.has_multiple_asset_variations {
             let variants = release.get_all_download_variants(&app_inst, &compat_tool);
-            select_architecture_variant(variants, true).await?
+            select_architecture_variant(&release.tag_name, variants, true)?
         } else {
             release.get_download_info(&app_inst, &compat_tool)
         };
@@ -438,30 +442,36 @@ pub async fn download_to_selected_app(app: Option<apps::App>) -> Result<Vec<Rele
         .await
     };
 
+    // let tool = selected_tool.clone();
+    // Check if the selected tool has multiple asset variations
+    let downloads: Vec<Download> = if selected_tool.has_multiple_asset_variations {
+        releases
+            .iter()
+            .map(|release| {
+                let variants = release.get_all_download_variants(&app_inst, &selected_tool);
+
+                select_architecture_variant(&release.tag_name, variants, false)
+                    .unwrap_or_else(|_| std::process::exit(1))
+            })
+            .collect::<Vec<Download>>()
+    } else {
+        releases
+            .iter()
+            .map(|release| release.get_download_info(&app_inst, &selected_tool))
+            .collect()
+    };
+
     let multi_progress = MultiProgress::with_draw_target(ProgressDrawTarget::stderr_with_hz(20));
 
-    // Check if the selected tool has multiple asset variations
-    let has_multiple_variants = selected_tool.has_multiple_asset_variations;
-
-    let tasks = releases.iter().map(|release| {
-        let release = release.clone();
+    let tasks = downloads.into_iter().map(|download| {
+        // let release = release.clone();
         let progress = multi_progress.clone();
         let tool = selected_tool.clone();
         let app_inst = app_inst.clone();
+
+        // Handle tools with multiple architecture variants
         tokio::spawn(async move {
-            // Handle tools with multiple architecture variants
-            if has_multiple_variants {
-                let variants = release.get_all_download_variants(&app_inst, &tool);
-                let download = match select_architecture_variant(variants, false).await {
-                    Ok(d) => d,
-                    Err(e) => {
-                        return Err(e);
-                    }
-                };
-                download_validate_unpack_with_download(download, app_inst, tool, progress).await
-            } else {
-                download_validate_unpack(release, app_inst, tool, progress).await
-            }
+            download_validate_unpack_with_download(download.clone(), app_inst, tool, progress).await
         })
     });
 
@@ -491,7 +501,6 @@ async fn download_validate_unpack(
     compat_tool: CompatTool,
     multi_progress: MultiProgress,
 ) -> Result<()> {
-    let _install_dir = for_app.installation_dir(&compat_tool).unwrap();
     let download = release.get_download_info(&for_app, &compat_tool);
     download_validate_unpack_with_download(download, for_app, compat_tool, multi_progress).await
 }
