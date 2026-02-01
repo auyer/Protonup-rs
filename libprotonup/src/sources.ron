@@ -9,16 +9,6 @@
         compatible_applications: [Steam, Lutris],
     ),
     (
-        name: "Proton CachyOS",
-        forge: GitHub,
-        repository_account: "CachyOS",
-        repository_name: "proton-cachyos",
-        tool_type: WineBased,
-        release_asset_filter: Some(r"^proton-cachyos-[0-9]+\.[0-9]+-[0-9]+-[a-z0-9]+-x86_64(_v[234])?\.(tar\.gz|tar\.xz|tar\.zst)$"),
-        has_multiple_asset_variations: true,
-        compatible_applications: [Steam, Lutris],
-    ),
-    (
         name: "WineGE",
         forge: GitHub,
         repository_account: "GloriousEggroll",
@@ -93,5 +83,15 @@
         tool_type: WineBased,
         release_asset_filter : Some(r"^(GE-Proton|Proton-)[0-9]+(-[0-9]+)?-(rtsp)-?(\d+(-\d+)?)?\.(tar\.gz|tar\.zst)$"),
         compatible_applications: [Steam],
+    ),
+    (
+        name: "Proton CachyOS",
+        forge: GitHub,
+        repository_account: "CachyOS",
+        repository_name: "proton-cachyos",
+        tool_type: WineBased,
+        release_asset_filter: Some(r"^proton-cachyos-[0-9]+\.[0-9]+-[0-9]+-[a-z0-9]+-x86_64(_v[234])?\.(tar\.gz|tar\.xz|tar\.zst)$"),
+        has_multiple_asset_variations: true,
+        compatible_applications: [Steam, Lutris],
     ),
 ]
