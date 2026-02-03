@@ -45,7 +45,7 @@ impl Decompressor<BufReader<File>> {
 
         let file = File::open(path).await.with_context(|| {
             format!(
-                "[Decompressing] Failed to unpack into destination : {}",
+                "[Decompressing] Failed to unpack into destination: {}",
                 path.display()
             )
         })?;
@@ -206,7 +206,7 @@ pub async fn remove_dir_all(path: &PathBuf) -> Result<()> {
     let p = f_path.as_path();
     tokio::fs::remove_dir_all(p)
         .await
-        .with_context(|| format!("[Remove] Failed to remove directory : {}", p.display()))?;
+        .with_context(|| format!("[Remove] Failed to remove directory: {}", p.display()))?;
     Ok(())
 }
 
