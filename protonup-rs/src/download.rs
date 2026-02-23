@@ -1,111 +1,497 @@
-use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
-
-use std::fs;
+use anyhow::{Context, Result, anyhow, bail};
+use futures_util::stream::FuturesUnordered;
+use futures_util::{StreamExt, future, stream};
+use indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle};
+use inquire::{Select, Text};
 use std::path::{Path, PathBuf};
-use std::{
-    sync::{atomic::Ordering, Arc},
-    thread,
-    time::Duration,
+use tokio::fs;
+use tokio::fs::{File, OpenOptions};
+use tokio::io::BufReader;
+use tokio::sync::OnceCell;
+
+use libprotonup::{
+    apps,
+    downloads::{self, Download, Release},
+    files, hashing,
+    sources::{CompatTool, CompatTools},
 };
 
-use libprotonup::{constants, files, github, utils, variants};
+use crate::{architecture_variants, file_path, helper_menus};
 
-pub(crate) async fn download_file(
-    tag: &str,
-    source: &variants::VariantParameters,
-) -> Result<PathBuf, String> {
-    let mut temp_dir = utils::expand_tilde(constants::TEMP_DIR).unwrap();
+static PROGRESS_BAR_STYLE: OnceCell<ProgressStyle> = OnceCell::const_new();
+static MESSAGE_BAR_STYLE: OnceCell<ProgressStyle> = OnceCell::const_new();
 
-    let download = match github::fetch_data_from_tag(tag, source).await {
-        Ok(data) => data,
-        Err(e) => {
-            eprintln!("Failed to fetch GitHub data, make sure you're connected to the internet\nError: {}", e);
-            std::process::exit(1)
-        }
-    };
+pub(crate) async fn init_download_progress(
+    download: &Download,
+    tmp_dir: &Path,
+    multi_progress: MultiProgress,
+) -> ProgressBar {
+    let progress_bar = multi_progress.add(ProgressBar::new(download.size));
+    progress_bar.set_style(get_progress_style().await);
+    progress_bar.set_message(format!(
+        "Downloading {} to {}",
+        download.download_url.split('/').next_back().unwrap(),
+        tmp_dir.display()
+    ));
 
-    temp_dir.push(if download.download.ends_with("tar.gz") {
-        format!("{}.tar.gz", &download.version)
-    } else if download.download.ends_with("tar.xz") {
-        format!("{}.tar.xz", &download.version)
-    } else {
-        eprintln!("Downloaded file wasn't of the expected type. (tar.(gz/xz)");
-        std::process::exit(1)
-    });
-
-    let git_hash = files::download_file_into_memory(&download.sha512sum)
-        .await
-        .unwrap();
-
-    if temp_dir.exists() {
-        fs::remove_file(&temp_dir).unwrap();
-    }
-
-    let (progress, done) = files::create_progress_trackers();
-    let progress_read = Arc::clone(&progress);
-    let done_read = Arc::clone(&done);
-    let url = String::from(&download.download);
-    let tmp_dir = String::from(temp_dir.to_str().unwrap());
-
-    // start ProgressBar in another thread
-    thread::spawn(move || {
-        let pb = ProgressBar::with_draw_target(
-            Some(download.size),
-            ProgressDrawTarget::stderr_with_hz(20),
-        );
-        pb.set_style(ProgressStyle::default_bar()
-        .template("{msg}\n{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({bytes_per_sec})").unwrap()
-        .progress_chars("#>-"));
-        pb.set_message(format!("Downloading {}", url.split('/').last().unwrap()));
-        let wait_time = Duration::from_millis(50); // 50ms wait is about 20Hz
-        loop {
-            let newpos = progress_read.load(Ordering::Relaxed);
-            pb.set_position(newpos as u64);
-            if done_read.load(Ordering::Relaxed) {
-                break;
-            }
-            thread::sleep(wait_time);
-        }
-        pb.set_message(format!("Downloaded {url} to {tmp_dir}"));
-        pb.abandon(); // closes progress bar without blanking terminal
-
-        println!("Checking file integrity"); // This is being printed here because the progress bar needs to be closed before printing.
-    });
-
-    files::download_file_progress(
-        download.download,
-        download.size,
-        temp_dir.clone().as_path(),
-        progress,
-        done,
-    )
-    .await
-    .unwrap();
-
-    if !files::hash_check_file(temp_dir.to_str().unwrap().to_string(), git_hash).unwrap() {
-        return Err("Failed checking file hash".to_string());
-    }
-
-    Ok(temp_dir)
+    progress_bar
 }
 
-pub(crate) async fn unpack_file(
-    dowaload_path: &Path,
-    install_path: &str,
-    source: &variants::VariantParameters,
-) -> Result<(), String> {
-    let install_dir = utils::expand_tilde(install_path).unwrap();
+pub(crate) async fn init_hash_progress(
+    path: &Path,
+    multi_progress: MultiProgress,
+) -> Result<ProgressBar> {
+    let progress_bar = multi_progress.add(ProgressBar::new(fs::metadata(path).await?.len()));
+    progress_bar.set_style(get_progress_style().await);
+    progress_bar.set_message(format!("Validating {}", path.display()));
+    Ok(progress_bar)
+}
 
-    fs::create_dir_all(&install_dir).unwrap();
+pub(crate) async fn init_unpack_progress(
+    target_dir: &Path,
+    source_file: &Path,
+    multi_progress: MultiProgress,
+) -> Result<ProgressBar> {
+    let progress_bar = multi_progress.add(ProgressBar::new(fs::metadata(source_file).await?.len()));
+    progress_bar.set_style(get_progress_style().await);
+    progress_bar.set_message(format!(
+        "Unpacking {} to {}",
+        source_file.display(),
+        target_dir.display()
+    ));
+    Ok(progress_bar)
+}
 
-    println!("Unpacking files into install location. Please wait");
-    files::decompress(dowaload_path, install_dir.as_path()).unwrap();
-    let source_type = source.variant_type();
-    println!(
-        "Done! Restart {}. {} installed in {}",
-        source_type.intended_application(),
-        source_type,
-        install_dir.to_string_lossy(),
-    );
+/// Downloads the requested file to the /tmp directory
+pub(crate) async fn download_file(
+    download: &Download,
+    multi_progress: MultiProgress,
+) -> Result<PathBuf> {
+    let output_dir = download.download_dir()?;
+
+    if files::check_if_exists(&output_dir).await {
+        fs::remove_dir_all(&output_dir).await?;
+    }
+
+    let file = OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .open(&output_dir)
+        .await
+        .with_context(|| {
+            format!(
+                "[Download] Failed creating destination file : {}",
+                output_dir.display()
+            )
+        })?;
+
+    let download_progress_bar =
+        init_download_progress(download, &output_dir, multi_progress.clone()).await;
+
+    downloads::download_to_async_write(
+        &download.download_url,
+        &mut download_progress_bar.wrap_async_write(file),
+    )
+    .await?;
+
+    download_progress_bar.set_style(get_message_bar_style().await);
+    download_progress_bar.finish_with_message(download_progress_bar.message().replacen(
+        "Downloading",
+        "Downloaded",
+        1,
+    ));
+
+    Ok(output_dir)
+}
+
+pub(crate) async fn validate_file(
+    file_name: &str,
+    path: &Path,
+    hash: hashing::HashSums,
+    multi_progress: MultiProgress,
+) -> Result<()> {
+    let file = File::open(path)
+        .await
+        .context("[Hash Check] Failed opening download file for checking. Was the file moved?")?;
+
+    let hash_progress_bar = init_hash_progress(path, multi_progress).await?;
+
+    if !hashing::hash_check_file(
+        file_name,
+        &mut hash_progress_bar.wrap_async_read(BufReader::new(file)),
+        hash,
+    )
+    .await?
+    {
+        bail!("{} failed validation", path.display());
+    }
+
+    hash_progress_bar.set_style(get_message_bar_style().await);
+    hash_progress_bar.finish_with_message(hash_progress_bar.message().replacen(
+        "Validating",
+        "Validated",
+        1,
+    ));
+
     Ok(())
+}
+
+/// Downloads the latest wine version for all the apps found
+pub async fn run_quick_downloads(force: bool) -> Result<Vec<Release>> {
+    let found_apps = apps::list_installed_apps().await;
+    if found_apps.is_empty() {
+        println!("No apps found. Please install at least one app before using this feature.");
+        return Err(anyhow!(
+            "No apps found. Please install at least one app before using this feature."
+        ));
+    }
+    println!(
+        "Found the following apps: {}",
+        found_apps
+            .iter()
+            .map(|app| app.to_string())
+            .collect::<Vec<String>>()
+            .join(", ")
+    );
+
+    let multi_progress = MultiProgress::with_draw_target(ProgressDrawTarget::stderr_with_hz(20));
+
+    let joins = FuturesUnordered::new();
+    let mut releases: Vec<Release> = vec![];
+    for app_inst in found_apps {
+        let compat_tool = app_inst.as_app().default_compatibility_tool();
+
+        // Get the latest Download info for the compat_tool
+        let release = match downloads::list_releases(&compat_tool).await {
+            // Get the Download info from the first item on the list, the latest version
+            Ok(mut release_list) => release_list.remove(0),
+            Err(e) => {
+                eprintln!(
+                    "Failed to fetch data, make sure you're connected to the internet.\nError: {e}"
+                );
+                std::process::exit(1)
+            }
+        };
+
+        // Handle tools with multiple architecture variants
+        let download = if compat_tool.has_multiple_asset_variations {
+            let variants = release.get_all_download_variants(&app_inst, &compat_tool);
+            architecture_variants::select_architecture_variant(&release.tag_name, variants, true)?
+        } else {
+            release.get_download_info(&app_inst, &compat_tool)
+        };
+
+        let mut download_path = PathBuf::from(&app_inst.default_install_dir().as_str());
+        download_path.push(compat_tool.installation_name(&download.version));
+        if files::check_if_exists(&download_path.clone()).await && !force {
+            continue;
+        }
+
+        joins.push(download_validate_unpack(
+            release.clone(),
+            app_inst,
+            compat_tool,
+            multi_progress.clone(),
+        ));
+
+        releases.push(release);
+    }
+
+    joins
+        .for_each(|res| {
+            if let Err(e) = res {
+                multi_progress.println(format!("{e}")).unwrap();
+            }
+            future::ready(())
+        })
+        .await;
+    multi_progress.clear().unwrap();
+
+    Ok(releases)
+}
+
+/// Start the Download for the selected app
+///
+/// If no app is provided, the user is prompted for which version of Wine/Proton to use and what directory to extract to
+pub async fn download_to_selected_app(app: Option<apps::App>) -> Result<Vec<Release>> {
+    // Get the folder to install Wine/Proton into
+    let app_inst = match app.clone() {
+        // If the user selected an app (Steam/Lutris)...
+        Some(app) => match app.detect_installation_method().await {
+            installed_apps if installed_apps.is_empty() => {
+                println!("Install location for selected app(s) not found. Exiting.");
+                std::process::exit(0);
+            }
+
+            // Figure out which versions of the App the user has (Native/Flatpak)
+            installed_apps if installed_apps.len() == 1 => {
+                println!(
+                    "Detected {}. Installing to {}",
+                    installed_apps[0], installed_apps[0]
+                );
+                installed_apps[0].clone()
+            }
+            // If the user has more than one installation method, ask them which one they would like to use
+            installed_apps => Select::new(
+                "Detected several app versions, which would you like to use?",
+                installed_apps,
+            )
+            .prompt()
+            .unwrap_or_else(|_| std::process::exit(0)),
+        },
+        // If the user didn't select an app, ask them what directory they want to install to
+        None => apps::AppInstallations::new_custom_app_install(
+            Text::new("Installation path:")
+                .with_autocomplete(file_path::FilePathCompleter::default())
+                .with_help_message(&format!(
+                    "Current directory: {}",
+                    &std::env::current_dir()
+                        .unwrap_or_else(|_| std::process::exit(0))
+                        .to_string_lossy()
+                ))
+                .with_default(
+                    &std::env::current_dir()
+                        .unwrap_or_else(|_| std::process::exit(0))
+                        .to_string_lossy(),
+                )
+                .prompt()
+                .unwrap_or_else(|_| std::process::exit(0)),
+        ),
+    };
+
+    // if an app was selected, filter compatible tools
+    let available_sources = match app {
+        // Use the default for the app
+        Some(app) => CompatTool::sources_for_app(&app),
+        // Or have the user select which one
+        None => CompatTools.clone(),
+    };
+
+    // TODO: maybe change to multi-select ?
+    let selected_tool = Select::new(
+        "Choose the compatibility tool you want to install:",
+        available_sources, // variants::ALL_VARIANTS.to_vec(),
+    )
+    .prompt()
+    .unwrap_or_else(|_| std::process::exit(0));
+
+    let releases = {
+        let release_list = match downloads::list_releases(&selected_tool).await {
+            Ok(data) => data,
+            Err(e) => {
+                eprintln!(
+                    "Failed to fetch data, make sure you're connected to the internet.\nError: {e}"
+                );
+                std::process::exit(1)
+            }
+        };
+
+        // Let the user choose which releases they want to use
+        stream::iter(
+            helper_menus::multiple_select_menu(
+                "Select the versions you want to download :",
+                release_list,
+            )
+            .unwrap_or_else(|e| {
+                eprintln!("The tag list could not be processed.\nError: {e}");
+                vec![]
+            }),
+        )
+        .filter_map(|release| async {
+            if should_download(
+                &release,
+                &mut app_inst
+                    .installation_dir(&selected_tool)
+                    .unwrap()
+                    .join(selected_tool.installation_name(&release.tag_name)),
+            )
+            .await
+            {
+                Some(release)
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>()
+        .await
+    };
+
+    // let tool = selected_tool.clone();
+    // Check if the selected tool has multiple asset variations
+    let downloads: Vec<Download> = if selected_tool.has_multiple_asset_variations {
+        releases
+            .iter()
+            .map(|release| {
+                let variants = release.get_all_download_variants(&app_inst, &selected_tool);
+
+                architecture_variants::select_architecture_variant(
+                    &release.tag_name,
+                    variants,
+                    false,
+                )
+                .unwrap_or_else(|_| std::process::exit(1))
+            })
+            .collect::<Vec<Download>>()
+    } else {
+        releases
+            .iter()
+            .map(|release| release.get_download_info(&app_inst, &selected_tool))
+            .collect()
+    };
+
+    let multi_progress = MultiProgress::with_draw_target(ProgressDrawTarget::stderr_with_hz(20));
+
+    let tasks = downloads.into_iter().map(|download| {
+        // let release = release.clone();
+        let progress = multi_progress.clone();
+        let tool = selected_tool.clone();
+        let app_inst = app_inst.clone();
+
+        // Handle tools with multiple architecture variants
+        tokio::spawn(async move {
+            download_validate_unpack_with_download(download.clone(), app_inst, tool, progress).await
+        })
+    });
+
+    for task in tasks
+        .collect::<FuturesUnordered<_>>()
+        .collect::<Vec<_>>()
+        .await
+    {
+        let err: Option<anyhow::Error> = match task {
+            Ok(Ok(())) => None,
+            Ok(Err(e)) => Some(e),
+            Err(join_err) => Some(anyhow!(join_err)),
+        };
+
+        if let Some(e) = err {
+            eprintln!("{e}");
+            return Err(anyhow!("Installation failed with Error"));
+        }
+    }
+
+    Ok(releases)
+}
+
+async fn download_validate_unpack(
+    release: Release,
+    for_app: apps::AppInstallations,
+    compat_tool: CompatTool,
+    multi_progress: MultiProgress,
+) -> Result<()> {
+    let download = release.get_download_info(&for_app, &compat_tool);
+    download_validate_unpack_with_download(download, for_app, compat_tool, multi_progress).await
+}
+
+async fn download_validate_unpack_with_download(
+    download: Download,
+    for_app: apps::AppInstallations,
+    compat_tool: CompatTool,
+    multi_progress: MultiProgress,
+) -> Result<()> {
+    let install_dir = for_app.installation_dir(&compat_tool).unwrap();
+    let file = download_file(&download, multi_progress.clone())
+        .await
+        .with_context(|| {
+            format!(
+                "Error downloading {}, make sure you're connected to the internet",
+                download.version
+            )
+        })?;
+    match download.hash_sum {
+        Some(ref git_hash_sum) => {
+            let hash_content = &downloads::download_file_into_memory(&git_hash_sum.sum_content)
+                .await
+                .with_context(|| {
+                    format!(
+                        "Error getting expected download hash for {}",
+                        &download.version
+                    )
+                })?;
+            let hash_sum = hashing::HashSums {
+                sum_content: hash_content.to_owned(),
+                sum_type: git_hash_sum.sum_type.clone(),
+            };
+
+            validate_file(&download.file_name, &file, hash_sum, multi_progress.clone()).await?;
+        }
+        None => {
+            println!("No sum files available, skipping");
+        }
+    }
+
+    let install_name = compat_tool.installation_name(&download.version);
+    let install_path = install_dir.join(install_name.clone());
+    if files::check_if_exists(&install_path).await {
+        fs::remove_dir_all(&install_path).await.with_context(|| {
+            format!(
+                "Error removing existing install at {}",
+                install_path.display()
+            )
+        })?;
+    }
+
+    let unpack_progress_bar = init_unpack_progress(&install_dir.clone(), &file, multi_progress)
+        .await
+        .with_context(|| format!("Error unpacking {}", file.display()))?;
+
+    let decompressor = files::Decompressor::from_path(&file)
+        .await
+        .with_context(|| format!("Error checking file type of {}", file.display()))?;
+
+    files::unpack_file(
+        &compat_tool,
+        &download,
+        unpack_progress_bar.wrap_async_read(decompressor),
+        &install_dir,
+    )
+    .await
+    .with_context(|| format!("Error unpacking {}", file.display()))?;
+
+    unpack_progress_bar.set_style(get_message_bar_style().await);
+    unpack_progress_bar.finish_with_message(format!(
+        "Done! {} installed in {}/{}\nYour app might require a restart to detect {}",
+        compat_tool,
+        download
+            .for_app
+            .installation_dir(&compat_tool)
+            .unwrap()
+            .to_str()
+            .unwrap(),
+        install_name,
+        compat_tool
+    ));
+    Ok(())
+}
+
+/// Checks if the selected Release/version is already installed.
+///
+/// Will prompt the user to overwrite existing files
+async fn should_download(release: &Release, install_dir: &mut PathBuf) -> bool {
+    // Check if versions exist in disk.
+    // If they do, ask the user if it should be overwritten
+    !files::check_if_exists(install_dir).await
+        || helper_menus::confirm_menu(
+            format!(
+                "Version {} exists in the installation path. Overwrite?",
+                &release.tag_name
+            ),
+            String::from("If you choose yes, you will re-install it."),
+            false,
+        )
+}
+
+async fn get_progress_style() -> ProgressStyle {
+    PROGRESS_BAR_STYLE.get_or_init(|| {
+        future::ready(ProgressStyle::default_bar()
+            .template("{msg}\n{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({bytes_per_sec})").unwrap()
+            .progress_chars("#>-"))
+    }).await.clone()
+}
+
+async fn get_message_bar_style() -> ProgressStyle {
+    MESSAGE_BAR_STYLE
+        .get_or_init(|| future::ready(ProgressStyle::default_bar().template("{msg}").unwrap()))
+        .await
+        .clone()
 }

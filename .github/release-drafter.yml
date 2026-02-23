@@ -3,28 +3,28 @@ tag-template: "v$RESOLVED_VERSION"
 categories:
   - title: "🚀 Features"
     labels:
-      - "🚀 Feature"
+      - "Feature"
   - title: "💅 Improvements"
     labels:
-      - "💅 Improvement"
+      - "Improvement"
   - title: "🐛 Bug Fix"
     labels:
-      - "🐛 Bug"
+      - "Bug"
   - title: "📚 Documentation"
     labels:
-      - "📚 Docs"
+      - "Docs"
   - title: "🧪 Tests"
     labels:
-      - "🧪 Tests"
+      - "Tests"
   - title: "🚨 Security"
     labels:
-      - "🚨 Security"
+      - "Security"
   - title: "☁️ CI"
     labels:
-      - "☁️ CI"
+      - "CI"
   - title: "🤖 Dependencies"
     labels:
-      - "🤖 Dependencies"
+      - "Dependencies"
 change-template: "- $TITLE @$AUTHOR (#$NUMBER)"
 change-title-escapes: '\<*_&'
 version-resolver:

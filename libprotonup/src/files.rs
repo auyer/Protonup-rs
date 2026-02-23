@@ -1,208 +1,414 @@
-use super::constants;
-use crate::utils;
-use anyhow::{Context, Result};
-use flate2::read::GzDecoder;
-use futures_util::StreamExt;
-use reqwest::header::USER_AGENT;
-use sha2::{Digest, Sha512};
-use std::cmp::min;
-use std::fs::{File, OpenOptions};
-use std::io;
-use std::io::Write;
-use std::path::Path;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::Arc;
-use tar::Archive;
-use xz2::read::XzDecoder;
+use std::fmt;
+use std::future;
+use std::path::{Path, PathBuf};
+use std::pin::Pin;
+use std::task::Poll;
 
-fn path_result(path: &Path) -> String {
-    let spath = path.to_str();
-    match spath {
-        Some(p) => String::from(p),
-        None => String::from("path missing!"),
+use anyhow::{Context, Error, Result, anyhow};
+use async_compression::tokio::bufread::{GzipDecoder, XzDecoder, ZstdDecoder};
+use futures_util::StreamExt;
+use pin_project::pin_project;
+use tokio::fs::File;
+use tokio::io::{AsyncBufRead, AsyncRead, BufReader, ReadBuf};
+use tokio::{fs, io, pin};
+use tokio_stream::wrappers::ReadDirStream;
+use tokio_tar::ArchiveBuilder;
+
+use crate::downloads::Download;
+use crate::sources::CompatTool;
+use crate::utils;
+
+#[pin_project(project = DecompressorProject)]
+pub enum Decompressor<R: AsyncBufRead + Unpin> {
+    Gzip(#[pin] GzipDecoder<R>),
+    Xz(#[pin] XzDecoder<R>),
+    Zstd(#[pin] ZstdDecoder<R>),
+}
+
+pub(crate) fn check_supported_extension(file_name: &str) -> Result<String> {
+    if file_name.ends_with("tar.gz") || file_name.ends_with("tgz") {
+        Ok("tar.gz".to_owned())
+    } else if file_name.ends_with("tar.zst") || file_name.ends_with("tar.zstd") {
+        Ok("tar.zst".to_owned())
+    } else if file_name.ends_with("tar.xz") || file_name.ends_with("txz") {
+        Ok("tar.xz".to_owned())
+    } else {
+        Err(anyhow!(
+            "Downloaded file wasn't of the expected type. (tar.(gz/xz/zst))"
+        ))
     }
 }
 
-// decompress will detect the extension and decompress the file with the appropriate function
-pub fn decompress(from_path: &Path, destination_path: &Path) -> Result<()> {
-    let path_str = from_path.as_os_str().to_string_lossy();
+impl Decompressor<BufReader<File>> {
+    pub async fn from_path(path: &Path) -> Result<Self> {
+        let path_str = path.as_os_str().to_string_lossy();
 
-    if path_str.ends_with("tar.gz") {
-        decompress_gz(from_path, destination_path)
-    } else if path_str.ends_with("tar.xz") {
-        decompress_xz(from_path, destination_path)
-    } else {
-        println!("no decompress\nPath: {:?}", from_path);
+        let file = File::open(path).await.with_context(|| {
+            format!(
+                "[Decompressing] Failed to unpack into destination : {}",
+                path.display()
+            )
+        })?;
+
+        // TODO: implement this using the same validation function
+        if path_str.ends_with("tar.gz") {
+            Ok(Decompressor::Gzip(GzipDecoder::new(BufReader::new(file))))
+        } else if path_str.ends_with("tar.xz") {
+            Ok(Decompressor::Xz(XzDecoder::new(BufReader::new(file))))
+        } else if path_str.ends_with("tar.zst") {
+            Ok(Decompressor::Zstd(ZstdDecoder::new(BufReader::new(file))))
+        } else {
+            Err(Error::msg(format!(
+                "no decompress\nPath: {}",
+                path.display()
+            )))
+        }
+    }
+}
+
+impl<R: AsyncBufRead + Unpin> AsyncRead for Decompressor<R> {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        match self.project() {
+            DecompressorProject::Gzip(reader) => {
+                pin!(reader);
+                reader.poll_read(cx, buf)
+            }
+            DecompressorProject::Xz(reader) => {
+                pin!(reader);
+                reader.poll_read(cx, buf)
+            }
+            DecompressorProject::Zstd(reader) => {
+                pin!(reader);
+                reader.poll_read(cx, buf)
+            }
+        }
+    }
+}
+
+/// Prepares downloaded file to be decompressed
+///
+/// Parses the passed in data and ensures the destination directory is created
+pub async fn unpack_file<R: AsyncRead + Unpin>(
+    compat_tool: &CompatTool,
+    download: &Download,
+    reader: R,
+    install_path: &Path,
+) -> Result<()> {
+    let install_dir = utils::expand_tilde(install_path).unwrap();
+
+    fs::create_dir_all(&install_dir).await.unwrap();
+
+    decompress_with_new_top_level(
+        reader,
+        install_dir.as_path(),
+        compat_tool.installation_name(&download.version).as_str(),
+    )
+    .await
+    .unwrap();
+
+    Ok(())
+}
+
+/// decompress_with_new_top_level unpacks the tarrball,
+/// replacing the top level folder with the provided value
+async fn decompress_with_new_top_level<R: AsyncRead + Unpin>(
+    reader: R,
+    destination_path: &Path,
+    new_top_level: &str,
+) -> Result<()> {
+    let mut archive = ArchiveBuilder::new(reader)
+        .set_unpack_xattrs(false)
+        .set_preserve_permissions(true)
+        .set_preserve_mtime(true)
+        .set_overwrite(true)
+        .set_ignore_zeros(false)
+        .build();
+
+    // Get the entries from the archive
+    let mut entries = archive.entries()?;
+
+    while let Some(entry) = entries.next().await {
+        let mut entry = entry?;
+
+        // Get the original path in the tar
+        let path = entry.path()?;
+
+        // Create the new path by replacing the top level
+        let new_path = if path.parent().is_some() {
+            let components: Vec<_> = path.components().collect();
+
+            if components.len() > 1 {
+                let mut new_path = PathBuf::from(destination_path).join(new_top_level);
+                // skip len 1, it corresponds to the top level itself
+                // we will provide a new top level
+                for component in components.iter().skip(1) {
+                    new_path.push(component);
+                }
+                new_path
+            } else {
+                // if the file name is the new top-level, ignore it
+                if path.starts_with(new_top_level) {
+                    PathBuf::from(destination_path).join(path.file_name().unwrap())
+                } else {
+                    PathBuf::from(destination_path)
+                        .join(new_top_level)
+                        .join(path.file_name().unwrap())
+                }
+            }
+        } else {
+            PathBuf::from(destination_path)
+                .join(new_top_level)
+                .join(&path)
+        };
+
+        if path.is_dir() {
+            fs::create_dir_all(&new_path).await?;
+            continue;
+        }
+
+        if let Some(parent) = new_path.parent() {
+            fs::create_dir_all(parent).await?;
+        }
+
+        // Extract the file
+        entry.unpack(&new_path).await?;
+    }
+
+    Ok(())
+}
+
+/// check_if_exists checks if a folder exists in a path
+pub async fn check_if_exists(path: &PathBuf) -> bool {
+    let f_path = utils::expand_tilde(path).unwrap();
+    let p = f_path.as_path();
+    fs::metadata(p).await.map(|m| m.is_dir()).unwrap_or(false)
+}
+
+/// list_folders_in_path returns a vector of strings of the folders in a path
+pub async fn list_folders_in_path(path: &PathBuf) -> Result<Vec<String>, anyhow::Error> {
+    let f_path = utils::expand_tilde(path).unwrap();
+    let paths_real: Vec<String> = ReadDirStream::new(tokio::fs::read_dir(f_path).await?)
+        .filter_map(|e| future::ready(e.ok()))
+        .filter(|e| future::ready(e.path().is_dir()))
+        .map(|e| e.path().file_name().unwrap().to_str().unwrap().to_string())
+        .collect()
+        .await;
+    Ok(paths_real)
+}
+
+/// Removes a directory and all its contents
+pub async fn remove_dir_all(path: &PathBuf) -> Result<()> {
+    let f_path = utils::expand_tilde(path).unwrap();
+    let p = f_path.as_path();
+    tokio::fs::remove_dir_all(p)
+        .await
+        .with_context(|| format!("[Remove] Failed to remove directory : {}", p.display()))?;
+    Ok(())
+}
+
+/// Folder structure is a helper to Display a combo of Path and subpath
+pub struct Folder(pub (PathBuf, String));
+
+impl fmt::Display for Folder {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Access the tuple's second element (String) using self.0.1
+        write!(f, "{}", self.0.1)
+    }
+}
+
+/// Folders is just an alias of `Vec<Folder>` to implement Display
+pub struct Folders(pub Vec<Folder>);
+
+impl fmt::Display for Folders {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for (i, folder) in self.0.iter().enumerate() {
+            if i > 0 {
+                write!(f, ", ")?;
+            }
+            write!(f, "{folder}")?;
+        }
         Ok(())
     }
 }
 
-/// Decompress a tar.gz file
-fn decompress_gz(from_path: &Path, destination_path: &Path) -> Result<()> {
-    let file = File::open(from_path).with_context(|| {
-        format!(
-            "[Decompressing] Failed to open file from Path: {}",
-            path_result(from_path),
-        )
-    })?;
+#[cfg(test)]
+mod test {
+    use crate::{apps::AppInstallations, sources};
 
-    let mut archive = Archive::new(GzDecoder::new(file));
+    use super::*;
+    use anyhow::Result;
+    use std::fs;
+    use tar;
+    use tempfile::tempdir;
 
-    archive.unpack(destination_path).with_context(|| {
-        format!(
-            "[Decompressing] Failed to unpack into destination : {}",
-            path_result(destination_path)
-        )
-    })?;
-    Ok(())
-}
+    #[test]
+    fn test_check_supported_extension() {
+        struct TestCase {
+            name: &'static str,
+            file_name: String,
+            expected: Result<String>,
+        }
 
-/// Decompress a tar.xz file
-fn decompress_xz(from_path: &Path, destination_path: &Path) -> Result<()> {
-    let file = File::open(from_path).with_context(|| {
-        format!(
-            "[Decompressing] Failed to open file from Path: {}",
-            path_result(from_path),
-        )
-    })?;
+        let test_cases = vec![
+            TestCase {
+                name: "tar.gz",
+                file_name: "my_archive.tar.gz".to_string(),
+                expected: Ok("tar.gz".to_string()),
+            },
+            TestCase {
+                name: "tgz",
+                file_name: "another_archive.tgz".to_string(),
+                expected: Ok("tar.gz".to_string()),
+            },
+            TestCase {
+                name: "tar.zst",
+                file_name: "data.tar.zst".to_string(),
+                expected: Ok("tar.zst".to_string()),
+            },
+            TestCase {
+                name: "tar.zstd",
+                file_name: "backup.tar.zstd".to_string(),
+                expected: Ok("tar.zst".to_string()),
+            },
+            TestCase {
+                name: "tar.xz",
+                file_name: "image.tar.xz".to_string(),
+                expected: Ok("tar.xz".to_string()),
+            },
+            TestCase {
+                name: "txz",
+                file_name: "report.txz".to_string(),
+                expected: Ok("tar.xz".to_string()),
+            },
+            TestCase {
+                name: "unsupported extension - zip",
+                file_name: "document.zip".to_string(),
+                expected: Err(anyhow::anyhow!(
+                    "Downloaded file wasn't of the expected type. (tar.(gz/xz/zst))",
+                )),
+            },
+            TestCase {
+                name: "unsupported extension - tar",
+                file_name: "plain.tar".to_string(),
+                expected: Err(anyhow::anyhow!(
+                    "Downloaded file wasn't of the expected type. (tar.(gz/xz/zst))",
+                )),
+            },
+            TestCase {
+                name: "unsupported extension - no extension",
+                file_name: "config".to_string(),
+                expected: Err(anyhow::anyhow!(
+                    "Downloaded file wasn't of the expected type. (tar.(gz/xz/zst))",
+                )),
+            },
+            TestCase {
+                name: "filename with supported extension in the middle",
+                file_name: "prefix.tar.gz.suffix".to_string(),
+                expected: Err(anyhow::anyhow!(
+                    "Downloaded file wasn't of the expected type. (tar.(gz/xz/zst))",
+                )),
+            },
+            TestCase {
+                name: "empty filename",
+                file_name: "".to_string(),
+                expected: Err(anyhow::anyhow!(
+                    "Downloaded file wasn't of the expected type. (tar.(gz/xz/zst))",
+                )),
+            },
+        ];
 
-    let mut archive = Archive::new(XzDecoder::new(file));
-
-    archive.unpack(destination_path).with_context(|| {
-        format!(
-            "[Decompressing] Failed to unpack into destination : {}",
-            path_result(destination_path)
-        )
-    })?;
-    Ok(())
-}
-
-/// Creates the progress trackers variable pointers
-pub fn create_progress_trackers() -> (Arc<AtomicUsize>, Arc<AtomicBool>) {
-    (
-        Arc::new(AtomicUsize::new(0)),
-        Arc::new(AtomicBool::new(false)),
-    )
-}
-
-/// Check if the Proton/Wine version (tag) exists at path
-pub fn check_if_exists(path: &str, tag: &str) -> bool {
-    let f_path = utils::expand_tilde(format!("{path}{tag}/")).unwrap();
-    let p = f_path.as_path();
-    p.is_dir()
-}
-
-// list_folders_in_path returns a vector of strings of the folders in a path
-pub fn list_folders_in_path(path: &str) -> Result<Vec<String>, anyhow::Error> {
-    let f_path = utils::expand_tilde(path).unwrap();
-    let p = f_path.as_path();
-    let paths: Vec<String> = p
-        .read_dir()
-        .with_context(|| format!("Failed to read directory : {}", path_result(p)))?
-        .filter_map(|e| e.ok())
-        .filter(|e| e.path().is_dir())
-        .map(|e| {
-            let path = e.path();
-            let name = path.file_name().unwrap();
-            name.to_str().unwrap().to_string()
-        })
-        .collect();
-    Ok(paths)
-}
-
-// removes a directory and all its contents
-pub fn remove_dir_all(path: &str) -> Result<()> {
-    let f_path = utils::expand_tilde(path).unwrap();
-    let p = f_path.as_path();
-    std::fs::remove_dir_all(p)
-        .with_context(|| format!("[Remove] Failed to remove directory : {}", path_result(p)))?;
-    Ok(())
-}
-
-/// requires pointers to store the progress, and another to store "done" status
-/// Create them with `create_progress_trackers`
-pub async fn download_file_progress(
-    url: String,
-    total_size: u64,
-    install_dir: &Path,
-    progress: Arc<AtomicUsize>,
-    done: Arc<AtomicBool>,
-) -> Result<()> {
-    let client = reqwest::Client::new();
-    let res = client
-        .get(&url)
-        .header(USER_AGENT, format!("protonup-rs {}", constants::VERSION))
-        .send()
-        .await
-        .with_context(|| format!("[Download] Failed to call remote server on URL : {}", &url))?;
-
-    let mut file = OpenOptions::new()
-        .create_new(true)
-        .write(true)
-        .open(install_dir)
-        .with_context(|| {
-            format!(
-                "[Download] Failed creating destination file : {}",
-                path_result(install_dir)
-            )
-        })?;
-
-    let mut downloaded: u64 = 0;
-    let mut stream = res.bytes_stream();
-
-    while let Some(item) = stream.next().await {
-        let chunk = item.context("[Download] Failed reading stream from network")?;
-
-        file.write_all(&chunk).with_context(|| {
-            format!(
-                "[Download] Failed creating destination file : {}",
-                path_result(install_dir)
-            )
-        })?;
-        let new = min(downloaded + (chunk.len() as u64), total_size);
-        downloaded = new;
-        let val = Arc::clone(&progress);
-        val.swap(new as usize, Ordering::SeqCst);
+        for test_case in test_cases {
+            let result = check_supported_extension(&test_case.file_name);
+            match (result, test_case.expected) {
+                (Ok(actual), Ok(expected)) => {
+                    assert_eq!(actual, expected, "Test '{}' failed", test_case.name)
+                }
+                (Err(actual), Err(expected)) => {
+                    assert_eq!(
+                        actual.to_string(),
+                        expected.to_string(),
+                        "Test '{}' failed",
+                        test_case.name
+                    );
+                }
+                (Ok(_), Err(_)) => panic!(
+                    "Test '{}' failed: Expected error, got success",
+                    test_case.name
+                ),
+                (Err(_), Ok(_)) => panic!(
+                    "Test '{}' failed: Expected success, got error",
+                    test_case.name
+                ),
+            }
+        }
     }
-    done.swap(true, Ordering::SeqCst);
-    Ok(())
-}
 
-/// Downloads sha512 hash returned as Result<String> to verify download integrity
-pub async fn download_sha512_into_memory(url: &String) -> Result<String> {
-    let client = reqwest::Client::new();
-    let res = client
-        .get(url)
-        .header(USER_AGENT, format!("protonup-rs {}", constants::VERSION))
-        .send()
-        .await
-        .with_context(|| {
-            format!(
-                "[Download SHA] Failed to call remote server on URL : {}",
-                &url
-            )
-        })?;
+    #[tokio::test]
+    async fn test_unpack_with_new_top_level() {
+        let empty = "".to_owned();
 
-    res.text()
-        .await
-        .with_context(|| format!("[Download SHA] Failed to read response from URL : {}", &url))
-}
+        let s = CompatTool::new_custom(
+            empty.clone(),
+            sources::Forge::GitHub,
+            empty.clone(),
+            empty.clone(),
+            sources::ToolType::WineBased,
+            None,
+            None,
+            None,
+        );
 
-pub fn hash_check_file(file_dir: String, git_hash: String) -> Result<bool> {
-    let mut file = File::open(file_dir)
-        .context("[Hash Check] Failed oppening download file for checking. Was the file moved?")?;
-    let mut hasher = Sha512::new();
-    io::copy(&mut file, &mut hasher)
-        .context("[Hash Check] Failed reading download file for checking")?;
+        let d = Download {
+            file_name: "test".to_owned(),
+            for_app: AppInstallations::Steam,
+            version: "new_top_123".to_owned(),
+            hash_sum: None,
+            download_url: "test.tar".to_owned(),
+            size: 1,
+        };
 
-    let hash = hasher.finalize();
+        // Create a temporary directory for the test
+        let temp_dir = tempdir().unwrap();
+        let tar_path = temp_dir.path().join("test.tar");
+        let output_dir = temp_dir.path().join("./output");
+        let new_top_level = d.version.clone();
 
-    let (git_hash, _) = git_hash
-        .rsplit_once(' ')
-        .context("[Hash Check] Failed decoding hash file. Is this the right hash ? Please file an issue to protonup-rs !")?;
+        // Create sample directory structure to tar
+        let original_top = temp_dir.path().join("original_top");
+        fs::create_dir_all(&original_top).unwrap();
+        fs::write(original_top.join("file1.txt"), "test content").unwrap();
+        fs::create_dir_all(original_top.join("subdir")).unwrap();
+        fs::write(original_top.join("subdir/file2.txt"), "more content").unwrap();
 
-    if hex::encode(hash) != git_hash.trim() {
-        return Ok(false);
+        // Create a tar file
+        let tar_file = fs::File::create(&tar_path).unwrap();
+        let mut builder = tar::Builder::new(tar_file);
+        builder
+            .append_dir_all("original_top", &original_top)
+            .unwrap();
+        builder.finish().unwrap();
+
+        let file = File::open(tar_path).await.unwrap();
+
+        unpack_file(&s, &d, file, output_dir.as_path())
+            .await
+            .expect("Unpacking failed");
+
+        // Verify the new directory structure
+        let new_root = output_dir.join(new_top_level);
+        assert!(new_root.exists(), "New top level directory not created");
+
+        let file1 = new_root.join("file1.txt");
+        assert!(file1.is_file(), "File not found in new structure");
+        assert_eq!(fs::read_to_string(file1).unwrap(), "test content");
+
+        let file2 = new_root.join("subdir/file2.txt");
+        assert!(file2.is_file(), "Nested file not found");
+        assert_eq!(fs::read_to_string(file2).unwrap(), "more content");
     }
-    Ok(true)
 }
+

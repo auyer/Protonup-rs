@@ -1,8 +1,11 @@
 use inquire::MultiSelect;
-use libprotonup::{apps, files};
+use libprotonup::{
+    apps::{self},
+    files::{self, Folders},
+};
 use std::fmt;
 
-use super::helper_menus::{confirm_menu, tag_menu};
+use super::helper_menus::{confirm_menu, multiple_select_menu};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub(crate) enum ManageAppsMenuOptions {
@@ -10,7 +13,7 @@ pub(crate) enum ManageAppsMenuOptions {
     AppInstallations(apps::AppInstallations),
 }
 
-// APP_VARIANTS_WITH_DETECT contains all variants of the App enum including the DetectAll variant
+/// APP_VARIANTS_WITH_DETECT contains all variants of the App enum including the DetectAll variant
 static APP_VARIANTS_WITH_DETECT: &[ManageAppsMenuOptions] = &[
     ManageAppsMenuOptions::DetectAll,
     ManageAppsMenuOptions::AppInstallations(apps::AppInstallations::Steam),
@@ -23,11 +26,12 @@ impl fmt::Display for ManageAppsMenuOptions {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match &self {
             Self::DetectAll => write!(f, "Detect All"),
-            Self::AppInstallations(app_inst) => write!(f, "{}", app_inst),
+            Self::AppInstallations(app_inst) => write!(f, "{app_inst}"),
         }
     }
 }
 
+/// Prompt the user for which App they want to manage
 fn manage_menu() -> Vec<ManageAppsMenuOptions> {
     let answer = MultiSelect::new(
         "Select the Applications you want to manage :",
@@ -36,70 +40,70 @@ fn manage_menu() -> Vec<ManageAppsMenuOptions> {
     .with_default(&[0_usize])
     .prompt();
 
-    match answer {
-        Ok(list) => list,
-
-        Err(_) => {
-            println!("The tag list could not be processed");
-            vec![]
-        }
-    }
+    answer.unwrap_or_else(|_| {
+        println!("The tag list could not be processed");
+        vec![]
+    })
 }
 
-pub(crate) fn manage_apps_routine() {
-    let mut apps = vec![];
-
+/// Allow the user to delete existing wine versions
+///
+/// The user selects the apps and wine versions to remove
+pub(crate) async fn manage_apps_routine() {
     let choices = manage_menu();
 
-    if choices.contains(&ManageAppsMenuOptions::DetectAll) {
-        apps = apps::APP_INSTALLATIONS_VARIANTS.to_vec();
+    // default to all apps
+    let mut selected_apps = apps::APP_INSTALLATIONS_VARIANTS.to_vec();
+    if !choices.contains(&ManageAppsMenuOptions::DetectAll) {
+        selected_apps = choices
+            .iter()
+            .map(|choice| match choice {
+                ManageAppsMenuOptions::DetectAll => unreachable!(), // managed by the default case
+                ManageAppsMenuOptions::AppInstallations(app) => app.to_owned(),
+            })
+            .collect::<Vec<apps::AppInstallations>>();
     }
-    for app in apps {
-        let versions = match app.list_installed_versions() {
+    for app in selected_apps {
+        let versions = match app.list_installed_versions().await {
             Ok(versions) => versions,
             Err(_) => {
-                println!("App {} not found in your system, skipping... ", app);
+                println!("App {app} not found in your system, skipping... ");
                 continue;
             }
         };
         if versions.is_empty() {
-            println!("No versions found for {}, skipping... ", app);
+            println!("No versions found for {app}, skipping... ");
             continue;
         }
-        let delete_versions = match tag_menu(
-            &format!("Select the versions you want to DELETE from {}", app),
+        let delete_versions = multiple_select_menu(
+            &format!("Select the versions you want to DELETE from {app}"),
             versions,
-        ) {
-            Ok(versions) => versions,
-            Err(_) => {
-                vec![]
-            }
-        };
+        )
+        .unwrap_or_else(|_| vec![]);
 
         if delete_versions.is_empty() {
-            println!("Zero versions selected for {}, skipping...\n", app);
+            println!("Zero versions selected for {app}, skipping...\n");
             continue;
         }
+        let delete_versions = Folders(delete_versions);
         if confirm_menu(
-            format!("Are you sure you want to delete {:?} ?", delete_versions),
-            format!("If you choose yes, you will them from {}", app),
+            format!("Are you sure you want to delete {delete_versions} ?"),
+            format!("If you choose yes, you will them from {app}"),
             true,
         ) {
-            for version in delete_versions {
-                files::remove_dir_all(&format!("{}{}", &app.default_install_dir(), &version))
-                    .map_or_else(
-                        |e| {
-                            eprintln!(
-                                "Error deleting {}{}: {}",
-                                &app.default_install_dir(),
-                                &version,
-                                e
-                            )
-                        },
-                        |_| {
-                            println!("{} {} deleted successfully", &app, &version);
-                        },
-                    );
+            for version in delete_versions.0 {
+                let version = version.0;
+                let version_path = version.0.join(&version.1);
+                files::remove_dir_all(&version_path).await.map_or_else(
+                    |e| eprintln!("Error deleting {}: {}", version_path.as_path().display(), e),
+                    |_| {
+                        println!(
+                            "{} {} deleted successfully",
+                            &app,
+                            version_path.as_path().display()
+                        );
+                    },
+                );
             }
         }
     }
