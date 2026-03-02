@@ -107,7 +107,7 @@ pub enum AppInstallations {
 impl fmt::Display for AppInstallations {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::Steam => write!(f, "Steam \"Native\" "),
+            Self::Steam => write!(f, "Steam \"Native\""),
             Self::SteamFlatpak => write!(f, "Steam Flatpak"),
             Self::Lutris => write!(f, "Lutris \"Native\""),
             Self::LutrisFlatpak => write!(f, "Lutris Flatpak"),

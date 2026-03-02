@@ -34,7 +34,7 @@ impl fmt::Display for ManageAppsMenuOptions {
 /// Prompt the user for which App they want to manage
 fn manage_menu() -> Vec<ManageAppsMenuOptions> {
     let answer = MultiSelect::new(
-        "Select the Applications you want to manage :",
+        "Select the Applications you want to manage:",
         APP_VARIANTS_WITH_DETECT.to_vec(),
     )
     .with_default(&[0_usize])

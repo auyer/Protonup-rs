@@ -180,14 +180,14 @@ pub async fn download_file_into_memory(url: &String) -> Result<String> {
         .await
         .with_context(|| {
             format!(
-                "[Download SHA] Failed to call remote server on URL : {}",
+                "[Download SHA] Failed to call remote server on URL: {}",
                 &url
             )
         })?;
 
     res.text()
         .await
-        .with_context(|| format!("[Download SHA] Failed to read response from URL : {}", &url))
+        .with_context(|| format!("[Download SHA] Failed to read response from URL: {}", &url))
 }
 
 /// Downloads to a AsyncWrite buffer, where hooks and Wrappers can be used to report progress
@@ -201,7 +201,7 @@ pub async fn download_to_async_write<W: AsyncWrite + Unpin>(
         .header(USER_AGENT, format!("protonup-rs {}", constants::VERSION))
         .send()
         .await
-        .with_context(|| format!("[Download] Failed to call remote server on URL : {}", &url))?;
+        .with_context(|| format!("[Download] Failed to call remote server on URL: {}", &url))?;
 
     io::copy(
         &mut StreamReader::new(res.bytes_stream().map_err(io::Error::other)),

@@ -32,7 +32,7 @@ pub struct CompatTool {
     /// release asset filter is a regex to filter out uwanted release assets
     pub release_asset_filter: Option<String>,
 
-    // Templates in order :
+    // Templates in order:
     /// file_name_replacement does a replace_all to the text version
     pub file_name_replacement: Option<(String, String)>,
     /// file_name_template will add prefixes and suffixes to
