@@ -262,8 +262,14 @@ pub struct Download {
 impl Download {
     // output_dir checks if the file is supported and returns the standardized file name
     pub fn download_dir(&self) -> Result<PathBuf> {
-        crate::utils::create_download_temp_dir(&self.version, &self.download_url)
-            .with_context(|| format!("Failed to create temp download directory for {}", self.version))
+        crate::utils::create_download_temp_dir(&self.version, &self.download_url).with_context(
+            || {
+                format!(
+                    "Failed to create temp download directory for {}",
+                    self.version
+                )
+            },
+        )
     }
 }
 
