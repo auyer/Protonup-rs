@@ -1,10 +1,10 @@
 [package]
 name = "libprotonup"
-version = "0.10.0"
+version = "0.11.0"
 edition = "2024"
 authors = ["Auyer <auyer@rcpassos.me>"]
 repository = "https://github.com/auyer/protonup-rs"
-license = "Apache-2.0"
+license = "GPL-3.0"
 readme = "../docs/docs.md"
 
 description = "Library for Custom Proton Download and installation"
@@ -15,28 +15,28 @@ anyhow = "1.0"
 dirs = "6.0"
 futures-util = "0.3"
 hex = "0.4"
-hex-literal = "1.0"
+hex-literal = "1.1"
 pin-project = "1.1"
-reqwest = { version = "0.12", default-features = false, features = [
-  "rustls-tls",
+reqwest = { version = "0.13", default-features = false, features = [
+	"rustls",
   "stream",
   "json",
 ] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 sha2 = "0.10"
-tokio = { version = "1.48", features = ["macros"] }
+tokio = { version = "1.50", features = ["macros"] }
 tokio-stream = { version = "0.1", features = ["fs"] }
 tokio-util = "0.7"
 ron = "0.12"
-lazy_static = "1.5.0"
+lazy_static = "1.5"
 # decompression
-astral-tokio-tar = "0.5.6"
+astral-tokio-tar = "0.6"
 async-compression = { version = "0.4", features = ['gzip', 'xz', 'zstd', 'tokio'] }
-tempfile = "3.24"
+tempfile = "3.27"
 regex = "1.12"
 
 [dev-dependencies]
 tar = "0.4"
-tokio = { version = "1.48", features = ["macros", "rt"] }
-wiremock = "0.6.5"
+tokio = { version = "1.50", features = ["macros", "rt"] }
+wiremock = "0.6"
