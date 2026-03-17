@@ -1,0 +1,25 @@
+{
+	"$schema": "https://raw.githubusercontent.com/jetify-com/devbox/0.16.0/.schema/devbox.schema.json",
+	"packages": [
+		"rustup@latest",
+		"libiconv@latest",
+		"xz@latest",
+		"lzma@latest"
+	],
+	"env": {
+		"PROJECT_DIR": "$PWD"
+	},
+	"shell": {
+		"init_hook": [
+			"rustup default stable",
+			"cargo fetch"
+		],
+		"scripts": {
+			"build-docs": "cargo doc",
+			"start": "cargo run",
+			"test": [
+				"cargo test -- --show-output"
+			]
+		}
+	}
+}
