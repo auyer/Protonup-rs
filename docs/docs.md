@@ -10,6 +10,58 @@ ProtonUp-rs is a tool for managing compatibility tools (like Proton, WineGE) for
 
 ---
 
+## Usage Modes
+
+### Interactive TUI Mode
+
+Run without arguments to start the interactive text-based user interface:
+
+```bash
+protonup-rs
+```
+
+### CLI Mode (Non-Interactive)
+
+Use CLI arguments for automation or scripting. When any of `--tool`, `--version`, or `--for` is provided, the TUI is bypassed:
+
+```bash
+# Install latest GEProton for Steam (auto-detected)
+protonup-rs --tool GEProton
+
+# Install specific version for Lutris
+protonup-rs --tool WineGE --version 8.26 --for lutris
+
+# Install to custom path
+protonup-rs --tool GEProton --version latest --for ~/.local/steam
+
+# Force overwrite existing installation
+protonup-rs --tool GEProton --for steam --force
+```
+
+#### CLI Arguments
+
+| Argument | Description |
+|----------|-------------|
+| `--tool <TOOL>` | Compatibility tool name (e.g., `GEProton`, `WineGE`, `Luxtorpeda`) |
+| `--version <VERSION>` | Version to install. Use `latest` for the latest version |
+| `--for <TARGET>` | Installation target: `steam`, `lutris`, or a custom path |
+| `--force` | Overwrite existing installations |
+| `--quick-download` | Auto-detect apps and install default tools |
+
+**`--for` argument behavior:**
+- `steam` / `Steam` (case-insensitive) - Install to Steam (Native or Flatpak)
+- `lutris` / `Lutris` (case-insensitive) - Install to Lutris (Native or Flatpak)
+- `<path>` - Any other value is treated as a custom installation path (relative or absolute)
+- Omitted - Auto-detects based on the tool's `compatible_applications` and what's installed
+
+**Auto-detection logic:**
+1. When `--tool` is specified, the tool's `compatible_applications` list is checked
+2. Compatible apps are checked in order (Steam first, then Lutris, based on the tool's configuration)
+3. First installed compatible app is selected
+4. If no compatible apps are found, an error is shown
+
+---
+
 ## Core Components
 
 ### 1. Applications (`apps` Module)
