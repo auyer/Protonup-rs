@@ -18,8 +18,17 @@ async fn determine_app_installation(
     for_target: Option<&str>,
     compat_tool: &CompatTool,
 ) -> Result<AppInstallations, Error> {
-    match for_target {
-        Some("steam") | Some("Steam") | Some("STEAM") => {
+    let app = match for_target {
+        Some(target) => App::from_str_or_path(target),
+        None => {
+            // Auto-detect based on tool's compatible applications
+            return auto_detect_app(&compat_tool.compatible_applications).await;
+        }
+    };
+
+    // For Steam and Lutris, detect installation method; for Custom, use directly
+    match app {
+        App::Steam => {
             let apps = App::Steam.detect_installation_method().await;
             if apps.is_empty() {
                 return Err(anyhow::anyhow!(
@@ -28,7 +37,7 @@ async fn determine_app_installation(
             }
             Ok(apps[0].clone())
         }
-        Some("lutris") | Some("Lutris") | Some("LUTRIS") => {
+        App::Lutris => {
             let apps = App::Lutris.detect_installation_method().await;
             if apps.is_empty() {
                 return Err(anyhow::anyhow!(
@@ -37,16 +46,7 @@ async fn determine_app_installation(
             }
             Ok(apps[0].clone())
         }
-        Some(custom_path) => {
-            // Treat as a custom path (relative or absolute)
-            Ok(AppInstallations::new_custom_app_install(
-                custom_path.to_string(),
-            ))
-        }
-        None => {
-            // Auto-detect based on tool's compatible applications
-            auto_detect_app(&compat_tool.compatible_applications).await
-        }
+        App::Custom(path) => Ok(AppInstallations::new_custom_app_install(path)),
     }
 }
 
@@ -74,25 +74,16 @@ async fn auto_detect_app(compatible_apps: &[App]) -> Result<AppInstallations, Er
     }
 
     // If no compatible apps are installed, provide a helpful error
-    let compatible_names: Vec<&str> = compatible_apps
+    let compatible_names: Vec<String> = compatible_apps
         .iter()
-        .filter_map(|app| match app {
-            App::Steam => Some("Steam"),
-            App::Lutris => Some("Lutris"),
-            App::Custom(_) => None,
-        })
+        .filter(|app| !matches!(app, App::Custom(_)))
+        .map(|app| app.to_string())
         .collect();
 
-    if compatible_names.is_empty() {
-        Err(anyhow::anyhow!(
-            "No supported apps found for this tool. Use --for to specify 'steam', 'lutris', or a custom installation path."
-        ))
-    } else {
-        Err(anyhow::anyhow!(
-            "{} installation(s) not found. Use --for to specify 'steam', 'lutris', or a custom installation path.",
-            compatible_names.join(" and ")
-        ))
-    }
+    Err(anyhow::anyhow!(
+        "{} installation(s) not found. Use --for to specify 'steam', 'lutris', or a custom installation path.",
+        compatible_names.join(" and ")
+    ))
 }
 
 /// Runs the program in CLI mode with provided arguments.
@@ -126,11 +117,8 @@ pub async fn run_cli_mode(
         }
         None => {
             // If no tool specified, determine app first, then use its default tool
-            // For auto-detect, check Steam first, then Lutris
             let temp_app = match for_target.as_deref() {
-                Some("steam") | Some("Steam") => App::Steam,
-                Some("lutris") | Some("Lutris") => App::Lutris,
-                Some(path) => App::Custom(path.to_string()),
+                Some(target) => App::from_str_or_path(target),
                 None => {
                     // Auto-detect: prefer Steam, fallback to Lutris
                     let apps = App::Steam.detect_installation_method().await;
