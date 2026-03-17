@@ -40,3 +40,10 @@ path = "fuzz_targets/hashing.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "match_version"
+path = "fuzz_targets/match_version.rs"
+test = false
+doc = false
+bench = false
