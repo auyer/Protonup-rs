@@ -15,6 +15,15 @@ mod manage_apps;
 
 use manage_apps::manage_apps_routine;
 
+/// Guard struct that cleans up temp directory when dropped
+struct TempDirCleanupGuard;
+
+impl Drop for TempDirCleanupGuard {
+    fn drop(&mut self) {
+        let _ = libprotonup::utils::cleanup_fallback_temp_dir();
+    }
+}
+
 #[derive(Debug, Parser)]
 #[command(
     about = "Protonup-rs Install and Manage Proton/Wine and other Game Runtimes.\n\nRun without arguments to start the interactive TUI mode, or use the options:"
@@ -82,6 +91,9 @@ impl fmt::Display for InitialMenu {
 
 #[tokio::main]
 async fn main() {
+    // Register temp directory cleanup guard
+    let _cleanup_guard = TempDirCleanupGuard;
+
     let Opt {
         quick_download,
         force,

@@ -262,17 +262,8 @@ pub struct Download {
 impl Download {
     // output_dir checks if the file is supported and returns the standardized file name
     pub fn download_dir(&self) -> Result<PathBuf> {
-        let mut output_dir = tempfile::tempdir()
-            .expect("Failed to create tempdir")
-            .keep();
-
-        match files::check_supported_extension(&self.download_url) {
-            Ok(ext) => {
-                output_dir.push(format!("{}.{}", &self.version, ext));
-                Ok(output_dir)
-            }
-            Err(err) => Err(err),
-        }
+        crate::utils::create_download_temp_dir(&self.version, &self.download_url)
+            .with_context(|| format!("Failed to create temp download directory for {}", self.version))
     }
 }
 
