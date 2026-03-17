@@ -32,21 +32,49 @@ Adding new tools should be a simple process, check the docs section below!
 
 ## Usage
 
+### Interactive TUI Mode
+
 The default way is to simply invoke the cli, and navigate the text interface.
 
 ```bash
 protonup-rs
 ```
 
-To run a quick update and get the latest GE Proton version without navigating the TUI, you can use the quick flag:
+### CLI Mode (Non-Interactive)
+
+For automation or scripting, you can use CLI arguments to skip the TUI:
 
 ```bash
-Usage: protonup-rs [OPTIONS]
+# Install latest GEProton for Steam (auto-detected)
+protonup-rs --tool GEProton
 
-Options:
-  -q, --quick-download  Skip Menu, auto detect apps and download using default parameters
-  -h, --help            Print help
+# Install specific version for Lutris
+protonup-rs --tool WineGE --version 8.26 --for lutris
+
+# Install to custom path
+protonup-rs --tool GEProton --version latest --for ~/.local/steam
+
+# Force overwrite existing installation
+protonup-rs --tool GEProton --for steam --force
 ```
+
+#### CLI Options
+
+```
+Options:
+  -q, --quick-download     Skip Menu, auto detect apps and download using default parameters
+  -f, --force              Force install for existing apps during quick downloads
+      --tool <TOOL>        Compatibility tool to install (e.g., GEProton, WineGE, Luxtorpeda)
+      --version <VERSION>  Version to install (use "latest" for the latest version)
+      --for <FOR>          Target for installation. Use "steam", "lutris", or a custom path. If omitted, auto-detects based on tool compatibility
+  -h, --help               Print help
+```
+
+**`--for` argument behavior:**
+- `steam` / `Steam` - Install to Steam (Native or Flatpak)
+- `lutris` / `Lutris` - Install to Lutris (Native or Flatpak)
+- `<path>` - Any other value is treated as a custom installation path
+- Omitted - Auto-detects based on the tool's compatible applications and what's installed
 
 ---
 

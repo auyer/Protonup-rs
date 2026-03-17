@@ -489,7 +489,7 @@ async fn get_progress_style() -> ProgressStyle {
     }).await.clone()
 }
 
-async fn get_message_bar_style() -> ProgressStyle {
+pub(crate) async fn get_message_bar_style() -> ProgressStyle {
     MESSAGE_BAR_STYLE
         .get_or_init(|| future::ready(ProgressStyle::default_bar().template("{msg}").unwrap()))
         .await
