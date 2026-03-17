@@ -127,9 +127,10 @@ fn match_version(version_str: &str, tag_name: &str) -> bool {
 
     // Check if user's components appear in sequence in the tag's components
     // e.g., user "8.26" should match "GE-Proton8-26"
-    if tag_components.windows(user_components.len()).any(|window| {
-        window == user_components.as_slice()
-    }) {
+    if tag_components
+        .windows(user_components.len())
+        .any(|window| window == user_components.as_slice())
+    {
         return true;
     }
 
@@ -166,123 +167,6 @@ fn find_release_by_version(
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    // Test cases for match_version function
-    // Format: (user_input, tag_name, expected_match)
-    const MATCH_TEST_CASES: &[(&str, &str, bool)] = &[
-        // --- Exact matches ---
-        ("v2.7.1", "v2.7.1", true),
-        ("v2.14", "v2.14", true),
-        ("v0.5.4", "v0.5.4", true),
-
-        // --- CachyOS style: cachyos-10.0-20260228-slr ---
-        ("10.0", "cachyos-10.0-20260228-slr", true),
-        ("10", "cachyos-10.0-20260228-slr", true),
-        ("20260228", "cachyos-10.0-20260228-slr", true),
-        ("10.1", "cachyos-10.0-20260228-slr", false),
-
-        // --- GE-Proton style: GE-Proton10-26-rtsp20 ---
-        ("10.26", "GE-Proton10-26-rtsp20", true),
-        ("10", "GE-Proton10-26-rtsp20", true),
-        ("26", "GE-Proton10-26-rtsp20", true),
-        ("20", "GE-Proton10-26-rtsp20", true), // rtsp20 contains 20
-        ("10.27", "GE-Proton10-26-rtsp20", false),
-
-        // --- GE-Proton standard: GE-Proton8-26, GE-Proton10-32 ---
-        ("8.26", "GE-Proton8-26", true),
-        ("8", "GE-Proton8-26", true),
-        ("26", "GE-Proton8-26", true),
-        ("10.32", "GE-Proton10-32", true),
-        ("10", "GE-Proton10-32", true),
-        ("32", "GE-Proton10-32", true),
-        ("9.26", "GE-Proton8-26", false),
-
-        // --- Simple v-prefixed versions ---
-        ("2.7.1", "v2.7.1", true),
-        ("2.7", "v2.7.1", true), // First two components match
-        ("2", "v2.7.1", true),
-        ("2.14", "v2.14", true),
-        ("2", "v2.14", true),
-        ("0.5.4", "v0.5.4", true),
-        ("0.5", "v0.5.4", true),
-        ("3.0", "v3.0b", true), // Components match, ignores trailing 'b'
-        ("3", "v3.0b", true),
-        ("76.2.0", "v76.2.0", true),
-        ("76.2", "v76.2.0", true),
-        ("76", "v76.2.0", true),
-
-        // --- Edge cases ---
-        ("", "v2.7.1", false),  // Empty input
-        ("abc", "v2.7.1", false), // Non-numeric input
-        ("2.7.1", "v2.7.2", false), // Different patch version
-        ("2.8", "v2.7.1", false), // Different minor version
-        ("3", "v2.7.1", false), // Different major version
-
-        // --- Prefix matching ---
-        ("v2", "v2.7.1", true),
-        ("GE-Proton8", "GE-Proton8-26", true),
-        ("cachyos", "cachyos-10.0-20260228-slr", true),
-    ];
-
-    #[test]
-    fn test_match_version() {
-        for (user_input, tag_name, expected) in MATCH_TEST_CASES {
-            let result = match_version(user_input, tag_name);
-            assert_eq!(
-                result, *expected,
-                "match_version(\"{}\", \"{}\") - expected {}, got {}",
-                user_input, tag_name, expected, result
-            );
-        }
-    }
-
-    #[test]
-    fn test_match_version_geproton_variants() {
-        // Test GE-Proton specific patterns
-        assert!(match_version("8-26", "GE-Proton8-26"));
-        assert!(match_version("10-32", "GE-Proton10-32"));
-        assert!(!match_version("8-27", "GE-Proton8-26"));
-        
-        // Test with LoL variants
-        assert!(match_version("8-27", "GE-Proton8-27-LoL"));
-        assert!(match_version("8.27", "GE-Proton8-27-LoL"));
-    }
-
-    #[test]
-    fn test_match_version_component_extraction() {
-        // Test that numeric components are correctly extracted and matched
-        assert!(match_version("1.2.3", "tool-1.2.3-release"));
-        assert!(match_version("1.2", "tool-1.2.3-release"));
-        assert!(match_version("1", "tool-1.2.3-release"));
-        assert!(!match_version("2.3.4", "tool-1.2.3-release")); // Different components
-        assert!(!match_version("4.5.6", "tool-1.2.3-release")); // Completely different
-    }
-
-    #[test]
-    fn test_match_version_prefix_fallback() {
-        // Test prefix matching as fallback
-        assert!(match_version("GE-Proton", "GE-Proton8-26"));
-        assert!(match_version("v2", "v2.7.1"));
-        assert!(match_version("cachyos-", "cachyos-10.0-20260228-slr"));
-    }
-
-    #[test]
-    fn test_match_version_consecutive_components() {
-        // Test matching consecutive numeric components
-        assert!(match_version("10.0", "cachyos-10.0-20260228-slr"));
-        assert!(match_version("10.26", "GE-Proton10-26-rtsp20"));
-        assert!(!match_version("10.27", "GE-Proton10-26-rtsp20"));
-        // Note: "26.20" matches because tag components are [GE, Proton, 10, 26, rtsp, 20]
-        // and [26, 20] are indeed consecutive in this list (after rtsp is split)
-        // This is expected behavior - user input "26.20" will match tags containing those
-        // consecutive numeric components
-        assert!(match_version("26.20", "GE-Proton10-26-rtsp20"));
-    }
-}
-
 /// Runs the program in CLI mode with provided arguments.
 /// This is a non-interactive mode that downloads the specified tool/version.
 ///
@@ -299,19 +183,17 @@ pub async fn run_cli_mode(
 ) -> Result<Vec<Release>, Error> {
     // Determine the compatibility tool first (needed for auto-detection)
     let compat_tool = match tool.as_deref() {
-        Some(tool_name) => {
-            tool_name.parse::<CompatTool>().map_err(|_| {
-                anyhow::anyhow!(
-                    "Unknown compatibility tool: '{}'. Available tools: {}",
-                    tool_name,
-                    libprotonup::sources::CompatTools
-                        .iter()
-                        .map(|t| t.name.as_str())
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                )
-            })?
-        }
+        Some(tool_name) => tool_name.parse::<CompatTool>().map_err(|_| {
+            anyhow::anyhow!(
+                "Unknown compatibility tool: '{}'. Available tools: {}",
+                tool_name,
+                libprotonup::sources::CompatTools
+                    .iter()
+                    .map(|t| t.name.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+        })?,
         None => {
             // If no tool specified, determine app first, then use its default tool
             let temp_app = match for_target.as_deref() {
@@ -346,18 +228,23 @@ pub async fn run_cli_mode(
     };
 
     // Select the version
-    let releases = match version.as_deref() {
-        Some("latest") | None => {
-            // Use the latest version (first in the list)
-            vec![release_list.into_iter().next().ok_or_else(|| {
-                anyhow::anyhow!("No releases available for {}", compat_tool.name)
-            })?]
-        }
-        Some(version_str) => {
-            // Find the matching version using flexible matching
-            vec![find_release_by_version(release_list, version_str, &compat_tool.name)?]
-        }
-    };
+    let releases =
+        match version.as_deref() {
+            Some("latest") | None => {
+                // Use the latest version (first in the list)
+                vec![release_list.into_iter().next().ok_or_else(|| {
+                    anyhow::anyhow!("No releases available for {}", compat_tool.name)
+                })?]
+            }
+            Some(version_str) => {
+                // Find the matching version using flexible matching
+                vec![find_release_by_version(
+                    release_list,
+                    version_str,
+                    &compat_tool.name,
+                )?]
+            }
+        };
 
     // Handle tools with multiple asset variations
     let downloads_vec: Vec<downloads::Download> = if compat_tool.has_multiple_asset_variations {
@@ -425,12 +312,9 @@ pub async fn run_cli_mode(
             tokio::fs::remove_dir_all(&install_path).await?;
         }
 
-        let unpack_progress_bar = download::init_unpack_progress(
-            &install_dir.clone(),
-            &file,
-            multi_progress.clone(),
-        )
-        .await?;
+        let unpack_progress_bar =
+            download::init_unpack_progress(&install_dir.clone(), &file, multi_progress.clone())
+                .await?;
 
         let decompressor = libprotonup::files::Decompressor::from_path(&file)
             .await
@@ -465,4 +349,121 @@ pub async fn run_cli_mode(
     }
 
     Ok(releases)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Test cases for match_version function
+    // Format: (user_input, tag_name, expected_match)
+    const MATCH_TEST_CASES: &[(&str, &str, bool)] = &[
+        // --- Exact matches ---
+        ("v2.7.1", "v2.7.1", true),
+        ("v2.14", "v2.14", true),
+        ("v0.5.4", "v0.5.4", true),
+        //
+        // --- CachyOS style: cachyos-10.0-20260228-slr ---
+        ("10.0", "cachyos-10.0-20260228-slr", true),
+        ("10", "cachyos-10.0-20260228-slr", true),
+        ("20260228", "cachyos-10.0-20260228-slr", true),
+        ("10.1", "cachyos-10.0-20260228-slr", false),
+        //
+        // --- GE-Proton style: GE-Proton10-26-rtsp20 ---
+        ("10.26", "GE-Proton10-26-rtsp20", true),
+        ("10", "GE-Proton10-26-rtsp20", true),
+        ("26", "GE-Proton10-26-rtsp20", true),
+        ("20", "GE-Proton10-26-rtsp20", true), // rtsp20 contains 20
+        ("10.27", "GE-Proton10-26-rtsp20", false),
+        //
+        // --- GE-Proton standard: GE-Proton8-26, GE-Proton10-32 ---
+        ("8.26", "GE-Proton8-26", true),
+        ("8", "GE-Proton8-26", true),
+        ("26", "GE-Proton8-26", true),
+        ("10.32", "GE-Proton10-32", true),
+        ("10", "GE-Proton10-32", true),
+        ("32", "GE-Proton10-32", true),
+        ("9.26", "GE-Proton8-26", false),
+        //
+        // --- Simple v-prefixed versions ---
+        ("2.7.1", "v2.7.1", true),
+        ("2.7", "v2.7.1", true), // First two components match
+        ("2", "v2.7.1", true),
+        ("2.14", "v2.14", true),
+        ("2", "v2.14", true),
+        ("0.5.4", "v0.5.4", true),
+        ("0.5", "v0.5.4", true),
+        ("3.0", "v3.0b", true), // Components match, ignores trailing 'b'
+        ("3", "v3.0b", true),
+        ("76.2.0", "v76.2.0", true),
+        ("76.2", "v76.2.0", true),
+        ("76", "v76.2.0", true),
+        //
+        // --- Edge cases ---
+        ("", "v2.7.1", false),      // Empty input
+        ("abc", "v2.7.1", false),   // Non-numeric input
+        ("2.7.1", "v2.7.2", false), // Different patch version
+        ("2.8", "v2.7.1", false),   // Different minor version
+        ("3", "v2.7.1", false),     // Different major version
+        //
+        // --- Prefix matching ---
+        ("v2", "v2.7.1", true),
+        ("GE-Proton8", "GE-Proton8-26", true),
+        ("cachyos", "cachyos-10.0-20260228-slr", true),
+    ];
+
+    #[test]
+    fn test_match_version() {
+        for (user_input, tag_name, expected) in MATCH_TEST_CASES {
+            let result = match_version(user_input, tag_name);
+            assert_eq!(
+                result, *expected,
+                "match_version(\"{}\", \"{}\") - expected {}, got {}",
+                user_input, tag_name, expected, result
+            );
+        }
+    }
+
+    #[test]
+    fn test_match_version_geproton_variants() {
+        // Test GE-Proton specific patterns
+        assert!(match_version("8-26", "GE-Proton8-26"));
+        assert!(match_version("10-32", "GE-Proton10-32"));
+        assert!(!match_version("8-27", "GE-Proton8-26"));
+        //
+        // Test with LoL variants
+        assert!(match_version("8-27", "GE-Proton8-27-LoL"));
+        assert!(match_version("8.27", "GE-Proton8-27-LoL"));
+    }
+
+    #[test]
+    fn test_match_version_component_extraction() {
+        // Test that numeric components are correctly extracted and matched
+        assert!(match_version("1.2.3", "tool-1.2.3-release"));
+        assert!(match_version("1.2", "tool-1.2.3-release"));
+        assert!(match_version("1", "tool-1.2.3-release"));
+        assert!(!match_version("2.3.4", "tool-1.2.3-release")); // Different components
+        assert!(!match_version("4.5.6", "tool-1.2.3-release")); // Completely different
+    }
+
+    #[test]
+    fn test_match_version_prefix_fallback() {
+        // Test prefix matching as fallback
+        assert!(match_version("GE-Proton", "GE-Proton8-26"));
+        assert!(match_version("v2", "v2.7.1"));
+        assert!(match_version("cachyos-", "cachyos-10.0-20260228-slr"));
+    }
+
+    #[test]
+    fn test_match_version_consecutive_components() {
+        // Test matching consecutive numeric components
+        assert!(match_version("10.0", "cachyos-10.0-20260228-slr"));
+        assert!(match_version("10.26", "GE-Proton10-26-rtsp20"));
+        assert!(!match_version("10.27", "GE-Proton10-26-rtsp20"));
+        // Note: "26.20" matches because tag components are [GE, Proton, 10, 26, rtsp, 20]
+        // and [26, 20] are indeed consecutive in this list (after rtsp is split)
+        // This is expected behavior - user input "26.20" will match tags containing those
+        // consecutive numeric components
+        assert!(match_version("26.20", "GE-Proton10-26-rtsp20"));
+    }
 }
