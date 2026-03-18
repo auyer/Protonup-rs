@@ -120,7 +120,7 @@ pub fn select_architecture_variant(
     });
 
     let selected = Select::new(
-        format!("Select CPU architecture for release '{}' :", release_name).as_str(),
+        format!("Select CPU architecture for release '{}':", release_name).as_str(),
         sorted_variants,
     )
     .prompt()
