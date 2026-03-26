@@ -36,6 +36,28 @@ impl fmt::Display for App {
 }
 
 impl App {
+    /// Parses a string into an App variant.
+    /// - "steam" (case-insensitive) -> App::Steam
+    /// - "lutris" (case-insensitive) -> App::Lutris
+    /// - Any other string -> App::Custom(path)
+    pub fn from_str_or_path(s: &str) -> App {
+        match s.to_lowercase().as_str() {
+            "steam" => App::Steam,
+            "lutris" => App::Lutris,
+            path => App::Custom(path.to_string()),
+        }
+    }
+}
+
+impl FromStr for App {
+    type Err = std::convert::Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self::from_str_or_path(s))
+    }
+}
+
+impl App {
     /// Returns the default compatibility tool for the App
     pub fn default_compatibility_tool(&self) -> CompatTool {
         match self {
@@ -107,7 +129,7 @@ pub enum AppInstallations {
 impl fmt::Display for AppInstallations {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::Steam => write!(f, "Steam \"Native\" "),
+            Self::Steam => write!(f, "Steam \"Native\""),
             Self::SteamFlatpak => write!(f, "Steam Flatpak"),
             Self::Lutris => write!(f, "Lutris \"Native\""),
             Self::LutrisFlatpak => write!(f, "Lutris Flatpak"),

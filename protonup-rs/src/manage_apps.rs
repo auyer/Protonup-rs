@@ -5,7 +5,7 @@ use libprotonup::{
 };
 use std::fmt;
 
-use super::helper_menus::{confirm_menu, multiple_select_menu};
+use super::helper_menus::{confirm_menu, multiple_select_menu_no_default};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub(crate) enum ManageAppsMenuOptions {
@@ -34,7 +34,7 @@ impl fmt::Display for ManageAppsMenuOptions {
 /// Prompt the user for which App they want to manage
 fn manage_menu() -> Vec<ManageAppsMenuOptions> {
     let answer = MultiSelect::new(
-        "Select the Applications you want to manage :",
+        "Select the Applications you want to manage:",
         APP_VARIANTS_WITH_DETECT.to_vec(),
     )
     .with_default(&[0_usize])
@@ -75,7 +75,7 @@ pub(crate) async fn manage_apps_routine() {
             println!("No versions found for {app}, skipping... ");
             continue;
         }
-        let delete_versions = multiple_select_menu(
+        let delete_versions = multiple_select_menu_no_default(
             &format!("Select the versions you want to DELETE from {app}"),
             versions,
         )

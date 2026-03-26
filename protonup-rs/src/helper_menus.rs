@@ -15,6 +15,17 @@ where
         .prompt()
 }
 
+/// Prompt the user to select multiple possible options with an inquire::MultiSelect menu
+pub(crate) fn multiple_select_menu_no_default<T>(
+    message: &str,
+    options: Vec<T>,
+) -> Result<Vec<T>, InquireError>
+where
+    T: std::fmt::Display,
+{
+    MultiSelect::new(message, options).prompt()
+}
+
 /// Prompt the user [Y/n] with an inquire::Confirm menu
 ///
 /// `help_text` and `default` are used to set default values

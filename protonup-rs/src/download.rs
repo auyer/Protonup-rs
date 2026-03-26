@@ -83,7 +83,7 @@ pub(crate) async fn download_file(
         .await
         .with_context(|| {
             format!(
-                "[Download] Failed creating destination file : {}",
+                "[Download] Failed creating destination file: {}",
                 output_dir.display()
             )
         })?;
@@ -350,7 +350,7 @@ pub async fn download_to_selected_app(app: Option<apps::App>) -> Result<Vec<Rele
         // Let the user choose which releases they want to use
         stream::iter(
             helper_menus::multiple_select_menu(
-                "Select the versions you want to download :",
+                "Select the versions you want to download:",
                 release_list,
             )
             .unwrap_or_else(|e| {
@@ -550,7 +550,7 @@ async fn get_progress_style() -> ProgressStyle {
     }).await.clone()
 }
 
-async fn get_message_bar_style() -> ProgressStyle {
+pub(crate) async fn get_message_bar_style() -> ProgressStyle {
     MESSAGE_BAR_STYLE
         .get_or_init(|| future::ready(ProgressStyle::default_bar().template("{msg}").unwrap()))
         .await
