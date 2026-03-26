@@ -13,10 +13,10 @@ use tokio::sync::OnceCell;
 
 use libprotonup::{
     apps,
+    constants::DEFAULT_STEAM_TOOL,
     downloads::{self, Download, Release},
     files, hashing,
     sources::{CompatTool, CompatTools},
-    constants::DEFAULT_STEAM_TOOL,
 };
 
 use crate::{architecture_variants, file_path, helper_menus};
@@ -202,6 +202,7 @@ pub async fn run_quick_downloads(force: bool, whats_new: bool) -> Result<Vec<Rel
 
     // Show release notes before downloading if --whats-new was passed
     const WHATS_NEW_LINES: usize = 40;
+    let default_tool = CompatTool::from_str(DEFAULT_STEAM_TOOL).unwrap();
 
     if whats_new {
         println!();
@@ -209,50 +210,36 @@ pub async fn run_quick_downloads(force: bool, whats_new: bool) -> Result<Vec<Rel
         println!("  │  {:^48}  │", "Release Notes");
         println!("  └{}┘", "─".repeat(50));
 
-        if releases.is_empty() {
-            // If no releases to download (everything already installed), show GEProton release notes
-            let default_tool = CompatTool::from_str(DEFAULT_STEAM_TOOL).unwrap();
+        let releases_to_show: Vec<Release> = if releases.is_empty() {
             match downloads::list_releases(&default_tool).await {
-                Ok(mut release_list) => {
-                    let release = release_list.remove(0);
-                    let release_url = format!(
-                        "https://github.com/{}/{}/releases/tag/{}",
-                        default_tool.repository_account, default_tool.repository_name, release.tag_name
-                    );
-                    println!("\n  {}: {}", release.tag_name, release_url);
-                    if let Some(body) = &release.body {
-                        let notes = body.lines().take(WHATS_NEW_LINES).collect::<Vec<_>>().join("\n");
-                        if body.lines().count() > WHATS_NEW_LINES {
-                            println!("\n{}\n  ⋯ {}", notes, "[truncated]");
-                        } else {
-                            println!("\n{}", notes);
-                        }
-                    } else {
-                        println!("\n  (no release notes)");
-                    }
-                }
+                Ok(mut release_list) => vec![release_list.remove(0)],
                 Err(e) => {
                     println!("\n  (could not fetch release notes: {})", e);
+                    println!();
+                    vec![]
                 }
             }
         } else {
-            let default_tool = CompatTool::from_str(DEFAULT_STEAM_TOOL).unwrap();
-            for release in &releases {
-                let release_url = format!(
-                    "https://github.com/{}/{}/releases/tag/{}",
-                    default_tool.repository_account, default_tool.repository_name, release.tag_name
-                );
-                println!("\n  {}: {}", release.tag_name, release_url);
-                if let Some(body) = &release.body {
-                    let notes = body.lines().take(WHATS_NEW_LINES).collect::<Vec<_>>().join("\n");
-                    if body.lines().count() > WHATS_NEW_LINES {
-                        println!("\n{}\n  ⋯ {}", notes, "[truncated]");
+            releases.clone()
+        };
+
+        for release in &releases_to_show {
+            let url = format!(
+                "https://github.com/{}/{}/releases/tag/{}",
+                default_tool.repository_account, default_tool.repository_name, release.tag_name
+            );
+            println!("\n  {}: {}", release.tag_name, url);
+            match &release.body {
+                Some(body) => {
+                    let all_lines: Vec<&str> = body.lines().collect();
+                    let notes = all_lines[..all_lines.len().min(WHATS_NEW_LINES)].join("\n");
+                    if all_lines.len() > WHATS_NEW_LINES {
+                        println!("\n{}\n  ⋯ [truncated]", notes);
                     } else {
                         println!("\n{}", notes);
                     }
-                } else {
-                    println!("\n  (no release notes)");
                 }
+                None => println!("\n  (no release notes)"),
             }
         }
         println!();
