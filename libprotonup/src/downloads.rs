@@ -18,10 +18,13 @@ pub type ReleaseList = Vec<Release>;
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Release {
     /// API URL of the Release
-    url: Option<String>,
+    pub url: Option<String>,
     /// Tag name of the Release, examples "8.7-GE-1-Lol" "GE-Proton8-5"
     pub tag_name: String,
     name: String,
+    /// Release notes / changelog
+    #[serde(default)]
+    pub body: Option<String>,
     /// Asset list for each Release, usually the tar.gz/tar.xz file and a sha512sum file for integrity checking
     assets: Vec<Asset>,
 }

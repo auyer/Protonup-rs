@@ -23,6 +23,10 @@ struct Opt {
     /// Force install for existing apps during quick downloads
     #[arg(short, long)]
     force: bool,
+
+    /// Show what's new in the latest version
+    #[arg(long)]
+    whats_new: bool,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -69,9 +73,10 @@ async fn main() {
     let Opt {
         quick_download,
         force,
+        whats_new,
     } = Opt::parse();
     let releases = if quick_download {
-        download::run_quick_downloads(force).await
+        download::run_quick_downloads(force, whats_new).await
     } else {
         let answer: InitialMenu = Select::new(
             "ProtonUp Menu: Choose your action:",
@@ -83,7 +88,7 @@ async fn main() {
 
         // Set parameters based on users choice
         match answer {
-            InitialMenu::QuickUpdate => download::run_quick_downloads(force).await,
+            InitialMenu::QuickUpdate => download::run_quick_downloads(force, whats_new).await,
             InitialMenu::DownloadForSteam => {
                 download::download_to_selected_app(Some(App::Steam)).await
             }

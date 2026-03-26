@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use anyhow::{Context, Result, anyhow, bail};
 use futures_util::stream::FuturesUnordered;
 use futures_util::{StreamExt, future, stream};
@@ -14,6 +16,7 @@ use libprotonup::{
     downloads::{self, Download, Release},
     files, hashing,
     sources::{CompatTool, CompatTools},
+    constants::DEFAULT_STEAM_TOOL,
 };
 
 use crate::{architecture_variants, file_path, helper_menus};
@@ -137,7 +140,7 @@ pub(crate) async fn validate_file(
 }
 
 /// Downloads the latest wine version for all the apps found
-pub async fn run_quick_downloads(force: bool) -> Result<Vec<Release>> {
+pub async fn run_quick_downloads(force: bool, whats_new: bool) -> Result<Vec<Release>> {
     let found_apps = apps::list_installed_apps().await;
     if found_apps.is_empty() {
         println!("No apps found. Please install at least one app before using this feature.");
@@ -195,6 +198,64 @@ pub async fn run_quick_downloads(force: bool) -> Result<Vec<Release>> {
         ));
 
         releases.push(release);
+    }
+
+    // Show release notes before downloading if --whats-new was passed
+    const WHATS_NEW_LINES: usize = 40;
+
+    if whats_new {
+        println!();
+        println!("  ┌{}┐", "─".repeat(50));
+        println!("  │  {:^48}  │", "Release Notes");
+        println!("  └{}┘", "─".repeat(50));
+
+        if releases.is_empty() {
+            // If no releases to download (everything already installed), show GEProton release notes
+            let default_tool = CompatTool::from_str(DEFAULT_STEAM_TOOL).unwrap();
+            match downloads::list_releases(&default_tool).await {
+                Ok(mut release_list) => {
+                    let release = release_list.remove(0);
+                    let release_url = format!(
+                        "https://github.com/{}/{}/releases/tag/{}",
+                        default_tool.repository_account, default_tool.repository_name, release.tag_name
+                    );
+                    println!("\n  {}: {}", release.tag_name, release_url);
+                    if let Some(body) = &release.body {
+                        let notes = body.lines().take(WHATS_NEW_LINES).collect::<Vec<_>>().join("\n");
+                        if body.lines().count() > WHATS_NEW_LINES {
+                            println!("\n{}\n  ⋯ {}", notes, "[truncated]");
+                        } else {
+                            println!("\n{}", notes);
+                        }
+                    } else {
+                        println!("\n  (no release notes)");
+                    }
+                }
+                Err(e) => {
+                    println!("\n  (could not fetch release notes: {})", e);
+                }
+            }
+        } else {
+            let default_tool = CompatTool::from_str(DEFAULT_STEAM_TOOL).unwrap();
+            for release in &releases {
+                let release_url = format!(
+                    "https://github.com/{}/{}/releases/tag/{}",
+                    default_tool.repository_account, default_tool.repository_name, release.tag_name
+                );
+                println!("\n  {}: {}", release.tag_name, release_url);
+                if let Some(body) = &release.body {
+                    let notes = body.lines().take(WHATS_NEW_LINES).collect::<Vec<_>>().join("\n");
+                    if body.lines().count() > WHATS_NEW_LINES {
+                        println!("\n{}\n  ⋯ {}", notes, "[truncated]");
+                    } else {
+                        println!("\n{}", notes);
+                    }
+                } else {
+                    println!("\n  (no release notes)");
+                }
+            }
+        }
+        println!();
     }
 
     joins
