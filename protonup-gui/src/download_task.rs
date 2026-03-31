@@ -11,34 +11,52 @@ use crate::download::{self, DownloadPhase};
 /// Progress updates streamed from the download task to the GUI
 #[derive(Debug, Clone)]
 pub enum DownloadUpdate {
-    Progress(Progress),
+    ToolProgress(ToolProgress),
+    GlobalProgress(GlobalProgress),
     Finished(Result<Vec<String>, DownloadError>),
 }
 
-/// Progress information for the GUI
+/// Per-tool progress information
 #[derive(Debug, Clone)]
-pub struct Progress {
-    pub percent: f32,
+pub struct ToolProgress {
+    pub tool_name: String,
     pub phase: DownloadPhase,
-    pub tool: String,
+    pub percent: f32,
     pub status_message: String,
+}
+
+/// Global progress information (overall status)
+#[derive(Debug, Clone)]
+pub struct GlobalProgress {
+    pub phase: DownloadPhase,
+    pub status_message: String,
+    pub percent: f32,
 }
 
 /// Internal progress type for sipper
 #[derive(Debug, Clone)]
 pub(crate) struct SipProgress {
-    pub percent: f32,
+    pub tool_name: Option<String>,  // None = global progress
     pub phase: DownloadPhase,
-    pub tool: String,
+    pub percent: f32,
     pub status_message: String,
 }
 
 impl SipProgress {
-    pub fn new(phase: DownloadPhase, tool: &str, status_message: &str, percent: f32) -> Self {
+    pub fn new(phase: DownloadPhase, tool_name: &str, status_message: &str, percent: f32) -> Self {
         Self {
             percent,
             phase,
-            tool: tool.to_string(),
+            tool_name: if tool_name.is_empty() { None } else { Some(tool_name.to_string()) },
+            status_message: status_message.to_string(),
+        }
+    }
+    
+    pub fn global(phase: DownloadPhase, status_message: &str, percent: f32) -> Self {
+        Self {
+            percent,
+            phase,
+            tool_name: None,
             status_message: status_message.to_string(),
         }
     }
@@ -57,7 +75,7 @@ pub enum DownloadError {
 /// 
 /// This uses Iced's `Task::sip()` pattern where:
 /// - The sipper async closure runs the download logic and sends progress updates
-/// - Progress updates are mapped to DownloadUpdate::Progress
+/// - Progress updates are mapped to DownloadUpdate (per-tool or global)
 /// - Final result is mapped to DownloadUpdate::Finished
 pub fn run_quick_update(force: bool) -> Task<DownloadUpdate> {
     // Create the sipper straw that runs the download logic
@@ -97,14 +115,24 @@ pub fn run_quick_update(force: bool) -> Task<DownloadUpdate> {
     // Wrap in Task::sip with progress and result mapping
     let (task, handle) = Task::sip(
         straw,
-        // Progress callback - receives progress from sipper
+        // Progress callback - receives progress from sipper and routes to per-tool or global
         |sip_progress: SipProgress| {
-            DownloadUpdate::Progress(Progress {
-                percent: sip_progress.percent,
-                phase: sip_progress.phase,
-                tool: sip_progress.tool,
-                status_message: sip_progress.status_message,
-            })
+            if let Some(tool_name) = sip_progress.tool_name {
+                // Per-tool progress
+                DownloadUpdate::ToolProgress(ToolProgress {
+                    tool_name,
+                    phase: sip_progress.phase,
+                    percent: sip_progress.percent,
+                    status_message: sip_progress.status_message,
+                })
+            } else {
+                // Global progress
+                DownloadUpdate::GlobalProgress(GlobalProgress {
+                    phase: sip_progress.phase,
+                    status_message: sip_progress.status_message,
+                    percent: sip_progress.percent,
+                })
+            }
         },
         // Transform the final result into DownloadUpdate::Finished
         |result| DownloadUpdate::Finished(result),
@@ -122,10 +150,10 @@ mod tests {
 
     #[test]
     fn download_update_is_clone() {
-        let u = DownloadUpdate::Progress(Progress {
-            percent: 25.0,
+        let u = DownloadUpdate::ToolProgress(ToolProgress {
+            tool_name: "GEProton".to_string(),
             phase: DownloadPhase::Downloading,
-            tool: "GEProton".to_string(),
+            percent: 25.0,
             status_message: "Downloading...".to_string(),
         });
         let _u2 = u.clone();
@@ -138,12 +166,22 @@ mod tests {
     }
 
     #[test]
-    fn progress_is_clone() {
-        let p = Progress {
-            percent: 50.0,
+    fn tool_progress_is_clone() {
+        let p = ToolProgress {
+            tool_name: "WineGE".to_string(),
             phase: DownloadPhase::Validating,
-            tool: "WineGE".to_string(),
+            percent: 50.0,
             status_message: "Validating...".to_string(),
+        };
+        let _p2 = p.clone();
+    }
+
+    #[test]
+    fn global_progress_is_clone() {
+        let p = GlobalProgress {
+            phase: DownloadPhase::Downloading,
+            status_message: "Downloading...".to_string(),
+            percent: 50.0,
         };
         let _p2 = p.clone();
     }
@@ -155,12 +193,22 @@ mod tests {
     }
 
     #[test]
-    fn sip_progress_is_clone() {
+    fn sip_progress_tool_is_clone() {
         let p = SipProgress::new(
             DownloadPhase::Downloading,
             "GEProton",
             "Downloading...",
             50.0,
+        );
+        let _p2 = p.clone();
+    }
+
+    #[test]
+    fn sip_progress_global_is_clone() {
+        let p = SipProgress::global(
+            DownloadPhase::FetchingReleases,
+            "Fetching...",
+            10.0,
         );
         let _p2 = p.clone();
     }

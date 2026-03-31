@@ -4,6 +4,8 @@
 //! which are then sent through the sipper's progress channel.
 
 use anyhow::{Context, Result};
+use futures_util::stream::FuturesUnordered;
+use futures_util::StreamExt;
 use libprotonup::{
     apps,
     downloads::{self, Download, Release},
@@ -212,11 +214,12 @@ where
         10.0,
     ));
 
-    // Process each app
+    // Collect all downloads first, then run them in parallel
+    let mut downloads_to_run: Vec<(Download, apps::AppInstallations, CompatTool, Release)> = vec![];
     let mut releases: Vec<Release> = vec![];
-    let total_apps = found_apps.len();
 
-    for (app_index, app_inst) in found_apps.into_iter().enumerate() {
+    // Phase 1: Fetch releases and prepare downloads
+    for app_inst in &found_apps {
         let compat_tool = app_inst.as_app().default_compatibility_tool();
         let tool_name = compat_tool.name.clone();
 
@@ -224,7 +227,7 @@ where
             DownloadPhase::FetchingReleases,
             &tool_name,
             &format!("Fetching releases for {}...", tool_name),
-            10.0 + (app_index as f32 / total_apps as f32) * 10.0,
+            10.0,
         ));
 
         // Get the latest release
@@ -254,12 +257,12 @@ where
 
         // Handle tools with multiple architecture variants
         let download = if compat_tool.has_multiple_asset_variations {
-            let variants = release.get_all_download_variants(&app_inst, &compat_tool);
+            let variants = release.get_all_download_variants(app_inst, &compat_tool);
             variants.into_iter().next().unwrap_or_else(|| {
-                release.get_download_info(&app_inst, &compat_tool)
+                release.get_download_info(app_inst, &compat_tool)
             })
         } else {
-            release.get_download_info(&app_inst, &compat_tool)
+            release.get_download_info(app_inst, &compat_tool)
         };
 
         // Check if already installed
@@ -276,28 +279,47 @@ where
         }
 
         releases.push(release.clone());
+        downloads_to_run.push((download, app_inst.clone(), compat_tool, release));
+    }
 
-        // Download, validate, and unpack
+    // Phase 2: Run all downloads in parallel using FuturesUnordered
+    send_progress(SipProgress::new(
+        DownloadPhase::Downloading,
+        "",
+        &format!("Downloading {} tools in parallel...", downloads_to_run.len()),
+        20.0,
+    ));
+
+    let mut joins = FuturesUnordered::new();
+    
+    for (download, app_inst, compat_tool, _release) in downloads_to_run {
         let progress_callback = send_progress.clone();
-        let tool_name_clone = tool_name.clone();
+        let tool_name = compat_tool.name.clone();
         
-        match download_validate_unpack_with_progress(
-            download,
-            app_inst,
-            compat_tool,
-            progress_callback,
-        ).await {
+        joins.push(async move {
+            (tool_name, download_validate_unpack_with_progress(
+                download,
+                app_inst,
+                compat_tool,
+                progress_callback,
+            ).await)
+        });
+    }
+
+    // Process results as they complete
+    let mut success_count = 0;
+    while let Some((tool_name, result)) = joins.next().await {
+        match result {
             Ok(()) => {
-                // Continue with next app
+                success_count += 1;
             }
             Err(e) => {
                 send_progress(SipProgress::new(
                     DownloadPhase::Error,
-                    &tool_name_clone,
-                    &format!("Error installing {}: {}", tool_name_clone, e),
+                    &tool_name,
+                    &format!("Error installing {}: {}", tool_name, e),
                     0.0,
                 ));
-                // Continue with other apps
             }
         }
     }
@@ -306,7 +328,7 @@ where
     send_progress(SipProgress::new(
         DownloadPhase::Complete,
         "",
-        &format!("Done! Installed {} tools.", releases.len()),
+        &format!("Done! Installed {}/{} tools.", success_count, releases.len()),
         100.0,
     ));
 

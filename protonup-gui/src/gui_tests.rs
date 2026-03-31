@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
-    use crate::{AppInstallations, DownloadPhase, DownloadUpdate, Message, ProtonupGui};
-    use crate::download_task::{self, DownloadError, Progress};
+    use crate::{AppInstallations, DownloadPhase, DownloadUpdate, GlobalProgress, Message, ProtonupGui, ToolProgress, ToolDownload, ToolStatus};
+    use crate::download_task::DownloadError;
     use iced_test::{Error, simulator};
 
     // Helper to create a model in "ready" state (apps detected, waiting for download)
@@ -10,10 +10,28 @@ mod tests {
             detected_apps: vec![AppInstallations::Steam],
             scan_complete: true,
             download_started: false,
-            download_progress: 0.0,
+            tools: vec![ToolDownload::new("GEProton".to_string(), "Steam \"Native\"".to_string())],
+            global_phase: DownloadPhase::DetectingApps,
+            global_status: "Detected: Steam \"Native\"".to_string(),
+            global_progress: 0.0,
             download_complete: None,
-            current_phase: DownloadPhase::DetectingApps,
-            status_message: "Detected: Steam".to_string(),
+        }
+    }
+
+    // Helper to create a model with multiple tools
+    fn multi_tool_model() -> ProtonupGui {
+        ProtonupGui {
+            detected_apps: vec![AppInstallations::Steam, AppInstallations::Lutris],
+            scan_complete: true,
+            download_started: false,
+            tools: vec![
+                ToolDownload::new("GEProton".to_string(), "Steam \"Native\"".to_string()),
+                ToolDownload::new("WineGE".to_string(), "Lutris \"Native\"".to_string()),
+            ],
+            global_phase: DownloadPhase::DetectingApps,
+            global_status: "Detected: Steam \"Native\", Lutris \"Native\"".to_string(),
+            global_progress: 0.0,
+            download_complete: None,
         }
     }
 
@@ -23,10 +41,18 @@ mod tests {
             detected_apps: vec![AppInstallations::Steam],
             scan_complete: true,
             download_started: true,
-            download_progress: 45.0,
+            tools: vec![ToolDownload {
+                name: "GEProton".to_string(),
+                app_target: "Steam \"Native\"".to_string(),
+                version: None,
+                phase: DownloadPhase::Downloading,
+                progress: 45.0,
+                status: ToolStatus::Downloading,
+            }],
+            global_phase: DownloadPhase::Downloading,
+            global_status: "Downloading in parallel...".to_string(),
+            global_progress: 45.0,
             download_complete: None,
-            current_phase: DownloadPhase::Downloading,
-            status_message: "Downloading GEProton... 45.0%".to_string(),
         }
     }
 
@@ -36,10 +62,18 @@ mod tests {
             detected_apps: vec![AppInstallations::Steam],
             scan_complete: true,
             download_started: true,
-            download_progress: 100.0,
+            tools: vec![ToolDownload {
+                name: "GEProton".to_string(),
+                app_target: "Steam \"Native\"".to_string(),
+                version: Some("GE-Proton9-27".to_string()),
+                phase: DownloadPhase::Complete,
+                progress: 100.0,
+                status: ToolStatus::Complete,
+            }],
+            global_phase: DownloadPhase::Complete,
+            global_status: "✓ Success! Installed 1 tools.".to_string(),
+            global_progress: 100.0,
             download_complete: Some(Ok(vec!["GE-Proton9-27".to_string()])),
-            current_phase: DownloadPhase::Complete,
-            status_message: "✓ Success! Installed 1 tools.".to_string(),
         }
     }
 
@@ -70,6 +104,17 @@ mod tests {
     }
 
     #[test]
+    fn view_renders_multiple_tools() -> Result<(), Error> {
+        let model = multi_tool_model();
+        let mut ui = simulator(model.view());
+
+        // Should have start button
+        assert!(ui.find("Start Quick Update").is_ok());
+
+        Ok(())
+    }
+
+    #[test]
     fn view_shows_start_button() -> Result<(), Error> {
         let model = ready_model();
         let mut ui = simulator(model.view());
@@ -81,12 +126,22 @@ mod tests {
     }
 
     #[test]
-    fn view_shows_phase_indicator_while_downloading() -> Result<(), Error> {
+    fn view_shows_global_progress_while_downloading() -> Result<(), Error> {
         let model = downloading_model();
-        let mut ui = simulator(model.view());
+        let ui = simulator(model.view());
 
         // View should render without error when downloading
-        // Progress bar should be visible
+        drop(ui);
+
+        Ok(())
+    }
+
+    #[test]
+    fn view_shows_per_tool_progress() -> Result<(), Error> {
+        let model = downloading_model();
+        let ui = simulator(model.view());
+
+        // View should render without error when downloading with per-tool progress
         drop(ui);
 
         Ok(())
@@ -106,7 +161,7 @@ mod tests {
     #[test]
     fn view_shows_installed_versions() -> Result<(), Error> {
         let model = completed_model();
-        let mut ui = simulator(model.view());
+        let ui = simulator(model.view());
 
         // View should render without error when complete
         drop(ui);
@@ -120,10 +175,11 @@ mod tests {
             detected_apps: vec![],
             scan_complete: true,
             download_started: false,
-            download_progress: 0.0,
+            tools: vec![],
+            global_phase: DownloadPhase::DetectingApps,
+            global_status: "No compatible apps detected".to_string(),
+            global_progress: 0.0,
             download_complete: None,
-            current_phase: DownloadPhase::DetectingApps,
-            status_message: "No compatible apps detected".to_string(),
         };
         let mut ui = simulator(model.view());
 
@@ -142,13 +198,14 @@ mod tests {
         let model = ProtonupGui::default();
         assert!(!model.scan_complete);
         assert!(!model.download_started);
-        assert_eq!(model.download_progress, 0.0);
+        assert_eq!(model.global_progress, 0.0);
         assert!(model.detected_apps.is_empty());
-        assert_eq!(model.current_phase, DownloadPhase::DetectingApps);
+        assert_eq!(model.global_phase, DownloadPhase::DetectingApps);
+        assert!(model.tools.is_empty());
     }
 
     #[test]
-    fn apps_scanned_updates_state() {
+    fn apps_scanned_creates_tools() {
         let mut model = ProtonupGui::default();
         let apps = vec![AppInstallations::Steam, AppInstallations::Lutris];
 
@@ -156,8 +213,9 @@ mod tests {
 
         assert!(model.scan_complete);
         assert_eq!(model.detected_apps.len(), 2);
-        assert!(model.status_message.contains("Steam"));
-        assert!(model.status_message.contains("Lutris"));
+        assert_eq!(model.tools.len(), 2);
+        assert_eq!(model.tools[0].name, "GEProton");
+        assert_eq!(model.tools[1].name, "WineGE");
     }
 
     #[test]
@@ -168,7 +226,8 @@ mod tests {
 
         assert!(model.scan_complete);
         assert!(model.detected_apps.is_empty());
-        assert_eq!(model.status_message, "No compatible apps detected");
+        assert!(model.tools.is_empty());
+        assert_eq!(model.global_status, "No compatible apps detected");
     }
 
     #[test]
@@ -178,95 +237,130 @@ mod tests {
         let _ = model.update(Message::StartDownload);
 
         assert!(model.download_started);
-        assert_eq!(model.download_progress, 0.0);
+        assert_eq!(model.global_progress, 0.0);
         assert!(model.download_complete.is_none());
-        assert_eq!(model.status_message, "Starting Quick Update...");
+        assert_eq!(model.global_status, "Starting Quick Update...");
+        
+        // All tools should be reset
+        for tool in &model.tools {
+            assert_eq!(tool.progress, 0.0);
+            assert_eq!(tool.status, ToolStatus::Pending);
+        }
     }
 
     #[test]
-    fn download_update_progress() {
+    fn tool_progress_update() {
         let mut model = downloading_model();
 
-        model.update(Message::DownloadUpdate(DownloadUpdate::Progress(
-            Progress {
-                percent: 75.0,
+        model.update(Message::DownloadUpdate(DownloadUpdate::ToolProgress(
+            ToolProgress {
+                tool_name: "GEProton".to_string(),
                 phase: DownloadPhase::Downloading,
-                tool: "GEProton".to_string(),
+                percent: 75.0,
                 status_message: "Downloading GEProton... 75.0%".to_string(),
             },
         )));
 
-        assert_eq!(model.download_progress, 75.0);
-        assert_eq!(model.current_phase, DownloadPhase::Downloading);
-        assert!(model.status_message.contains("75.0"));
+        assert_eq!(model.tools[0].progress, 75.0);
+        assert_eq!(model.tools[0].phase, DownloadPhase::Downloading);
+        assert_eq!(model.tools[0].status, ToolStatus::Downloading);
         assert!(model.download_complete.is_none());
     }
 
     #[test]
-    fn download_update_phase_transitions() {
+    fn tool_phase_transitions() {
         let mut model = downloading_model();
 
         // Transition to Validating phase
-        model.update(Message::DownloadUpdate(DownloadUpdate::Progress(
-            download_task::Progress {
-                percent: 10.0,
+        model.update(Message::DownloadUpdate(DownloadUpdate::ToolProgress(
+            ToolProgress {
+                tool_name: "GEProton".to_string(),
                 phase: DownloadPhase::Validating,
-                tool: "GEProton".to_string(),
+                percent: 10.0,
                 status_message: "Validating GEProton...".to_string(),
             },
         )));
 
-        assert_eq!(model.current_phase, DownloadPhase::Validating);
-        assert!(model.status_message.contains("Validating"));
+        assert_eq!(model.tools[0].phase, DownloadPhase::Validating);
+        assert_eq!(model.tools[0].status, ToolStatus::Validating);
 
         // Transition to Unpacking phase
-        model.update(Message::DownloadUpdate(DownloadUpdate::Progress(
-            download_task::Progress {
-                percent: 30.0,
+        model.update(Message::DownloadUpdate(DownloadUpdate::ToolProgress(
+            ToolProgress {
+                tool_name: "GEProton".to_string(),
                 phase: DownloadPhase::Unpacking,
-                tool: "GEProton".to_string(),
+                percent: 30.0,
                 status_message: "Installing GEProton...".to_string(),
             },
         )));
 
-        assert_eq!(model.current_phase, DownloadPhase::Unpacking);
-        assert!(model.status_message.contains("Installing"));
+        assert_eq!(model.tools[0].phase, DownloadPhase::Unpacking);
+        assert_eq!(model.tools[0].status, ToolStatus::Unpacking);
+
+        // Transition to Complete phase
+        model.update(Message::DownloadUpdate(DownloadUpdate::ToolProgress(
+            ToolProgress {
+                tool_name: "GEProton".to_string(),
+                phase: DownloadPhase::Complete,
+                percent: 100.0,
+                status_message: "✓ GEProton installed successfully".to_string(),
+            },
+        )));
+
+        assert_eq!(model.tools[0].phase, DownloadPhase::Complete);
+        assert_eq!(model.tools[0].status, ToolStatus::Complete);
     }
 
     #[test]
-    fn download_update_finished_success() {
+    fn global_progress_update() {
+        let mut model = downloading_model();
+
+        model.update(Message::DownloadUpdate(DownloadUpdate::GlobalProgress(
+            GlobalProgress {
+                phase: DownloadPhase::Downloading,
+                status_message: "Downloading 2 tools in parallel...".to_string(),
+                percent: 50.0,
+            },
+        )));
+
+        assert_eq!(model.global_progress, 50.0);
+        assert_eq!(model.global_phase, DownloadPhase::Downloading);
+        assert!(model.global_status.contains("2 tools"));
+    }
+
+    #[test]
+    fn download_finished_success() {
         let mut model = downloading_model();
 
         model.update(Message::DownloadUpdate(DownloadUpdate::Finished(Ok(
             vec!["GE-Proton9-27".to_string()],
         ))));
 
-        assert_eq!(model.download_progress, 100.0);
-        assert_eq!(model.current_phase, DownloadPhase::Complete);
+        assert_eq!(model.global_progress, 100.0);
+        assert_eq!(model.global_phase, DownloadPhase::Complete);
         assert!(model.download_complete.is_some());
         assert!(model.download_complete.as_ref().unwrap().is_ok());
-        assert!(model.status_message.contains("Success"));
+        assert!(model.global_status.contains("Success"));
     }
 
     #[test]
-    fn download_update_finished_error() {
+    fn download_finished_error() {
         let mut model = downloading_model();
 
         model.update(Message::DownloadUpdate(DownloadUpdate::Finished(Err(
             DownloadError::IoError("test error".to_string()),
         ))));
 
-        assert_eq!(model.current_phase, DownloadPhase::Error);
+        assert_eq!(model.global_phase, DownloadPhase::Error);
         assert!(model.download_complete.is_some());
         assert!(model.download_complete.as_ref().unwrap().is_err());
-        assert!(model.status_message.contains("Error"));
+        assert!(model.global_status.contains("Error"));
     }
 
     #[test]
     fn subscription_active_when_not_scanned() {
         let model = ProtonupGui::default();
         let sub = model.subscription();
-        // Subscription should be active (not None)
         drop(sub);
     }
 
@@ -274,7 +368,6 @@ mod tests {
     fn subscription_none_after_scan() {
         let mut model = ready_model();
         let sub = model.subscription();
-        // Subscription should be None after scan complete
         drop(sub);
     }
 
@@ -297,8 +390,61 @@ mod tests {
 
         // Verify state changed
         assert!(model.download_started);
-        assert_eq!(model.status_message, "Starting Quick Update...");
+        assert_eq!(model.global_status, "Starting Quick Update...");
 
         Ok(())
+    }
+
+    //
+    // Multi-tool tests
+    //
+
+    #[test]
+    fn multi_tool_independent_progress() {
+        let mut model = multi_tool_model();
+        model.download_started = true;
+
+        // Update first tool
+        model.update(Message::DownloadUpdate(DownloadUpdate::ToolProgress(
+            ToolProgress {
+                tool_name: "GEProton".to_string(),
+                phase: DownloadPhase::Downloading,
+                percent: 80.0,
+                status_message: "Downloading...".to_string(),
+            },
+        )));
+
+        // Update second tool
+        model.update(Message::DownloadUpdate(DownloadUpdate::ToolProgress(
+            ToolProgress {
+                tool_name: "WineGE".to_string(),
+                phase: DownloadPhase::Validating,
+                percent: 30.0,
+                status_message: "Validating...".to_string(),
+            },
+        )));
+
+        // Verify independent progress
+        assert_eq!(model.tools[0].progress, 80.0);
+        assert_eq!(model.tools[0].phase, DownloadPhase::Downloading);
+        assert_eq!(model.tools[1].progress, 30.0);
+        assert_eq!(model.tools[1].phase, DownloadPhase::Validating);
+    }
+
+    #[test]
+    fn tool_status_error() {
+        let mut model = downloading_model();
+
+        model.update(Message::DownloadUpdate(DownloadUpdate::ToolProgress(
+            ToolProgress {
+                tool_name: "GEProton".to_string(),
+                phase: DownloadPhase::Error,
+                percent: 0.0,
+                status_message: "Download failed: connection error".to_string(),
+            },
+        )));
+
+        assert_eq!(model.tools[0].phase, DownloadPhase::Error);
+        assert!(matches!(model.tools[0].status, ToolStatus::Error(_)));
     }
 }
