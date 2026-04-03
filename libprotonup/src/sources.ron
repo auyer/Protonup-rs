@@ -9,15 +9,6 @@
         compatible_applications: [Steam, Lutris],
     ),
     (
-        name: "WineGE",
-        forge: GitHub,
-        repository_account: "GloriousEggroll",
-        repository_name: "wine-ge-custom",
-        tool_type: WineBased,
-        compatible_applications: [Steam, Lutris],
-        file_name_replacement: Some(("Proton","Wine")),
-    ),
-    (
         name: "Luxtorpeda",
         forge: GitHub,
         repository_account: "luxtorpeda-dev",
