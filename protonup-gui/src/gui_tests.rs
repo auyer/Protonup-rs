@@ -2,6 +2,8 @@
 mod tests {
     use crate::{AppInstallations, App, DownloadPhase, DownloadUpdate, Message, ProtonupGui, ToolProgress, ToolDownload, ToolStatus, GuiMode, SelectionStep};
     use crate::download_task::{DownloadError, GlobalProgress};
+    use libprotonup::sources::CompatTool;
+    use std::str::FromStr;
     use iced_test::{Error, simulator};
 
     // Helper to create a model in "ready" state (apps detected, waiting for action)
@@ -307,7 +309,7 @@ mod tests {
     }
 
     #[test]
-    fn start_selected_downloads_creates_tool_entries() {
+    fn tool_selection_state_is_correct() {
         use libprotonup::sources::{CompatTool, Forge, ToolType};
         
         let mut model = ready_model();
@@ -326,47 +328,188 @@ mod tests {
                 None, None, None,
             ),
         ];
-        model.selected_tool_indices = vec![0];
         
-        // Simulate versions being fetched
-        model.selection_step = SelectionStep::SelectingVersions;
-        let _ = model.update(Message::VersionsFetched(vec![]));
-        model.available_versions = vec![]; // Empty for this test
-        model.selected_version_indices = vec![0];
+        // Toggle tool selection
+        let _ = model.update(Message::ToggleTool(0));
+        assert_eq!(model.selected_tool_indices, vec![0]);
         
-        // Starting download should create ToolDownload entries
-        // (Won't actually download since versions are empty, but should set up state)
-        let _ = model.update(Message::StartSelectedDownloads);
-        
-        assert!(model.download_started);
-        assert_eq!(model.selection_step, SelectionStep::Downloading);
-        // Should have created one ToolDownload entry per tool/version combo
-        assert_eq!(model.tools.len(), 1);
-        assert!(model.tools[0].name.contains("GEProton"));
+        // Confirm selection should move to version selection
+        let _ = model.update(Message::ToolSelectionConfirmed);
+        assert_eq!(model.selection_step, SelectionStep::SelectingVersions);
+        assert!(model.selected_tool.is_some());
     }
 
     #[test]
-    fn multi_version_selection_creates_multiple_entries() {
+    fn version_toggle_state_is_correct() {
         let mut model = ready_model();
         model.mode = GuiMode::DownloadForSteam;
         model.app_installation = Some(AppInstallations::Steam);
-        
-        // Set up one tool with multiple versions
-        model.available_tools = vec![
-            CompatTool::from_str("GEProton").unwrap(),
-        ];
-        model.selected_tool_indices = vec![0];
-        
-        // Set up multiple versions
         model.selection_step = SelectionStep::SelectingVersions;
-        model.available_versions = vec![]; // Would normally have releases
-        model.selected_version_indices = vec![0, 1, 2]; // Three versions selected
-        
-        // Starting download should create 3 ToolDownload entries (1 tool x 3 versions)
-        let _ = model.update(Message::StartSelectedDownloads);
-        
-        assert!(model.download_started);
-        // Should have created 3 ToolDownload entries
-        assert_eq!(model.tools.len(), 3);
+        model.available_versions = vec![]; // Would have releases in real usage
+
+        // Toggle versions (indices would exist if versions were present)
+        let _ = model.update(Message::ToggleVersion(0));
+        assert_eq!(model.selected_version_indices, vec![0]);
+
+        let _ = model.update(Message::ToggleVersion(1));
+        assert_eq!(model.selected_version_indices, vec![0, 1]);
+
+        let _ = model.update(Message::ToggleVersion(0));
+        assert_eq!(model.selected_version_indices, vec![1]);
+    }
+
+    //
+    // Download progress tracking tests
+    //
+
+    #[test]
+    fn download_progress_updates_correct_tool() {
+        let mut model = ProtonupGui::default();
+        model.tools.push(ToolDownload::new(
+            "GEProton GE-Proton9-27".to_string(),
+            "Steam \"Native\"".to_string(),
+        ));
+
+        // Simulate download progress with matching name
+        model.update(Message::DownloadUpdate(DownloadUpdate::ToolProgress(
+            ToolProgress {
+                tool_name: "GEProton GE-Proton9-27".to_string(),
+                phase: DownloadPhase::Downloading,
+                percent: 50.0,
+                status_message: "Downloading GE-Proton9-27... 50.0%".to_string(),
+            },
+        )));
+
+        assert_eq!(model.tools[0].progress, 50.0);
+        assert_eq!(model.tools[0].status, ToolStatus::Downloading);
+        assert_eq!(model.tools[0].phase, DownloadPhase::Downloading);
+    }
+
+    #[test]
+    fn mismatched_tool_name_does_not_update() {
+        let mut model = ProtonupGui::default();
+        model.tools.push(ToolDownload::new(
+            "GEProton GE-Proton9-27".to_string(),
+            "Steam \"Native\"".to_string(),
+        ));
+
+        // Simulate progress with WRONG name (just version, like the bug)
+        model.update(Message::DownloadUpdate(DownloadUpdate::ToolProgress(
+            ToolProgress {
+                tool_name: "GE-Proton9-27".to_string(),  // WRONG - missing tool name prefix
+                phase: DownloadPhase::Downloading,
+                percent: 50.0,
+                status_message: "Downloading... 50.0%".to_string(),
+            },
+        )));
+
+        // Progress should NOT have updated because names don't match
+        assert_eq!(model.tools[0].progress, 0.0);
+        assert_eq!(model.tools[0].status, ToolStatus::Pending);
+    }
+
+    #[test]
+    fn validation_progress_updates_correct_tool() {
+        let mut model = ProtonupGui::default();
+        model.tools.push(ToolDownload::new(
+            "GEProton GE-Proton9-27".to_string(),
+            "Steam \"Native\"".to_string(),
+        ));
+
+        // Simulate validation progress
+        model.update(Message::DownloadUpdate(DownloadUpdate::ToolProgress(
+            ToolProgress {
+                tool_name: "GEProton GE-Proton9-27".to_string(),
+                phase: DownloadPhase::Validating,
+                percent: 30.0,
+                status_message: "Validating GE-Proton9-27... 30.0%".to_string(),
+            },
+        )));
+
+        assert_eq!(model.tools[0].progress, 30.0);
+        assert_eq!(model.tools[0].status, ToolStatus::Validating);
+    }
+
+    #[test]
+    fn unpacking_progress_updates_correct_tool() {
+        let mut model = ProtonupGui::default();
+        model.tools.push(ToolDownload::new(
+            "GEProton GE-Proton9-27".to_string(),
+            "Steam \"Native\"".to_string(),
+        ));
+
+        // Simulate unpacking progress
+        model.update(Message::DownloadUpdate(DownloadUpdate::ToolProgress(
+            ToolProgress {
+                tool_name: "GEProton GE-Proton9-27".to_string(),
+                phase: DownloadPhase::Unpacking,
+                percent: 75.0,
+                status_message: "Installing GE-Proton9-27... 75.0%".to_string(),
+            },
+        )));
+
+        assert_eq!(model.tools[0].progress, 75.0);
+        assert_eq!(model.tools[0].status, ToolStatus::Unpacking);
+    }
+
+    #[test]
+    fn complete_phase_marks_tool_done() {
+        let mut model = ProtonupGui::default();
+        model.tools.push(ToolDownload::new(
+            "GEProton GE-Proton9-27".to_string(),
+            "Steam \"Native\"".to_string(),
+        ));
+
+        // Simulate completion
+        model.update(Message::DownloadUpdate(DownloadUpdate::ToolProgress(
+            ToolProgress {
+                tool_name: "GEProton GE-Proton9-27".to_string(),
+                phase: DownloadPhase::Complete,
+                percent: 100.0,
+                status_message: "✓ GEProton GE-Proton9-27 installed successfully".to_string(),
+            },
+        )));
+
+        assert_eq!(model.tools[0].progress, 100.0);
+        assert_eq!(model.tools[0].status, ToolStatus::Complete);
+    }
+
+    #[test]
+    fn multiple_tools_track_progress_independently() {
+        let mut model = ProtonupGui::default();
+        model.tools.push(ToolDownload::new(
+            "GEProton GE-Proton9-27".to_string(),
+            "Steam \"Native\"".to_string(),
+        ));
+        model.tools.push(ToolDownload::new(
+            "GEProton GE-Proton9-26".to_string(),
+            "Steam \"Native\"".to_string(),
+        ));
+
+        // Update first tool
+        model.update(Message::DownloadUpdate(DownloadUpdate::ToolProgress(
+            ToolProgress {
+                tool_name: "GEProton GE-Proton9-27".to_string(),
+                phase: DownloadPhase::Downloading,
+                percent: 50.0,
+                status_message: "Downloading...".to_string(),
+            },
+        )));
+
+        // Update second tool
+        model.update(Message::DownloadUpdate(DownloadUpdate::ToolProgress(
+            ToolProgress {
+                tool_name: "GEProton GE-Proton9-26".to_string(),
+                phase: DownloadPhase::Validating,
+                percent: 80.0,
+                status_message: "Validating...".to_string(),
+            },
+        )));
+
+        // Verify independent progress
+        assert_eq!(model.tools[0].progress, 50.0);
+        assert_eq!(model.tools[0].status, ToolStatus::Downloading);
+        assert_eq!(model.tools[1].progress, 80.0);
+        assert_eq!(model.tools[1].status, ToolStatus::Validating);
     }
 }

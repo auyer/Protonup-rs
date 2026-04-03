@@ -611,22 +611,13 @@ impl ProtonupGui {
     fn view_download_progress(&self) -> Element<Message> {
         let mut column = Column::new().spacing(10);
 
-        // Global progress
-        column = column.push(
-            Row::new()
-                .spacing(10)
-                .push(progress_bar(0.0..=100.0, self.global_progress))
-                .push(text(&self.global_status).size(12)),
-        );
-
-        // Per-tool progress bars
         for tool in &self.tools {
             let status_color = match &tool.status {
                 ToolStatus::Complete => [0.3, 1.0, 0.3],
                 ToolStatus::Error(_) => [1.0, 0.3, 0.3],
                 _ => [1.0, 1.0, 1.0],
             };
-            
+
             column = column.push(
                 Column::new()
                     .spacing(5)

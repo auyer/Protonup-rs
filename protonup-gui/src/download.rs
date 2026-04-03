@@ -290,9 +290,10 @@ where
 
     let mut handles = Vec::new();
 
-    for (download, app_inst, compat_tool, _release) in downloads_to_run {
+    for (download, app_inst, compat_tool, release) in downloads_to_run {
         let progress_callback = send_progress.clone();
-        let tool_name: String = compat_tool.name.clone();
+        // Use combined tool name + version to match GUI ToolDownload entries
+        let display_name: String = format!("{} {}", compat_tool.name, release.tag_name);
 
         handles.push(tokio::spawn(async move {
             let result = download_validate_unpack_with_progress(
@@ -300,8 +301,9 @@ where
                 app_inst,
                 compat_tool,
                 progress_callback,
+                display_name.clone(),
             ).await;
-            (tool_name, result)
+            (display_name, result)
         }));
     }
 
@@ -349,28 +351,28 @@ async fn download_validate_unpack_with_progress<F>(
     for_app: apps::AppInstallations,
     compat_tool: CompatTool,
     send_progress: F,
+    display_name: String,  // e.g., "GEProton GE-Proton9-27"
 ) -> Result<()>
 where
     F: Fn(SipProgress) + Send + Sync + Clone + Unpin + 'static,
 {
-    let tool_name = compat_tool.name.clone();
     let install_dir = for_app.installation_dir(&compat_tool).unwrap();
 
     // Phase: Download
     send_progress(SipProgress::new(
         DownloadPhase::Downloading,
-        &tool_name,
+        &display_name,
         &format!("Downloading {}...", download.version),
         0.0,
     ));
 
     // Download file
-    let file = download_file_with_progress(&download, send_progress.clone()).await?;
+    let file = download_file_with_progress(&download, send_progress.clone(), display_name.clone()).await?;
 
     // Phase: Validate
     send_progress(SipProgress::new(
         DownloadPhase::Validating,
-        &tool_name,
+        &display_name,
         &format!("Validating {}...", download.version),
         0.0,
     ));
@@ -392,7 +394,7 @@ where
     // Phase: Unpack
     send_progress(SipProgress::new(
         DownloadPhase::Unpacking,
-        &tool_name,
+        &display_name,
         &format!("Installing {}...", download.version),
         0.0,
     ));
@@ -417,7 +419,7 @@ where
         decompressor,
         send_progress.clone(),
         file_metadata.len(),
-        tool_name.clone(),
+        display_name.clone(),
         DownloadPhase::Unpacking,
     );
 
@@ -428,8 +430,8 @@ where
     // Mark this tool as complete
     send_progress(SipProgress::new(
         DownloadPhase::Complete,
-        &tool_name,
-        &format!("✓ {} installed successfully", tool_name),
+        &display_name,
+        &format!("✓ {} installed successfully", display_name),
         100.0,
     ));
 
@@ -440,6 +442,7 @@ where
 async fn download_file_with_progress<F>(
     download: &Download,
     send_progress: F,
+    display_name: String,
 ) -> Result<PathBuf>
 where
     F: Fn(SipProgress) + Send + Sync + Clone + Unpin + 'static,
@@ -466,7 +469,7 @@ where
         file,
         send_progress,
         download.size,
-        download.version.clone(),
+        display_name,
         DownloadPhase::Downloading,
     );
 
@@ -600,7 +603,7 @@ where
     for (download, app_inst, compat_tool, release) in downloads_to_run {
         let progress_callback = send_progress.clone();
         // Use combined tool name + version to match GUI ToolDownload entries
-        let tool_name: String = format!("{} {}", compat_tool.name, release.tag_name);
+        let display_name: String = format!("{} {}", compat_tool.name, release.tag_name);
 
         handles.push(tokio::spawn(async move {
             let result = download_validate_unpack_with_progress(
@@ -608,8 +611,9 @@ where
                 app_inst,
                 compat_tool,
                 progress_callback,
+                display_name.clone(),
             ).await;
-            (tool_name, result)
+            (display_name, result)
         }));
     }
 
