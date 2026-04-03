@@ -27,6 +27,7 @@ mod tests {
             global_status: "Detected: Steam".to_string(),
             global_progress: 0.0,
             download_complete: None,
+            spinner_frame: 0,
         }
     }
 
@@ -77,6 +78,7 @@ mod tests {
             global_status: "No compatible apps detected".to_string(),
             global_progress: 0.0,
             download_complete: None,
+            spinner_frame: 0,
         };
         let mut ui = simulator(model.view());
 

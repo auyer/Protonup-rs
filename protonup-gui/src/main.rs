@@ -1,5 +1,5 @@
 use iced::widget::{button, center, checkbox, progress_bar, text, Column, Container, Row, scrollable};
-use iced::{Element, Task, Subscription};
+use iced::{Center, Element, Task, Subscription};
 use iced::time;
 
 use libprotonup::apps::{list_installed_apps, App, AppInstallations};
@@ -9,6 +9,11 @@ use libprotonup::files;
 
 use std::collections::HashSet;
 use std::path::PathBuf;
+use std::time::Duration;
+
+// Spinner animation constants
+const SPINNER_CHARS: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+const SPINNER_INTERVAL: Duration = Duration::from_millis(80);
 
 mod download;
 mod download_task;
@@ -54,6 +59,9 @@ enum Message {
 
     // Errors
     SelectionError(String),
+
+    // Spinner animation
+    TickSpinner,
 }
 
 /// GUI mode - what the user is doing
@@ -183,6 +191,9 @@ struct ProtonupGui {
     global_status: String,
     global_progress: f32,
     download_complete: Option<Result<Vec<String>, String>>,
+
+    // Spinner animation state
+    spinner_frame: usize,
 }
 
 impl ProtonupGui {
@@ -429,6 +440,11 @@ impl ProtonupGui {
                 self.selection_step = SelectionStep::Initial;
                 Task::none()
             }
+
+            Message::TickSpinner => {
+                self.spinner_frame = (self.spinner_frame + 1) % SPINNER_CHARS.len();
+                Task::none()
+            }
         }
     }
 
@@ -619,7 +635,13 @@ impl ProtonupGui {
                 self.view_confirm_reinstall()
             }
             SelectionStep::Downloading => {
-                text("Download in progress...").size(14).into()
+                let spinner = SPINNER_CHARS[self.spinner_frame];
+                Column::new()
+                    .spacing(10)
+                    .align_x(Center)
+                    .push(text(spinner).size(48))
+                    .push(text("Download in progress...").size(16))
+                    .into()
             }
             SelectionStep::Complete => {
                 Column::new()
@@ -801,11 +823,25 @@ impl ProtonupGui {
     }
 
     fn subscription(&self) -> Subscription<Message> {
+        let mut subscriptions = vec![];
+
+        // App scanning subscription
         if !self.scan_complete {
-            time::every(std::time::Duration::from_millis(100)).map(|_| Message::ScanApps)
-        } else {
-            Subscription::none()
+            subscriptions.push(
+                time::every(Duration::from_millis(100))
+                    .map(|_| Message::ScanApps)
+            );
         }
+
+        // Spinner animation subscription when downloading
+        if self.download_started && self.selection_step == SelectionStep::Downloading {
+            subscriptions.push(
+                time::every(SPINNER_INTERVAL)
+                    .map(|_| Message::TickSpinner)
+            );
+        }
+
+        Subscription::batch(subscriptions)
     }
 }
 
