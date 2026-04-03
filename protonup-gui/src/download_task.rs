@@ -1,10 +1,16 @@
 //! Task::sip() wrapper for the download module.
-//! 
+//!
 //! This module provides the bridge between the download logic in download.rs
 //! and Iced's Task::sip() pattern for streaming updates to the GUI.
 
 use iced::task::sipper;
 use iced::Task;
+use std::sync::Arc;
+use tokio::sync::Mutex;
+
+use libprotonup::apps::AppInstallations;
+use libprotonup::sources::CompatTool;
+use libprotonup::downloads::Release;
 
 use crate::download::{self, DownloadPhase};
 
@@ -140,6 +146,70 @@ pub fn run_quick_update(force: bool) -> Task<DownloadUpdate> {
     .abortable();
     
     // Drop handle to auto-cancel when task is dropped
+    drop(handle);
+    task
+}
+
+/// Creates a streaming task that downloads selected tools and versions
+pub fn download_selected_tools(
+    app_installation: AppInstallations,
+    tools_and_versions: Vec<(CompatTool, Vec<Release>)>,
+) -> Task<DownloadUpdate> {
+    let progress = Arc::new(Mutex::new(())); // Dummy lock for compatibility
+    let progress_for_sipper = progress.clone();
+    
+    // Create the sipper straw that runs the download logic
+    let straw = sipper(async move |mut progress_sender| {
+        // Run the actual download logic with progress callback
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<SipProgress>();
+        
+        let forward_task = tokio::spawn(async move {
+            while let Some(progress) = rx.recv().await {
+                let _ = progress_sender.send(progress).await;
+            }
+        });
+        
+        let result = download::download_selected_tools(
+            app_installation,
+            tools_and_versions,
+            move |progress: SipProgress| {
+                let _ = tx.send(progress);
+            },
+        ).await;
+        
+        forward_task.abort();
+        
+        match result {
+            Ok(releases) => {
+                let versions: Vec<String> = releases.iter().map(|r| r.tag_name.clone()).collect();
+                Ok(versions)
+            }
+            Err(e) => Err(DownloadError::IoError(e.to_string())),
+        }
+    });
+    
+    let (task, handle) = Task::sip(
+        straw,
+        |sip_progress: SipProgress| {
+            if let Some(tool_name) = sip_progress.tool_name {
+                DownloadUpdate::ToolProgress(ToolProgress {
+                    tool_name,
+                    phase: sip_progress.phase,
+                    percent: sip_progress.percent,
+                    status_message: sip_progress.status_message,
+                })
+            } else {
+                DownloadUpdate::GlobalProgress(GlobalProgress {
+                    phase: sip_progress.phase,
+                    status_message: sip_progress.status_message,
+                    percent: sip_progress.percent,
+                })
+            }
+        },
+        |result| DownloadUpdate::Finished(result),
+    )
+    .abortable();
+    
     drop(handle);
     task
 }
