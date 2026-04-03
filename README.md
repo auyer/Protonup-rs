@@ -18,7 +18,6 @@ These are the tools that are currently supported by this project.
 | Project Name      | GitHub Repository |
 |-------------------|-------------------|
 | GEProton          | [GloriousEggroll/proton-ge-custom](https://github.com/GloriousEggroll/proton-ge-custom) |
-| WineGE            | [GloriousEggroll/wine-ge-custom](https://github.com/GloriousEggroll/wine-ge-custom) |
 | Luxtorpeda        | [luxtorpeda-dev/luxtorpeda](https://github.com/luxtorpeda-dev/luxtorpeda) |
 | Boxtron           | [dreamer/boxtron](https://github.com/dreamer/boxtron) |
 | VKD3D-Proton      | [HansKristian-Work/vkd3d-proton](https://github.com/HansKristian-Work/vkd3d-proton) |
@@ -49,7 +48,7 @@ For automation or scripting, you can use CLI arguments to skip the TUI:
 protonup-rs --tool GEProton
 
 # Install specific version for Lutris
-protonup-rs --tool WineGE --version 8.26 --for lutris
+protonup-rs --tool GEProton --version 8.26 --for lutris
 
 # Install to custom path
 protonup-rs --tool GEProton --version latest --for ~/.local/steam
@@ -64,7 +63,7 @@ protonup-rs --tool GEProton --for steam --force
 Options:
   -q, --quick-download     Skip Menu, auto detect apps and download using default parameters
   -f, --force              Force install for existing apps during quick downloads
-      --tool <TOOL>        Compatibility tool to install (e.g., GEProton, WineGE, Luxtorpeda)
+      --tool <TOOL>        Compatibility tool to install (e.g., GEProton, Luxtorpeda)
       --version <VERSION>  Version to install (use "latest" for the latest version)
       --for <FOR>          Target for installation. Use "steam", "lutris", or a custom path. If omitted, auto-detects based on tool compatibility
   -h, --help               Print help
