@@ -10,6 +10,7 @@ use libprotonup::{
     files, hashing,
     sources::CompatTool,
 };
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::task::{Context as TaskContext, Poll};
@@ -538,6 +539,7 @@ pub async fn download_selected_tools<F>(
     app_installation: AppInstallations,
     tools_and_versions: Vec<(CompatTool, Vec<Release>)>,
     send_progress: F,
+    force_reinstall_names: HashSet<String>,
 ) -> Result<Vec<Release>>
 where
     F: Fn(SipProgress) + Send + Sync + Clone + Unpin + 'static,
@@ -564,14 +566,18 @@ where
                 release.get_download_info(&app_installation, compat_tool)
             };
 
-            // Check if already installed
+            // Check if already installed (only if not in force reinstall set)
+            let display_name = format!("{} {}", compat_tool.name, release.tag_name);
             let mut download_path = PathBuf::from(&app_installation.default_install_dir().as_str());
             download_path.push(compat_tool.installation_name(&download.version));
-            if files::check_if_exists(&download_path.clone()).await {
+            
+            if !force_reinstall_names.contains(&display_name) 
+                && files::check_if_exists(&download_path.clone()).await 
+            {
                 send_progress(SipProgress::new(
                     DownloadPhase::Complete,
-                    &compat_tool.name,
-                    &format!("{} {} already installed, skipping", compat_tool.name, download.version),
+                    &display_name,
+                    &format!("{} already installed, skipping", display_name),
                     100.0,
                 ));
                 continue;

@@ -5,6 +5,7 @@
 
 use iced::task::sipper;
 use iced::Task;
+use std::collections::HashSet;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -154,31 +155,33 @@ pub fn run_quick_update(force: bool) -> Task<DownloadUpdate> {
 pub fn download_selected_tools(
     app_installation: AppInstallations,
     tools_and_versions: Vec<(CompatTool, Vec<Release>)>,
+    force_reinstall_names: HashSet<String>,
 ) -> Task<DownloadUpdate> {
     let progress = Arc::new(Mutex::new(())); // Dummy lock for compatibility
     let progress_for_sipper = progress.clone();
-    
+
     // Create the sipper straw that runs the download logic
     let straw = sipper(async move |mut progress_sender| {
         // Run the actual download logic with progress callback
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<SipProgress>();
-        
+
         let forward_task = tokio::spawn(async move {
             while let Some(progress) = rx.recv().await {
                 let _ = progress_sender.send(progress).await;
             }
         });
-        
+
         let result = download::download_selected_tools(
             app_installation,
             tools_and_versions,
             move |progress: SipProgress| {
                 let _ = tx.send(progress);
             },
+            force_reinstall_names,
         ).await;
-        
+
         forward_task.abort();
-        
+
         match result {
             Ok(releases) => {
                 let versions: Vec<String> = releases.iter().map(|r| r.tag_name.clone()).collect();

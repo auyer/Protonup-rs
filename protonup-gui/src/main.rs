@@ -5,6 +5,10 @@ use iced::time;
 use libprotonup::apps::{list_installed_apps, App, AppInstallations};
 use libprotonup::sources::CompatTool;
 use libprotonup::downloads::Release;
+use libprotonup::files;
+
+use std::collections::HashSet;
+use std::path::PathBuf;
 
 mod download;
 mod download_task;
@@ -19,30 +23,35 @@ enum Message {
     // Initial actions
     ScanApps,
     AppsScanned(Vec<AppInstallations>),
-    
+
     // Mode selection
     SelectQuickUpdate,
     SelectDownloadForSteam,
     SelectDownloadForLutris,
-    
+
     // Tool selection
     ToolsFetched(Vec<CompatTool>),  // Unused, kept for compatibility
     AppInstallationDetected(AppInstallations),
     ToggleTool(usize),
     ToolSelectionConfirmed,
-    
+
     // Version selection
     VersionsFetched(Vec<Release>),
     ToggleVersion(usize),
     StartSelectedDownloads,
-    
+
+    // Reinstall confirmation
+    AlreadyInstalledChecked(Vec<ToolDownload>),
+    ToggleReinstall(usize),
+    ConfirmReinstallSelection,
+
     // Download progress
     DownloadUpdate(DownloadUpdate),
-    
+
     // Navigation
     BackToInitial,
     Restart,
-    
+
     // Errors
     SelectionError(String),
 }
@@ -64,6 +73,7 @@ enum SelectionStep {
     Initial,
     SelectingTools,
     SelectingVersions,
+    ConfirmReinstall,  // NEW: Show already-installed tools with checkboxes
     Downloading,
     Complete,
 }
@@ -145,23 +155,27 @@ struct ProtonupGui {
     // App detection
     detected_apps: Vec<AppInstallations>,
     scan_complete: bool,
-    
+
     // Mode and selection state
     mode: GuiMode,
     selection_step: SelectionStep,
-    
+
     // Tool selection
     available_tools: Vec<CompatTool>,
     selected_tool_indices: Vec<usize>,
-    
+
     // Version selection
     selected_tool: Option<CompatTool>,
     available_versions: Vec<Release>,
     selected_version_indices: Vec<usize>,
-    
+
     // App installation target
     app_installation: Option<AppInstallations>,
-    
+
+    // Reinstall confirmation state
+    already_installed_tools: Vec<ToolDownload>,
+    force_reinstall_indices: Vec<usize>,
+
     // Download state (shared with QuickUpdate)
     download_started: bool,
     tools: Vec<ToolDownload>,
@@ -309,38 +323,61 @@ impl ProtonupGui {
                     return Task::none();
                 }
 
-                self.selection_step = SelectionStep::Downloading;
-                self.download_started = true;
-                self.global_progress = 0.0;
-                self.download_complete = None;
-
-                // Prepare tools and versions for download
+                // Build tools_and_versions for checking
                 let mut tools_and_versions = Vec::new();
-                
-                // Create ToolDownload entries for each tool/version combination
-                self.tools.clear();
                 for &tool_idx in &self.selected_tool_indices {
                     let tool = self.available_tools[tool_idx].clone();
                     let versions: Vec<Release> = self.selected_version_indices
                         .iter()
                         .map(|&v_idx| self.available_versions[v_idx].clone())
                         .collect();
-                    
-                    // Create a ToolDownload entry for each version
-                    for version in &versions {
-                        self.tools.push(ToolDownload::new(
-                            format!("{} {}", tool.name, version.tag_name),
-                            self.app_installation.as_ref().map(|a| a.to_string()).unwrap_or_default(),
-                        ));
-                    }
-                    
                     tools_and_versions.push((tool, versions));
                 }
 
                 let app_inst = self.app_installation.clone().unwrap();
 
-                download_task::download_selected_tools(app_inst, tools_and_versions)
-                    .map(Message::DownloadUpdate)
+                // Check which tools are already installed
+                Task::perform(
+                    Self::check_already_installed(app_inst, tools_and_versions),
+                    Message::AlreadyInstalledChecked,
+                )
+            }
+
+            Message::AlreadyInstalledChecked(already_installed) => {
+                self.already_installed_tools = already_installed;
+                self.force_reinstall_indices.clear();
+
+                if self.already_installed_tools.is_empty() {
+                    // Nothing to confirm, proceed directly to download
+                    self.start_downloads(HashSet::new())
+                } else {
+                    // Show confirmation dialog
+                    self.selection_step = SelectionStep::ConfirmReinstall;
+                    self.global_status = format!(
+                        "{} tool(s) already installed. Select which to reinstall.",
+                        self.already_installed_tools.len()
+                    );
+                    Task::none()
+                }
+            }
+
+            Message::ToggleReinstall(index) => {
+                if let Some(pos) = self.force_reinstall_indices.iter().position(|&i| i == index) {
+                    self.force_reinstall_indices.remove(pos);
+                } else {
+                    self.force_reinstall_indices.push(index);
+                }
+                Task::none()
+            }
+
+            Message::ConfirmReinstallSelection => {
+                // Build the set of tool names that should be force reinstalled
+                let force_reinstall_names: HashSet<String> = self.force_reinstall_indices
+                    .iter()
+                    .filter_map(|&i| self.already_installed_tools.get(i))
+                    .map(|t| t.name.clone())
+                    .collect();
+                self.start_downloads(force_reinstall_names)
             }
 
             Message::DownloadUpdate(update) => match update {
@@ -401,17 +438,78 @@ impl ProtonupGui {
         if installations.is_empty() {
             return Err(format!("{} installation not found", app));
         }
-        
+
         // Use first detected installation (could prompt user if multiple)
         let app_inst = installations[0].clone();
-        
+
         // Get compatible tools
         let tools = CompatTool::sources_for_app(&app);
         if tools.is_empty() {
             return Err("No compatible tools found".to_string());
         }
-        
+
         Ok((app_inst, tools))
+    }
+
+    /// Check which tools are already installed
+    async fn check_already_installed(
+        app_installation: AppInstallations,
+        tools_and_versions: Vec<(CompatTool, Vec<Release>)>,
+    ) -> Vec<ToolDownload> {
+        let mut already_installed = Vec::new();
+
+        for (tool, versions) in &tools_and_versions {
+            for version in versions {
+                let install_name = tool.installation_name(&version.tag_name);
+                let mut install_path = PathBuf::from(app_installation.default_install_dir().as_str());
+                install_path.push(&install_name);
+
+                if files::check_if_exists(&install_path).await {
+                    already_installed.push(ToolDownload::new(
+                        format!("{} {}", tool.name, version.tag_name),
+                        app_installation.to_string(),
+                    ));
+                }
+            }
+        }
+
+        already_installed
+    }
+
+    /// Start the actual downloads
+    fn start_downloads(&mut self, force_reinstall_names: HashSet<String>) -> Task<Message> {
+        self.selection_step = SelectionStep::Downloading;
+        self.download_started = true;
+        self.global_progress = 0.0;
+        self.download_complete = None;
+
+        // Prepare tools and versions for download
+        let mut tools_and_versions = Vec::new();
+
+        // Create ToolDownload entries for each tool/version combination
+        self.tools.clear();
+        for &tool_idx in &self.selected_tool_indices {
+            let tool = self.available_tools[tool_idx].clone();
+            let versions: Vec<Release> = self.selected_version_indices
+                .iter()
+                .map(|&v_idx| self.available_versions[v_idx].clone())
+                .collect();
+
+            // Create a ToolDownload entry for each version
+            for version in &versions {
+                self.tools.push(ToolDownload::new(
+                    format!("{} {}", tool.name, version.tag_name),
+                    self.app_installation.as_ref().map(|a| a.to_string()).unwrap_or_default(),
+                ));
+            }
+
+            tools_and_versions.push((tool, versions));
+        }
+
+        let app_inst = self.app_installation.clone().unwrap();
+
+        download_task::download_selected_tools(app_inst, tools_and_versions, force_reinstall_names)
+            .map(Message::DownloadUpdate)
     }
 
     fn reset_to_initial(&mut self) {
@@ -517,6 +615,9 @@ impl ProtonupGui {
             SelectionStep::SelectingVersions => {
                 self.view_version_selection()
             }
+            SelectionStep::ConfirmReinstall => {
+                self.view_confirm_reinstall()
+            }
             SelectionStep::Downloading => {
                 text("Download in progress...").size(14).into()
             }
@@ -602,6 +703,46 @@ impl ProtonupGui {
         column = column.push(
             button(text("Back").size(14))
                 .on_press(Message::ToolSelectionConfirmed)
+                .padding(10),
+        );
+
+        scrollable(column).into()
+    }
+
+    fn view_confirm_reinstall(&self) -> Element<Message> {
+        let mut column = Column::new().spacing(10);
+
+        column = column.push(
+            text("The following tools are already installed:").size(16)
+        );
+
+        column = column.push(
+            text("Select which ones you want to reinstall:").size(14)
+        );
+
+        if self.already_installed_tools.is_empty() {
+            column = column.push(text("No tools to reinstall.").size(14));
+        } else {
+            for (index, tool) in self.already_installed_tools.iter().enumerate() {
+                let is_selected = self.force_reinstall_indices.contains(&index);
+                column = column.push(
+                    Row::new()
+                        .spacing(10)
+                        .push(checkbox(is_selected).on_toggle(move |_| Message::ToggleReinstall(index)))
+                        .push(text(&tool.name).size(14)),
+                );
+            }
+        }
+
+        column = column.push(
+            button(text("Continue").size(14))
+                .on_press(Message::ConfirmReinstallSelection)
+                .padding(10),
+        );
+
+        column = column.push(
+            button(text("Back").size(14))
+                .on_press(Message::BackToInitial)
                 .padding(10),
         );
 
