@@ -3,7 +3,7 @@
 //! This module provides the bridge between the download logic in download.rs
 //! and Iced's Task::sip() pattern for streaming updates to the GUI.
 
-use iced::task::sipper;
+use iced::task::{self, sipper};
 use iced::Task;
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -79,12 +79,9 @@ pub enum DownloadError {
 }
 
 /// Creates a streaming task that runs quick downloads and reports progress
-/// 
-/// This uses Iced's `Task::sip()` pattern where:
-/// - The sipper async closure runs the download logic and sends progress updates
-/// - Progress updates are mapped to DownloadUpdate (per-tool or global)
-/// - Final result is mapped to DownloadUpdate::Finished
-pub fn run_quick_update(force: bool) -> Task<DownloadUpdate> {
+///
+/// Returns a tuple of (Task, Handle) where the Handle can be used to abort the task
+pub fn run_quick_update(force: bool) -> (Task<DownloadUpdate>, task::Handle) {
     // Create the sipper straw that runs the download logic
     let straw = sipper(async move |mut progress_sender| {
         // Run the actual download logic with progress callback
@@ -145,18 +142,19 @@ pub fn run_quick_update(force: bool) -> Task<DownloadUpdate> {
         |result| DownloadUpdate::Finished(result),
     )
     .abortable();
-    
-    // Drop handle to auto-cancel when task is dropped
-    drop(handle);
-    task
+
+    // Return both task and handle so caller can abort if needed
+    (task, handle)
 }
 
 /// Creates a streaming task that downloads selected tools and versions
+///
+/// Returns a tuple of (Task, Handle) where the Handle can be used to abort the task
 pub fn download_selected_tools(
     app_installation: AppInstallations,
     tools_and_versions: Vec<(CompatTool, Vec<Release>)>,
     force_reinstall_names: HashSet<String>,
-) -> Task<DownloadUpdate> {
+) -> (Task<DownloadUpdate>, task::Handle) {
     let progress = Arc::new(Mutex::new(())); // Dummy lock for compatibility
     let progress_for_sipper = progress.clone();
 
@@ -212,9 +210,9 @@ pub fn download_selected_tools(
         |result| DownloadUpdate::Finished(result),
     )
     .abortable();
-    
-    drop(handle);
-    task
+
+    // Return both task and handle so caller can abort if needed
+    (task, handle)
 }
 
 #[cfg(test)]

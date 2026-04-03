@@ -1,5 +1,6 @@
 use iced::widget::{button, center, checkbox, progress_bar, text, Column, Container, Row, scrollable};
-use iced::{Center, Element, Task, Subscription};
+use iced::task;
+use iced::{Center, Element, Task, Subscription, Length};
 use iced::time;
 
 use libprotonup::apps::{list_installed_apps, App, AppInstallations};
@@ -62,6 +63,9 @@ enum Message {
 
     // Spinner animation
     TickSpinner,
+
+    // Cancel download
+    Cancel,
 }
 
 /// GUI mode - what the user is doing
@@ -194,6 +198,9 @@ struct ProtonupGui {
 
     // Spinner animation state
     spinner_frame: usize,
+
+    // Cancel handle for aborting downloads
+    download_handle: Option<task::Handle>,
 }
 
 impl ProtonupGui {
@@ -231,7 +238,7 @@ impl ProtonupGui {
                 self.global_progress = 0.0;
                 self.download_complete = None;
                 self.global_status = "Starting Quick Update...".to_string();
-                
+
                 // Pre-populate tools based on detected apps
                 self.tools.clear();
                 for app in &self.detected_apps {
@@ -242,8 +249,11 @@ impl ProtonupGui {
                     ));
                 }
 
-                download_task::run_quick_update(false)
-                    .map(Message::DownloadUpdate)
+                // Store the handle so we can abort the task later
+                let (task, handle) = download_task::run_quick_update(false);
+                self.download_handle = Some(handle);
+
+                task.map(Message::DownloadUpdate)
             }
 
             Message::SelectDownloadForSteam => {
@@ -405,6 +415,9 @@ impl ProtonupGui {
                     Task::none()
                 }
                 DownloadUpdate::Finished(result) => {
+                    // Clear the handle since the task is done
+                    self.download_handle = None;
+                    
                     match result {
                         Ok(versions) => {
                             self.global_progress = 100.0;
@@ -424,6 +437,16 @@ impl ProtonupGui {
                     Task::none()
                 }
             },
+
+            Message::Cancel => {
+                // Abort the download task
+                if let Some(handle) = self.download_handle.take() {
+                    handle.abort();
+                }
+                // Reset state to initial
+                self.reset_to_initial();
+                Task::none()
+            }
 
             Message::BackToInitial => {
                 self.reset_to_initial();
@@ -524,8 +547,15 @@ impl ProtonupGui {
 
         let app_inst = self.app_installation.clone().unwrap();
 
-        download_task::download_selected_tools(app_inst, tools_and_versions, force_reinstall_names)
-            .map(Message::DownloadUpdate)
+        // Store the handle so we can abort the task later
+        let (task, handle) = download_task::download_selected_tools(
+            app_inst,
+            tools_and_versions,
+            force_reinstall_names,
+        );
+        self.download_handle = Some(handle);
+
+        task.map(Message::DownloadUpdate)
     }
 
     fn reset_to_initial(&mut self) {
@@ -543,6 +573,7 @@ impl ProtonupGui {
         self.global_status = String::new();
         self.global_progress = 0.0;
         self.download_complete = None;
+        self.download_handle = None;
     }
 
     fn view(&self) -> Element<Message> {
@@ -580,6 +611,19 @@ impl ProtonupGui {
         if self.download_started {
             content = content.push(text("Download Progress:").size(16));
             content = content.push(self.view_download_progress());
+        }
+
+        // Cancel button at bottom (always visible when downloading)
+        if self.download_started && self.selection_step == SelectionStep::Downloading {
+            content = content.push(
+                Container::new(
+                    button(text("Cancel").size(14))
+                        .on_press(Message::Cancel)
+                        .padding(10),
+                )
+                .center_x(Length::Fill)
+                .width(Length::Fill),
+            );
         }
 
         Container::new(center(content)).into()

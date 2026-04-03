@@ -28,6 +28,7 @@ mod tests {
             global_progress: 0.0,
             download_complete: None,
             spinner_frame: 0,
+            download_handle: None,
         }
     }
 
@@ -79,6 +80,7 @@ mod tests {
             global_progress: 0.0,
             download_complete: None,
             spinner_frame: 0,
+            download_handle: None,
         };
         let mut ui = simulator(model.view());
 
@@ -674,5 +676,28 @@ mod tests {
         assert!(force_reinstall_names.contains("GEProton GE-Proton9-27"));
         assert!(!force_reinstall_names.contains("GEProton GE-Proton9-26"));
         assert!(force_reinstall_names.contains("GEProton GE-Proton9-25"));
+    }
+
+    //
+    // Cancel tests
+    //
+
+    #[test]
+    fn cancel_resets_state_to_initial() {
+        let mut model = ready_model();
+        model.download_started = true;
+        model.selection_step = SelectionStep::Downloading;
+        model.mode = GuiMode::DownloadForSteam;
+        // Simulate having a handle (we can't easily create a real one)
+        // The test just verifies the state reset logic
+
+        let _ = model.update(Message::Cancel);
+
+        // Verify state is reset
+        assert_eq!(model.selection_step, SelectionStep::Initial);
+        assert_eq!(model.mode, GuiMode::Initial);
+        assert!(!model.download_started);
+        assert!(model.download_handle.is_none());
+        assert!(model.tools.is_empty());
     }
 }
