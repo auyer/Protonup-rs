@@ -46,6 +46,9 @@ enum Message {
     ToggleVersion(usize),
     StartSelectedDownloads,
 
+    // Architecture variant selection
+    SelectArchitecture(u8),
+
     // Reinstall confirmation
     AlreadyInstalledChecked(Vec<ToolDownload>),
     ToggleReinstall(usize),
@@ -85,7 +88,8 @@ enum SelectionStep {
     Initial,
     SelectingTools,
     SelectingVersions,
-    ConfirmReinstall,  // NEW: Show already-installed tools with checkboxes
+    SelectingArchitecture,  // NEW: Show architecture variant selection
+    ConfirmReinstall,
     Downloading,
     Complete,
 }
@@ -180,6 +184,10 @@ struct ProtonupGui {
     selected_tool: Option<CompatTool>,
     available_versions: Vec<Release>,
     selected_version_indices: Vec<usize>,
+
+    // Architecture variant selection
+    selected_arch_variant: Option<u8>,  // 1=x86_64, 2=v2, 3=v3, 4=v4
+    has_variant_tools: bool,            // True if any selected tool has variants
 
     // App installation target
     app_installation: Option<AppInstallations>,
@@ -325,7 +333,20 @@ impl ProtonupGui {
                 if !self.available_versions.is_empty() {
                     self.selected_version_indices.push(0);
                 }
-                self.selection_step = SelectionStep::SelectingVersions;
+
+                // Check if any selected tool has architecture variants
+                self.has_variant_tools = self.selected_tool_indices.iter().any(|&idx| {
+                    self.available_tools.get(idx).map_or(false, |t| t.has_multiple_asset_variations)
+                });
+
+                if self.has_variant_tools {
+                    // Show architecture selection next
+                    self.selection_step = SelectionStep::SelectingArchitecture;
+                    self.selected_arch_variant = Some(2);  // Default to v2
+                } else {
+                    // No variants, proceed to version selection
+                    self.selection_step = SelectionStep::SelectingVersions;
+                }
                 Task::none()
             }
 
@@ -335,6 +356,11 @@ impl ProtonupGui {
                 } else {
                     self.selected_version_indices.push(index);
                 }
+                Task::none()
+            }
+
+            Message::SelectArchitecture(variant_code) => {
+                self.selected_arch_variant = Some(variant_code);
                 Task::none()
             }
 
@@ -552,6 +578,7 @@ impl ProtonupGui {
             app_inst,
             tools_and_versions,
             force_reinstall_names,
+            self.selected_arch_variant,
         );
         self.download_handle = Some(handle);
 
@@ -675,6 +702,9 @@ impl ProtonupGui {
             SelectionStep::SelectingVersions => {
                 self.view_version_selection()
             }
+            SelectionStep::SelectingArchitecture => {
+                self.view_architecture_selection()
+            }
             SelectionStep::ConfirmReinstall => {
                 self.view_confirm_reinstall()
             }
@@ -769,6 +799,56 @@ impl ProtonupGui {
         column = column.push(
             button(text("Back").size(14))
                 .on_press(Message::ToolSelectionConfirmed)
+                .padding(10),
+        );
+
+        scrollable(column).into()
+    }
+
+    fn view_architecture_selection(&self) -> Element<Message> {
+        let mut column = Column::new().spacing(10);
+
+        column = column.push(
+            text("Select CPU Architecture Variant:").size(16)
+        );
+
+        column = column.push(
+            text("Some tools offer optimized builds for different CPU architectures.")
+                .size(12)
+        );
+
+        // Architecture variants: (code, name, description)
+        let variants = [
+            (1, "x86_64", "Universal - all x86-64 CPUs"),
+            (2, "x86_64_v2", "Recommended - optimized for SSE3"),
+            (3, "x86_64_v3", "Modern CPUs - optimized for AVX2"),
+            (4, "x86_64_v4", "Experimental - optimized for AVX-512"),
+        ];
+
+        for (code, name, desc) in variants {
+            let is_selected = self.selected_arch_variant == Some(code);
+            column = column.push(
+                Row::new()
+                    .spacing(10)
+                    .align_y(Center)
+                    .push(checkbox(is_selected).on_toggle(move |_| Message::SelectArchitecture(code)))
+                    .push(
+                        Column::new()
+                            .push(text(name).size(14))
+                            .push(text(desc).size(10)),
+                    ),
+            );
+        }
+
+        column = column.push(
+            button(text("Continue").size(14))
+                .on_press(Message::StartSelectedDownloads)
+                .padding(10),
+        );
+
+        column = column.push(
+            button(text("Back").size(14))
+                .on_press(Message::VersionsFetched(vec![]))
                 .padding(10),
         );
 

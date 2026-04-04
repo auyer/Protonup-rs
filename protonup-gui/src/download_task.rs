@@ -154,6 +154,7 @@ pub fn download_selected_tools(
     app_installation: AppInstallations,
     tools_and_versions: Vec<(CompatTool, Vec<Release>)>,
     force_reinstall_names: HashSet<String>,
+    arch_variant: Option<u8>,
 ) -> (Task<DownloadUpdate>, task::Handle) {
     let progress = Arc::new(Mutex::new(())); // Dummy lock for compatibility
     let progress_for_sipper = progress.clone();
@@ -176,6 +177,7 @@ pub fn download_selected_tools(
                 let _ = tx.send(progress);
             },
             force_reinstall_names,
+            arch_variant,
         ).await;
 
         forward_task.abort();

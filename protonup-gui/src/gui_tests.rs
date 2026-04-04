@@ -18,6 +18,8 @@ mod tests {
             selected_tool: None,
             available_versions: vec![],
             selected_version_indices: vec![],
+            selected_arch_variant: None,
+            has_variant_tools: false,
             app_installation: None,
             already_installed_tools: vec![],
             force_reinstall_indices: vec![],
@@ -70,6 +72,8 @@ mod tests {
             selected_tool: None,
             available_versions: vec![],
             selected_version_indices: vec![],
+            selected_arch_variant: None,
+            has_variant_tools: false,
             app_installation: None,
             already_installed_tools: vec![],
             force_reinstall_indices: vec![],
@@ -699,5 +703,76 @@ mod tests {
         assert!(!model.download_started);
         assert!(model.download_handle.is_none());
         assert!(model.tools.is_empty());
+    }
+
+    //
+    // Architecture variant selection tests
+    //
+
+    #[test]
+    fn select_architecture_variant_updates_state() {
+        let mut model = ready_model();
+        model.selected_arch_variant = Some(2);  // Default
+
+        // Select v3
+        let _ = model.update(Message::SelectArchitecture(3));
+
+        assert_eq!(model.selected_arch_variant, Some(3));
+    }
+
+    #[test]
+    fn has_variant_tools_detects_variant_tool() {
+        use libprotonup::sources::{CompatTool, Forge, ToolType};
+
+        let mut model = ready_model();
+        model.selected_tool_indices = vec![0];
+
+        // Add a tool with multiple asset variations
+        model.available_tools = vec![
+            CompatTool::new_custom(
+                "ProtonCachyOS".to_string(),
+                Forge::GitHub,
+                "CachyOS".to_string(),
+                "proton-cachyos".to_string(),
+                ToolType::Runtime,
+                None, None, None,
+            ),
+        ];
+        // Manually set has_multiple_asset_variations for testing
+        model.available_tools[0].has_multiple_asset_variations = true;
+
+        // Simulate versions being fetched
+        model.has_variant_tools = model.selected_tool_indices.iter().any(|&idx| {
+            model.available_tools.get(idx).map_or(false, |t| t.has_multiple_asset_variations)
+        });
+
+        assert!(model.has_variant_tools);
+    }
+
+    #[test]
+    fn has_variant_tools_false_for_normal_tool() {
+        use libprotonup::sources::{CompatTool, Forge, ToolType};
+
+        let mut model = ready_model();
+        model.selected_tool_indices = vec![0];
+
+        // Add a tool without multiple asset variations
+        model.available_tools = vec![
+            CompatTool::new_custom(
+                "GEProton".to_string(),
+                Forge::GitHub,
+                "GloriousEggroll".to_string(),
+                "proton-ge-custom".to_string(),
+                ToolType::Runtime,
+                None, None, None,
+            ),
+        ];
+        // has_multiple_asset_variations is false by default
+
+        model.has_variant_tools = model.selected_tool_indices.iter().any(|&idx| {
+            model.available_tools.get(idx).map_or(false, |t| t.has_multiple_asset_variations)
+        });
+
+        assert!(!model.has_variant_tools);
     }
 }

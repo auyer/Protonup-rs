@@ -6,6 +6,7 @@
 use anyhow::{Context, Result};
 use libprotonup::{
     apps::{self, AppInstallations},
+    architecture_variants,
     downloads::{self, Download, Release},
     files, hashing,
     sources::CompatTool,
@@ -540,6 +541,7 @@ pub async fn download_selected_tools<F>(
     tools_and_versions: Vec<(CompatTool, Vec<Release>)>,
     send_progress: F,
     force_reinstall_names: HashSet<String>,
+    arch_variant: Option<u8>,
 ) -> Result<Vec<Release>>
 where
     F: Fn(SipProgress) + Send + Sync + Clone + Unpin + 'static,
@@ -559,9 +561,19 @@ where
             // Handle tools with multiple architecture variants
             let download = if compat_tool.has_multiple_asset_variations {
                 let variants = release.get_all_download_variants(&app_installation, compat_tool);
-                variants.into_iter().next().unwrap_or_else(|| {
-                    release.get_download_info(&app_installation, compat_tool)
-                })
+
+                // Select variant based on arch_variant parameter
+                if let Some(variant_code) = arch_variant {
+                    let variant_name = architecture_variants::get_variant_name(variant_code);
+                    variants
+                        .into_iter()
+                        .find(|d| d.file_name.contains(variant_name))
+                        .unwrap_or_else(|| release.get_download_info(&app_installation, compat_tool))
+                } else {
+                    // Default to v2 or first available
+                    architecture_variants::select_default_variant(&variants)
+                        .unwrap_or_else(|| release.get_download_info(&app_installation, compat_tool))
+                }
             } else {
                 release.get_download_info(&app_installation, compat_tool)
             };
