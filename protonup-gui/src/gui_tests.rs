@@ -47,7 +47,7 @@ mod tests {
         assert!(ui.find("Protonup-rs").is_ok());
 
         // Should show placeholder text when no action selected
-        assert!(ui.find("<- Choose your option").is_ok());
+        assert!(ui.find("⬅️ Choose your option").is_ok());
 
         Ok(())
     }

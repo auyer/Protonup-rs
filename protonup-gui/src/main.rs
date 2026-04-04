@@ -790,39 +790,12 @@ impl ProtonupGui {
     }
 
     fn view_main_content(&self) -> Element<Message> {
-        // If no action selected, show placeholder
-        if self.app_mode == AppMode::None {
-            return container(
-                center(
-                    text("<- Choose your option")
-                        .size(18),
-                )
-            )
-            .width(Fill)
-            .height(Fill)
-            .into();
-        }
-
-        // Show download progress when downloading
-        if self.download_started && self.selection_step == SelectionStep::Downloading {
-            return Column::new()
-                .spacing(10)
-                .push(self.view_download_progress())
-                .into();
-        }
-
-        // Otherwise show existing selection windows
-        match &self.mode {
-            GuiMode::QuickUpdate => {
-                self.view_quick_update()
-            }
-            GuiMode::DownloadForSteam | GuiMode::DownloadForLutris => {
-                self.view_selection_flow()
-            }
-            _ => {
+        let content: Element<Message> = {
+            // If no action selected, show placeholder
+            if self.app_mode == AppMode::None {
                 container(
                     center(
-                        text("<- Choose your option")
+                        text("⬅️ Choose your option")
                             .size(18),
                     )
                 )
@@ -830,7 +803,45 @@ impl ProtonupGui {
                 .height(Fill)
                 .into()
             }
-        }
+
+            // Show download progress when downloading
+            else if self.download_started && self.selection_step == SelectionStep::Downloading {
+                Column::new()
+                    .spacing(10)
+                    .push(self.view_download_progress())
+                    .into()
+            }
+
+            // Otherwise show existing selection windows
+            else {
+                match &self.mode {
+                    GuiMode::QuickUpdate => {
+                        self.view_quick_update()
+                    }
+                    GuiMode::DownloadForSteam | GuiMode::DownloadForLutris => {
+                        self.view_selection_flow()
+                    }
+                    _ => {
+                        container(
+                            center(
+                                text("⬅️ Choose your option")
+                                    .size(18),
+                            )
+                        )
+                        .width(Fill)
+                        .height(Fill)
+                        .into()
+                    }
+                }
+            }
+        };
+
+        // Wrap in container with padding
+        container(content)
+            .padding(20)
+            .width(Fill)
+            .height(Fill)
+            .into()
     }
 
     fn view_initial_buttons(&self) -> Element<Message> {
