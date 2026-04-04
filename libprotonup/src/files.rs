@@ -66,6 +66,27 @@ impl Decompressor<BufReader<File>> {
     }
 }
 
+impl<R: AsyncBufRead + Unpin> Decompressor<R> {
+    /// Creates a Decompressor from any AsyncBufRead reader.
+    ///
+    /// This allows wrapping the reader with progress trackers or other
+    /// middleware before decompression.
+    pub fn from_reader(reader: R, path_str: &str) -> Result<Self> {
+        if path_str.ends_with("tar.gz") || path_str.ends_with(".tgz") {
+            Ok(Decompressor::Gzip(GzipDecoder::new(reader)))
+        } else if path_str.ends_with("tar.xz") || path_str.ends_with(".txz") {
+            Ok(Decompressor::Xz(XzDecoder::new(reader)))
+        } else if path_str.ends_with("tar.zst") || path_str.ends_with("tar.zstd") {
+            Ok(Decompressor::Zstd(ZstdDecoder::new(reader)))
+        } else {
+            Err(Error::msg(format!(
+                "unsupported compression: {}",
+                path_str
+            )))
+        }
+    }
+}
+
 impl<R: AsyncBufRead + Unpin> AsyncRead for Decompressor<R> {
     fn poll_read(
         self: Pin<&mut Self>,

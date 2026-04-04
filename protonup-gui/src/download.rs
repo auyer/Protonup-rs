@@ -413,19 +413,28 @@ where
     // Unpack
     let file_metadata = fs::metadata(&file).await?;
 
-    let decompressor = files::Decompressor::from_path(&file)
-        .await
-        .with_context(|| format!("Error checking file type of {}", file.display()))?;
+    // Open the compressed file
+    let compressed_file = File::open(&file).await
+        .with_context(|| format!("Error opening compressed file {}", file.display()))?;
 
-    let reader = ProgressReader::new(
-        decompressor,
+    // Wrap the file with ProgressReader to track compressed bytes read
+    let progress_reader = ProgressReader::new(
+        compressed_file,
         send_progress.clone(),
         file_metadata.len(),
         display_name.clone(),
         DownloadPhase::Unpacking,
     );
 
-    files::unpack_file(&compat_tool, &download, reader, &install_dir)
+    // Wrap with BufReader to provide AsyncBufRead for the decompressor
+    let buf_reader = BufReader::new(progress_reader);
+
+    // Create Decompressor from the BufReader<ProgressReader<File>>
+    let path_str = file.to_string_lossy();
+    let decompressor = files::Decompressor::from_reader(buf_reader, &path_str)
+        .with_context(|| format!("Error checking file type of {}", file.display()))?;
+
+    files::unpack_file(&compat_tool, &download, decompressor, &install_dir)
         .await
         .with_context(|| format!("Error unpacking {}", file.display()))?;
 
