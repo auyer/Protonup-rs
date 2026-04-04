@@ -681,9 +681,13 @@ impl ProtonupGui {
 
         column = column.push(rule::horizontal(1));
 
-        // Check if currently downloading
+        // Check if currently downloading (not yet complete)
         let is_downloading = self.download_started
-            && self.selection_step == SelectionStep::Downloading;
+            && self.selection_step == SelectionStep::Downloading
+            && self.download_complete.is_none();
+
+        // Check if download is complete (success or error)
+        let is_complete = self.download_complete.is_some();
 
         // Show loading spinner when downloading
         if is_downloading {
@@ -702,6 +706,17 @@ impl ProtonupGui {
                     text("Download in progress...").size(12)
                 )
                 .center_x(Length::Fill),
+            );
+        }
+
+        // Show completion status when done
+        if is_complete {
+            column = column.push(
+                Container::new(
+                    text("Completed ✅").size(14)
+                )
+                .center_x(Length::Fill)
+                .padding(10),
             );
         }
 
