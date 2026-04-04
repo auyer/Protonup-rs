@@ -1,4 +1,5 @@
 pub mod apps;
+pub mod architecture_variants;
 pub mod constants;
 pub mod downloads;
 pub mod files;
