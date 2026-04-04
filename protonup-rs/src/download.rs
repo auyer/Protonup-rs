@@ -527,22 +527,29 @@ async fn download_validate_unpack_with_download(
         })?;
     }
 
+    // Open the compressed file
+    let compressed_file = File::open(&file)
+        .await
+        .with_context(|| format!("Error opening compressed file {}", file.display()))?;
+
+    // Wrap the file with progress tracking to read compressed bytes
     let unpack_progress_bar = init_unpack_progress(&install_dir.clone(), &file, multi_progress)
         .await
         .with_context(|| format!("Error unpacking {}", file.display()))?;
 
-    let decompressor = files::Decompressor::from_path(&file)
-        .await
+    let progress_reader = unpack_progress_bar.wrap_async_read(compressed_file);
+
+    // Wrap with BufReader to provide AsyncBufRead for the decompressor
+    let buf_reader = BufReader::new(progress_reader);
+
+    // Create Decompressor from the BufReader
+    let path_str = file.to_string_lossy();
+    let decompressor = files::Decompressor::from_reader(buf_reader, &path_str)
         .with_context(|| format!("Error checking file type of {}", file.display()))?;
 
-    files::unpack_file(
-        &compat_tool,
-        &download,
-        unpack_progress_bar.wrap_async_read(decompressor),
-        &install_dir,
-    )
-    .await
-    .with_context(|| format!("Error unpacking {}", file.display()))?;
+    files::unpack_file(&compat_tool, &download, decompressor, &install_dir)
+        .await
+        .with_context(|| format!("Error unpacking {}", file.display()))?;
 
     unpack_progress_bar.set_style(get_message_bar_style().await);
     unpack_progress_bar.finish_with_message(format!(
@@ -666,23 +673,30 @@ async fn download_validate_unpack_to_targets(
                 })?;
             }
 
+            // Open the compressed file
+            let compressed_file = File::open(&output_dir).await.with_context(|| {
+                format!("Error opening compressed file {}", output_dir.display())
+            })?;
+
+            // Wrap the file with progress tracking to read compressed bytes
             let unpack_progress_bar =
                 init_unpack_progress(&install_dir, &output_dir, multi_progress.clone())
                     .await
                     .with_context(|| format!("Error unpacking {}", output_dir.display()))?;
 
-            let decompressor = files::Decompressor::from_path(&output_dir)
-                .await
+            let progress_reader = unpack_progress_bar.wrap_async_read(compressed_file);
+
+            // Wrap with BufReader to provide AsyncBufRead for the decompressor
+            let buf_reader = BufReader::new(progress_reader);
+
+            // Create Decompressor from the BufReader
+            let path_str = output_dir.to_string_lossy();
+            let decompressor = files::Decompressor::from_reader(buf_reader, &path_str)
                 .with_context(|| format!("Error checking file type of {}", output_dir.display()))?;
 
-            files::unpack_file(
-                &compat_tool,
-                &download,
-                unpack_progress_bar.wrap_async_read(decompressor),
-                &install_dir,
-            )
-            .await
-            .with_context(|| format!("Error unpacking {}", output_dir.display()))?;
+            files::unpack_file(&compat_tool, &download, decompressor, &install_dir)
+                .await
+                .with_context(|| format!("Error unpacking {}", output_dir.display()))?;
 
             unpack_progress_bar.set_style(get_message_bar_style().await);
             unpack_progress_bar.finish_with_message(format!(
