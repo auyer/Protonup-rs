@@ -1,7 +1,9 @@
-use iced::widget::{button, center, checkbox, progress_bar, text, Column, Container, Row, scrollable};
+use iced::widget::{button, center, checkbox, container, image, progress_bar, rule, text, Column, Container, Row, scrollable, space};
+use iced::widget::image::Handle;
 use iced::task;
-use iced::{Center, Element, Task, Subscription, Length};
+use iced::{Center, ContentFit, Element, Fill, Task, Subscription, Length};
 use iced::time;
+use iced::window;
 
 use libprotonup::apps::{list_installed_apps, App, AppInstallations};
 use libprotonup::sources::CompatTool;
@@ -12,9 +14,12 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 use std::time::Duration;
 
-// Spinner animation constants
-const SPINNER_CHARS: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-const SPINNER_INTERVAL: Duration = Duration::from_millis(80);
+// Logo path
+const LOGO_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/protonup--rs-logo.png");
+
+mod circular;
+mod easing;
+use circular::Circular;
 
 mod download;
 mod download_task;
@@ -69,6 +74,9 @@ enum Message {
 
     // Cancel download
     Cancel,
+
+    // Layout
+    CloseRequested,
 }
 
 /// GUI mode - what the user is doing
@@ -76,6 +84,16 @@ enum Message {
 enum GuiMode {
     #[default]
     Initial,
+    QuickUpdate,
+    DownloadForSteam,
+    DownloadForLutris,
+}
+
+/// Which action was selected in the sidebar
+#[derive(Debug, Clone, PartialEq, Default)]
+enum AppMode {
+    #[default]
+    None,           // No action selected yet
     QuickUpdate,
     DownloadForSteam,
     DownloadForLutris,
@@ -204,11 +222,11 @@ struct ProtonupGui {
     global_progress: f32,
     download_complete: Option<Result<Vec<String>, String>>,
 
-    // Spinner animation state
-    spinner_frame: usize,
-
     // Cancel handle for aborting downloads
     download_handle: Option<task::Handle>,
+
+    // Layout state
+    app_mode: AppMode,  // Track which action was selected
 }
 
 impl ProtonupGui {
@@ -240,6 +258,7 @@ impl ProtonupGui {
             }
 
             Message::SelectQuickUpdate => {
+                self.app_mode = AppMode::QuickUpdate;
                 self.mode = GuiMode::QuickUpdate;
                 self.selection_step = SelectionStep::Downloading;
                 self.download_started = true;
@@ -265,6 +284,7 @@ impl ProtonupGui {
             }
 
             Message::SelectDownloadForSteam => {
+                self.app_mode = AppMode::DownloadForSteam;
                 self.mode = GuiMode::DownloadForSteam;
                 self.selection_step = SelectionStep::SelectingTools;
                 self.global_status = "Detecting Steam installation...".to_string();
@@ -278,6 +298,7 @@ impl ProtonupGui {
             }
 
             Message::SelectDownloadForLutris => {
+                self.app_mode = AppMode::DownloadForLutris;
                 self.mode = GuiMode::DownloadForLutris;
                 self.selection_step = SelectionStep::SelectingTools;
                 self.global_status = "Detecting Lutris installation...".to_string();
@@ -471,16 +492,19 @@ impl ProtonupGui {
                 }
                 // Reset state to initial
                 self.reset_to_initial();
+                self.app_mode = AppMode::None;
                 Task::none()
             }
 
             Message::BackToInitial => {
                 self.reset_to_initial();
+                self.app_mode = AppMode::None;
                 Task::none()
             }
 
             Message::Restart => {
                 self.reset_to_initial();
+                self.app_mode = AppMode::None;
                 Task::perform(list_installed_apps(), Message::AppsScanned)
             }
 
@@ -491,8 +515,12 @@ impl ProtonupGui {
             }
 
             Message::TickSpinner => {
-                self.spinner_frame = (self.spinner_frame + 1) % SPINNER_CHARS.len();
+                // The Circular widget handles its own animation via RedrawRequested events
                 Task::none()
+            }
+
+            Message::CloseRequested => {
+                std::process::exit(0);
             }
         }
     }
@@ -604,56 +632,190 @@ impl ProtonupGui {
     }
 
     fn view(&self) -> Element<Message> {
-        let mut content = Column::new().spacing(20).padding(20);
+        // Header
+        let header = container(
+            Row::new()
+                .push(text("Protonup-rs").size(20))
+                .push(space::horizontal())
+                .push(text(&self.global_status).size(12))
+                .padding(10)
+                .align_y(Center),
+        )
+        .style(|theme: &iced::Theme| {
+            let palette = theme.extended_palette();
+            container::Style::default()
+                .border(iced::border::color(palette.background.strong.color).width(1))
+        });
 
-        // Title
-        content = content.push(text("Protonup-rs GUI").size(24));
+        // Sidebar
+        let sidebar = self.view_sidebar();
 
-        // App detection status
-        if self.scan_complete {
-            let apps_text = if self.detected_apps.is_empty() {
-                text("No compatible apps detected").color([1.0, 0.3, 0.3])
-            } else {
-                text(&self.global_status)
-            };
-            content = content.push(apps_text.size(14));
-        } else {
-            content = content.push(text(&self.global_status).size(14));
-        }
+        // Main content
+        let main_content = self.view_main_content();
 
-        // Main content based on mode and step
-        match &self.mode {
-            GuiMode::Initial => {
-                content = content.push(self.view_initial_buttons());
-            }
-            GuiMode::QuickUpdate => {
-                content = content.push(self.view_quick_update());
-            }
-            GuiMode::DownloadForSteam | GuiMode::DownloadForLutris => {
-                content = content.push(self.view_selection_flow());
-            }
-        }
+        // Full layout
+        Column::new()
+            .push(header)
+            .push(Row::new().push(sidebar).push(main_content))
+            .into()
+    }
 
-        // Download progress section (always shown when downloading)
-        if self.download_started {
-            content = content.push(text("Download Progress:").size(16));
-            content = content.push(self.view_download_progress());
-        }
+    fn view_sidebar(&self) -> Element<Message> {
+        let mut column = Column::new()
+            .spacing(10)
+            .padding(10)
+            .width(220);
 
-        // Cancel button at bottom (always visible when downloading)
-        if self.download_started && self.selection_step == SelectionStep::Downloading {
-            content = content.push(
+        // Logo at top
+        let logo_handle = Handle::from_path(LOGO_PATH);
+        column = column.push(
+            Container::new(
+                image(logo_handle)
+                    .width(180)
+                    .height(Length::Fixed(180.0))
+                    .content_fit(ContentFit::Contain),
+            )
+            .center_x(Length::Fill)
+            .padding(5),
+        );
+
+        column = column.push(rule::horizontal(1));
+
+        // Check if currently downloading
+        let is_downloading = self.download_started
+            && self.selection_step == SelectionStep::Downloading;
+
+        // Show loading spinner when downloading
+        if is_downloading {
+            column = column.push(
                 Container::new(
-                    button(text("Cancel").size(14))
-                        .on_press(Message::Cancel)
-                        .padding(10),
+                    Circular::new()
+                        .size(40.0)
+                        .bar_height(4.0),
                 )
                 .center_x(Length::Fill)
-                .width(Length::Fill),
+                .padding(10),
+            );
+
+            column = column.push(
+                Container::new(
+                    text("Download in progress...").size(12)
+                )
+                .center_x(Length::Fill),
             );
         }
 
-        Container::new(center(content)).into()
+        // Action buttons (disabled when downloading or when already selected)
+        let quick_update_disabled = is_downloading || self.app_mode == AppMode::QuickUpdate;
+        column = column.push(
+            if quick_update_disabled {
+                button(text("Quick Update").size(14))
+                    .padding(10)
+                    .width(Length::Fill)
+            } else {
+                button(text("Quick Update").size(14))
+                    .on_press(Message::SelectQuickUpdate)
+                    .padding(10)
+                    .width(Length::Fill)
+            },
+        );
+
+        let steam_disabled = is_downloading || self.app_mode == AppMode::DownloadForSteam;
+        column = column.push(
+            if steam_disabled {
+                button(text("Download for Steam").size(14))
+                    .padding(10)
+                    .width(Length::Fill)
+            } else {
+                button(text("Download for Steam").size(14))
+                    .on_press(Message::SelectDownloadForSteam)
+                    .padding(10)
+                    .width(Length::Fill)
+            },
+        );
+
+        let lutris_disabled = is_downloading || self.app_mode == AppMode::DownloadForLutris;
+        column = column.push(
+            if lutris_disabled {
+                button(text("Download for Lutris").size(14))
+                    .padding(10)
+                    .width(Length::Fill)
+            } else {
+                button(text("Download for Lutris").size(14))
+                    .on_press(Message::SelectDownloadForLutris)
+                    .padding(10)
+                    .width(Length::Fill)
+            },
+        );
+
+        // Cancel button (only when downloading)
+        if is_downloading {
+            column = column.push(
+                button(text("Cancel").size(14))
+                    .on_press(Message::Cancel)
+                    .padding(10)
+                    .width(Length::Fill),
+            );
+        }
+
+        // Spacer to push close button to bottom
+        column = column.push(space::vertical());
+
+        // Close button at bottom
+        column = column.push(
+            button(text("Close").size(14))
+                .on_press(Message::CloseRequested)
+                .padding(10)
+                .width(Length::Fill),
+        );
+
+        container(column)
+            .style(container::rounded_box)
+            .into()
+    }
+
+    fn view_main_content(&self) -> Element<Message> {
+        // If no action selected, show placeholder
+        if self.app_mode == AppMode::None {
+            return container(
+                center(
+                    text("<- Choose your option")
+                        .size(18),
+                )
+            )
+            .width(Fill)
+            .height(Fill)
+            .into();
+        }
+
+        // Show download progress when downloading
+        if self.download_started && self.selection_step == SelectionStep::Downloading {
+            return Column::new()
+                .spacing(10)
+                .push(self.view_download_progress())
+                .into();
+        }
+
+        // Otherwise show existing selection windows
+        match &self.mode {
+            GuiMode::QuickUpdate => {
+                self.view_quick_update()
+            }
+            GuiMode::DownloadForSteam | GuiMode::DownloadForLutris => {
+                self.view_selection_flow()
+            }
+            _ => {
+                container(
+                    center(
+                        text("<- Choose your option")
+                            .size(18),
+                    )
+                )
+                .width(Fill)
+                .height(Fill)
+                .into()
+            }
+        }
     }
 
     fn view_initial_buttons(&self) -> Element<Message> {
@@ -709,13 +871,8 @@ impl ProtonupGui {
                 self.view_confirm_reinstall()
             }
             SelectionStep::Downloading => {
-                let spinner = SPINNER_CHARS[self.spinner_frame];
-                Column::new()
-                    .spacing(10)
-                    .align_x(Center)
-                    .push(text(spinner).size(48))
-                    .push(text("Download in progress...").size(16))
-                    .into()
+                // Spinner is shown in sidebar, progress bars in main content
+                text("Preparing downloads...").size(14).into()
             }
             SelectionStep::Complete => {
                 Column::new()
@@ -957,11 +1114,10 @@ impl ProtonupGui {
             );
         }
 
-        // Spinner animation subscription when downloading
+        // Window frames subscription for spinner animation when downloading
         if self.download_started && self.selection_step == SelectionStep::Downloading {
             subscriptions.push(
-                time::every(SPINNER_INTERVAL)
-                    .map(|_| Message::TickSpinner)
+                window::frames().map(|_| Message::TickSpinner)
             );
         }
 

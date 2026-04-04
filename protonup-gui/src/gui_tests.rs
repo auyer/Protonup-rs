@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::{AppInstallations, App, DownloadPhase, DownloadUpdate, Message, ProtonupGui, ToolProgress, ToolDownload, ToolStatus, GuiMode, SelectionStep};
+    use crate::{AppInstallations, App, DownloadPhase, DownloadUpdate, Message, ProtonupGui, ToolProgress, ToolDownload, ToolStatus, GuiMode, SelectionStep, AppMode};
     use crate::download_task::{DownloadError, GlobalProgress};
     use libprotonup::sources::CompatTool;
     use std::str::FromStr;
@@ -29,8 +29,8 @@ mod tests {
             global_status: "Detected: Steam".to_string(),
             global_progress: 0.0,
             download_complete: None,
-            spinner_frame: 0,
             download_handle: None,
+            app_mode: AppMode::None,
         }
     }
 
@@ -43,8 +43,11 @@ mod tests {
         let model = ProtonupGui::default();
         let mut ui = simulator(model.view());
 
-        // Should show title
-        assert!(ui.find("Protonup-rs GUI").is_ok());
+        // Should show title in header
+        assert!(ui.find("Protonup-rs").is_ok());
+
+        // Should show placeholder text when no action selected
+        assert!(ui.find("<- Choose your option").is_ok());
 
         Ok(())
     }
@@ -83,8 +86,8 @@ mod tests {
             global_status: "No compatible apps detected".to_string(),
             global_progress: 0.0,
             download_complete: None,
-            spinner_frame: 0,
             download_handle: None,
+            app_mode: AppMode::None,
         };
         let mut ui = simulator(model.view());
 
