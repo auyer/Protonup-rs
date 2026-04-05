@@ -50,8 +50,8 @@ struct Opt {
     #[arg(long)]
     r#for: Option<String>,
 
-    /// Show what's new in the latest version
-    #[arg(long)]
+    /// Show GE Proton release notes (requires --quick-download/-q)
+    #[arg(short, long)]
     whats_new: bool,
 }
 

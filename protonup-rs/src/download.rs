@@ -207,7 +207,7 @@ pub async fn run_quick_downloads(force: bool, whats_new: bool) -> Result<Vec<Rel
     if whats_new {
         println!();
         println!("  ┌{}┐", "─".repeat(50));
-        println!("  │  {:^48}  │", "Release Notes");
+        println!("  │ {:^48} │", "Release Notes");
         println!("  └{}┘", "─".repeat(50));
 
         let releases_to_show: Vec<Release> = if releases.is_empty() {
