@@ -1,11 +1,15 @@
 #[cfg(test)]
 mod tests {
-    use crate::{AppInstallations, DownloadPhase, DownloadUpdate, Message, ProtonupGui, ToolProgress, ToolDownload, ToolStatus, GuiMode, SelectionStep, AppMode};
     use crate::download_task::{DownloadError, GlobalProgress};
+    use crate::{
+        AppInstallations, AppMode, DownloadPhase, DownloadUpdate, GuiMode, Message, ProtonupGui,
+        SelectionStep, ToolDownload, ToolProgress, ToolStatus,
+    };
+    use iced_test::{simulator, Error};
+    use libprotonup::downloads::Release;
     use libprotonup::sources::CompatTool;
     use std::path::PathBuf;
     use std::str::FromStr;
-    use iced_test::{Error, simulator};
 
     // Helper to create a model in "ready" state (apps detected, waiting for action)
     fn ready_model() -> ProtonupGui {
@@ -148,9 +152,9 @@ mod tests {
     #[test]
     fn tools_fetched_does_not_crash() {
         let mut model = ProtonupGui::default();
-        
+
         let _ = model.update(Message::ToolsFetched(vec![]));
-        
+
         // Should not crash
         assert!(true);
     }
@@ -158,9 +162,9 @@ mod tests {
     #[test]
     fn selection_error_sets_status() {
         let mut model = ProtonupGui::default();
-        
+
         let _ = model.update(Message::SelectionError("test error".to_string()));
-        
+
         assert!(model.global_status.contains("test error"));
     }
 
@@ -169,9 +173,9 @@ mod tests {
         let mut model = ready_model();
         model.mode = GuiMode::DownloadForSteam;
         model.selection_step = SelectionStep::SelectingTools;
-        
+
         let _ = model.update(Message::BackToInitial);
-        
+
         assert_eq!(model.mode, GuiMode::Initial);
         assert_eq!(model.selection_step, SelectionStep::Initial);
     }
@@ -180,9 +184,9 @@ mod tests {
     fn restart_resets_and_rescans() {
         let mut model = ready_model();
         model.download_started = true;
-        
+
         let _ = model.update(Message::Restart);
-        
+
         assert_eq!(model.mode, GuiMode::Initial);
         assert!(!model.download_started);
     }
@@ -208,7 +212,10 @@ mod tests {
     #[test]
     fn tool_progress_update() {
         let mut model = ProtonupGui::default();
-        model.tools.push(ToolDownload::new("GEProton".to_string(), "Steam".to_string()));
+        model.tools.push(ToolDownload::new(
+            "GEProton".to_string(),
+            "Steam".to_string(),
+        ));
 
         model.update(Message::DownloadUpdate(DownloadUpdate::ToolProgress(
             ToolProgress {
@@ -243,9 +250,9 @@ mod tests {
     fn download_finished_success() {
         let mut model = ProtonupGui::default();
 
-        model.update(Message::DownloadUpdate(DownloadUpdate::Finished(Ok(
-            vec!["GE-Proton9-27".to_string()],
-        ))));
+        model.update(Message::DownloadUpdate(DownloadUpdate::Finished(Ok(vec![
+            "GE-Proton9-27".to_string(),
+        ]))));
 
         assert_eq!(model.global_progress, 100.0);
         assert_eq!(model.global_phase, DownloadPhase::Complete);
@@ -302,17 +309,17 @@ mod tests {
             CompatTool::from_str("Luxtorpeda").unwrap(),
         ];
 
-        // Toggle first tool
-        let _ = model.update(Message::ToggleTool(0));
+        // Select first tool (radio button behavior - only one at a time)
+        let _ = model.update(Message::ToolSelected(0));
         assert_eq!(model.selected_tool_indices, vec![0]);
 
-        // Toggle second tool
-        let _ = model.update(Message::ToggleTool(1));
-        assert_eq!(model.selected_tool_indices, vec![0, 1]);
-
-        // Toggle off first tool
-        let _ = model.update(Message::ToggleTool(0));
+        // Select second tool (replaces first)
+        let _ = model.update(Message::ToolSelected(1));
         assert_eq!(model.selected_tool_indices, vec![1]);
+
+        // Select first tool again (replaces second)
+        let _ = model.update(Message::ToolSelected(0));
+        assert_eq!(model.selected_tool_indices, vec![0]);
     }
 
     #[test]
@@ -337,28 +344,28 @@ mod tests {
     #[test]
     fn tool_selection_state_is_correct() {
         use libprotonup::sources::{CompatTool, Forge, ToolType};
-        
+
         let mut model = ready_model();
         model.mode = GuiMode::DownloadForSteam;
         model.selection_step = SelectionStep::SelectingTools;
         model.app_installation = Some(AppInstallations::Steam);
-        
+
         // Set up available tools
-        model.available_tools = vec![
-            CompatTool::new_custom(
-                "GEProton".to_string(),
-                Forge::GitHub,
-                "GloriousEggroll".to_string(),
-                "proton-ge-custom".to_string(),
-                ToolType::Runtime,
-                None, None, None,
-            ),
-        ];
-        
-        // Toggle tool selection
-        let _ = model.update(Message::ToggleTool(0));
+        model.available_tools = vec![CompatTool::new_custom(
+            "GEProton".to_string(),
+            Forge::GitHub,
+            "GloriousEggroll".to_string(),
+            "proton-ge-custom".to_string(),
+            ToolType::Runtime,
+            None,
+            None,
+            None,
+        )];
+
+        // Select tool
+        let _ = model.update(Message::ToolSelected(0));
         assert_eq!(model.selected_tool_indices, vec![0]);
-        
+
         // Confirm selection should move to version selection
         let _ = model.update(Message::ToolSelectionConfirmed);
         assert_eq!(model.selection_step, SelectionStep::SelectingVersions);
@@ -422,7 +429,7 @@ mod tests {
         // Simulate progress with WRONG name (just version, like the bug)
         model.update(Message::DownloadUpdate(DownloadUpdate::ToolProgress(
             ToolProgress {
-                tool_name: "GE-Proton9-27".to_string(),  // WRONG - missing tool name prefix
+                tool_name: "GE-Proton9-27".to_string(), // WRONG - missing tool name prefix
                 phase: DownloadPhase::Downloading,
                 percent: 50.0,
                 status_message: "Downloading... 50.0%".to_string(),
@@ -571,9 +578,10 @@ mod tests {
         model.app_installation = Some(AppInstallations::Steam);
 
         // Simulate already installed tools being checked
-        let already_installed = vec![
-            ToolDownload::new("GEProton GE-Proton9-27".to_string(), "Steam".to_string()),
-        ];
+        let already_installed = vec![ToolDownload::new(
+            "GEProton GE-Proton9-27".to_string(),
+            "Steam".to_string(),
+        )];
 
         let _ = model.update(Message::AlreadyInstalledChecked(already_installed));
 
@@ -589,9 +597,10 @@ mod tests {
         model.app_installation = Some(AppInstallations::Steam);
 
         // Simulate already installed tools being checked
-        let already_installed = vec![
-            ToolDownload::new("GEProton GE-Proton9-27".to_string(), "Steam".to_string()),
-        ];
+        let already_installed = vec![ToolDownload::new(
+            "GEProton GE-Proton9-27".to_string(),
+            "Steam".to_string(),
+        )];
 
         let _ = model.update(Message::AlreadyInstalledChecked(already_installed));
 
@@ -620,10 +629,11 @@ mod tests {
         model.mode = GuiMode::DownloadForSteam;
         model.selection_step = SelectionStep::ConfirmReinstall;
         model.app_installation = Some(AppInstallations::Steam);
-        model.already_installed_tools = vec![
-            ToolDownload::new("GEProton GE-Proton9-27".to_string(), "Steam".to_string()),
-        ];
-        model.force_reinstall_indices = vec![0];  // User selected to reinstall
+        model.already_installed_tools = vec![ToolDownload::new(
+            "GEProton GE-Proton9-27".to_string(),
+            "Steam".to_string(),
+        )];
+        model.force_reinstall_indices = vec![0]; // User selected to reinstall
 
         // Just verify the state is set up correctly for the test
         assert_eq!(model.force_reinstall_indices, vec![0]);
@@ -633,29 +643,30 @@ mod tests {
     #[test]
     fn selective_reinstall_only_includes_selected_tools() {
         use std::collections::HashSet;
-        
+
         let mut model = ready_model();
         model.mode = GuiMode::DownloadForSteam;
         model.selection_step = SelectionStep::ConfirmReinstall;
         model.app_installation = Some(AppInstallations::Steam);
-        
+
         // Setup: 3 tools already installed
         model.already_installed_tools = vec![
             ToolDownload::new("GEProton GE-Proton9-27".to_string(), "Steam".to_string()),
             ToolDownload::new("GEProton GE-Proton9-26".to_string(), "Steam".to_string()),
             ToolDownload::new("GEProton GE-Proton9-25".to_string(), "Steam".to_string()),
         ];
-        
+
         // User only selects the first one for reinstall
         model.force_reinstall_indices = vec![0];
-        
+
         // Build the force_reinstall_names set (same logic as ConfirmReinstallSelection)
-        let force_reinstall_names: HashSet<String> = model.force_reinstall_indices
+        let force_reinstall_names: HashSet<String> = model
+            .force_reinstall_indices
             .iter()
             .filter_map(|&i| model.already_installed_tools.get(i))
             .map(|t| t.name.clone())
             .collect();
-        
+
         // Verify only the selected tool is in the set
         assert_eq!(force_reinstall_names.len(), 1);
         assert!(force_reinstall_names.contains("GEProton GE-Proton9-27"));
@@ -666,29 +677,30 @@ mod tests {
     #[test]
     fn selective_reinstall_multiple_selected() {
         use std::collections::HashSet;
-        
+
         let mut model = ready_model();
         model.mode = GuiMode::DownloadForSteam;
         model.selection_step = SelectionStep::ConfirmReinstall;
         model.app_installation = Some(AppInstallations::Steam);
-        
+
         // Setup: 3 tools already installed
         model.already_installed_tools = vec![
             ToolDownload::new("GEProton GE-Proton9-27".to_string(), "Steam".to_string()),
             ToolDownload::new("GEProton GE-Proton9-26".to_string(), "Steam".to_string()),
             ToolDownload::new("GEProton GE-Proton9-25".to_string(), "Steam".to_string()),
         ];
-        
+
         // User selects first and third for reinstall
         model.force_reinstall_indices = vec![0, 2];
-        
+
         // Build the force_reinstall_names set
-        let force_reinstall_names: HashSet<String> = model.force_reinstall_indices
+        let force_reinstall_names: HashSet<String> = model
+            .force_reinstall_indices
             .iter()
             .filter_map(|&i| model.already_installed_tools.get(i))
             .map(|t| t.name.clone())
             .collect();
-        
+
         // Verify only selected tools are in the set
         assert_eq!(force_reinstall_names.len(), 2);
         assert!(force_reinstall_names.contains("GEProton GE-Proton9-27"));
@@ -726,7 +738,7 @@ mod tests {
     #[test]
     fn select_architecture_variant_updates_state() {
         let mut model = ready_model();
-        model.selected_arch_variant = Some(2);  // Default
+        model.selected_arch_variant = Some(2); // Default
 
         // Select v3
         let _ = model.update(Message::SelectArchitecture(3));
@@ -742,22 +754,25 @@ mod tests {
         model.selected_tool_indices = vec![0];
 
         // Add a tool with multiple asset variations
-        model.available_tools = vec![
-            CompatTool::new_custom(
-                "ProtonCachyOS".to_string(),
-                Forge::GitHub,
-                "CachyOS".to_string(),
-                "proton-cachyos".to_string(),
-                ToolType::Runtime,
-                None, None, None,
-            ),
-        ];
+        model.available_tools = vec![CompatTool::new_custom(
+            "ProtonCachyOS".to_string(),
+            Forge::GitHub,
+            "CachyOS".to_string(),
+            "proton-cachyos".to_string(),
+            ToolType::Runtime,
+            None,
+            None,
+            None,
+        )];
         // Manually set has_multiple_asset_variations for testing
         model.available_tools[0].has_multiple_asset_variations = true;
 
         // Simulate versions being fetched
         model.has_variant_tools = model.selected_tool_indices.iter().any(|&idx| {
-            model.available_tools.get(idx).is_some_and(|t| t.has_multiple_asset_variations)
+            model
+                .available_tools
+                .get(idx)
+                .is_some_and(|t| t.has_multiple_asset_variations)
         });
 
         assert!(model.has_variant_tools);
@@ -771,20 +786,23 @@ mod tests {
         model.selected_tool_indices = vec![0];
 
         // Add a tool without multiple asset variations
-        model.available_tools = vec![
-            CompatTool::new_custom(
-                "GEProton".to_string(),
-                Forge::GitHub,
-                "GloriousEggroll".to_string(),
-                "proton-ge-custom".to_string(),
-                ToolType::Runtime,
-                None, None, None,
-            ),
-        ];
+        model.available_tools = vec![CompatTool::new_custom(
+            "GEProton".to_string(),
+            Forge::GitHub,
+            "GloriousEggroll".to_string(),
+            "proton-ge-custom".to_string(),
+            ToolType::Runtime,
+            None,
+            None,
+            None,
+        )];
         // has_multiple_asset_variations is false by default
 
         model.has_variant_tools = model.selected_tool_indices.iter().any(|&idx| {
-            model.available_tools.get(idx).is_some_and(|t| t.has_multiple_asset_variations)
+            model
+                .available_tools
+                .get(idx)
+                .is_some_and(|t| t.has_multiple_asset_variations)
         });
 
         assert!(!model.has_variant_tools);
@@ -862,8 +880,6 @@ mod tests {
 
     #[test]
     fn custom_location_tool_selection_confirmed_advances() {
-        use libprotonup::sources::{CompatTool, Forge, ToolType};
-
         let mut model = ready_model();
         model.app_mode = AppMode::DownloadForCustom;
         model.mode = GuiMode::DownloadForCustom;
@@ -901,5 +917,28 @@ mod tests {
         assert!(model.path_error.is_some());
         assert_eq!(model.selection_step, SelectionStep::Initial);
         assert!(model.app_installation.is_none());
+    }
+
+    #[test]
+    fn back_from_version_selection_returns_to_tool_selection() {
+        let mut model = ready_model();
+        model.app_mode = AppMode::DownloadForSteam;
+        model.mode = GuiMode::DownloadForSteam;
+        model.selection_step = SelectionStep::SelectingVersions;
+
+        // Set up some version selection state
+        model.selected_version_indices = vec![0, 1];
+
+        // Simulate having fetched some versions (we can't construct Release directly)
+        // Just test the state transition without actual Release objects
+        model.available_versions = Vec::new(); // Empty but that's OK for this test
+
+        // Send back message
+        let _ = model.update(Message::BackToToolSelection);
+
+        // Should return to tool selection
+        assert_eq!(model.selection_step, SelectionStep::SelectingTools);
+        assert!(model.selected_version_indices.is_empty());
+        assert!(model.available_versions.is_empty());
     }
 }

@@ -1,14 +1,17 @@
-use iced::widget::{button, center, checkbox, container, image, progress_bar, rule, text, text_input, Column, Container, Row, scrollable, space};
-use iced::widget::image::Handle;
 use iced::task;
-use iced::{Center, ContentFit, Element, Fill, Task, Subscription, Length};
 use iced::time;
+use iced::widget::image::Handle;
+use iced::widget::{
+    button, center, checkbox, container, image, progress_bar, radio, rule, scrollable, space, text,
+    text_input, Column, Container, Row,
+};
 use iced::window;
+use iced::{Center, ContentFit, Element, Fill, Length, Subscription, Task, Color, Border};
 
 use libprotonup::apps::{list_installed_apps, App, AppInstallations};
-use libprotonup::sources::CompatTool;
 use libprotonup::downloads::Release;
 use libprotonup::files;
+use libprotonup::sources::CompatTool;
 
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -23,8 +26,8 @@ use circular::Circular;
 
 mod download;
 mod download_task;
-use download_task::{DownloadUpdate, ToolProgress};
 use download::DownloadPhase;
+use download_task::{DownloadUpdate, ToolProgress};
 
 #[cfg(test)]
 mod gui_tests;
@@ -41,9 +44,9 @@ enum Message {
     SelectDownloadForLutris,
 
     // Tool selection
-    ToolsFetched(Vec<CompatTool>),  // Unused, kept for compatibility
+    ToolsFetched(Vec<CompatTool>), // Unused, kept for compatibility
     AppInstallationDetected(AppInstallations),
-    ToggleTool(usize),
+    ToolSelected(usize),
     ToolSelectionConfirmed,
 
     // Version selection
@@ -64,6 +67,7 @@ enum Message {
 
     // Navigation
     BackToInitial,
+    BackToToolSelection,
     Restart,
 
     // Errors
@@ -109,7 +113,7 @@ enum GuiMode {
 #[derive(Debug, Clone, PartialEq, Default)]
 enum AppMode {
     #[default]
-    None,           // No action selected yet
+    None, // No action selected yet
     QuickUpdate,
     DownloadForSteam,
     DownloadForLutris,
@@ -124,7 +128,7 @@ enum SelectionStep {
     Initial,
     SelectingTools,
     SelectingVersions,
-    SelectingArchitecture,  // NEW: Show architecture variant selection
+    SelectingArchitecture, // NEW: Show architecture variant selection
     ConfirmReinstall,
     Downloading,
     Complete,
@@ -167,7 +171,7 @@ impl ToolDownload {
     fn update_from_progress(&mut self, progress: &ToolProgress) {
         self.phase = progress.phase.clone();
         self.progress = progress.percent;
-        
+
         match &self.phase {
             DownloadPhase::DetectingApps | DownloadPhase::FetchingReleases => {
                 self.status = ToolStatus::Pending;
@@ -193,8 +197,12 @@ impl ToolDownload {
     fn status_text(&self) -> String {
         match &self.status {
             ToolStatus::Pending => format!("{} - Waiting...", self.name),
-            ToolStatus::Downloading => format!("{} - Downloading... {:.1}%", self.name, self.progress),
-            ToolStatus::Validating => format!("{} - Validating... {:.1}%", self.name, self.progress),
+            ToolStatus::Downloading => {
+                format!("{} - Downloading... {:.1}%", self.name, self.progress)
+            }
+            ToolStatus::Validating => {
+                format!("{} - Validating... {:.1}%", self.name, self.progress)
+            }
             ToolStatus::Unpacking => format!("{} - Installing... {:.1}%", self.name, self.progress),
             ToolStatus::Complete => format!("{} - ✓ Installed", self.name),
             ToolStatus::Error(msg) => format!("{} - ✗ Error: {}", self.name, msg),
@@ -240,8 +248,8 @@ struct ProtonupGui {
     selected_version_indices: Vec<usize>,
 
     // Architecture variant selection
-    selected_arch_variant: Option<u8>,  // 1=x86_64, 2=v2, 3=v3, 4=v4
-    has_variant_tools: bool,            // True if any selected tool has variants
+    selected_arch_variant: Option<u8>, // 1=x86_64, 2=v2, 3=v3, 4=v4
+    has_variant_tools: bool,           // True if any selected tool has variants
 
     // App installation target
     app_installation: Option<AppInstallations>,
@@ -262,7 +270,7 @@ struct ProtonupGui {
     download_handle: Option<task::Handle>,
 
     // Layout state
-    app_mode: AppMode,  // Track which action was selected
+    app_mode: AppMode, // Track which action was selected
 
     // Custom location state
     custom_path_input: String,
@@ -272,6 +280,61 @@ struct ProtonupGui {
     app_installations_views: Vec<AppInstallationView>,
     manage_status: String,
     manage_error: Option<String>,
+}
+
+/// Warning button style (yellow/orange for cautionary actions like Cancel/Close)
+fn warning_button_style() -> impl Fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style {
+    |theme, status| {
+        let palette = theme.extended_palette();
+        let warning_color = Color::from_rgb(0.6, 0.5, 0.2); // Yellow-orange warning color
+
+        match status {
+            iced::widget::button::Status::Hovered => iced::widget::button::Style {
+                background: Some(iced::Background::Color(Color::from_rgb(0.85, 0.65, 0.0))),
+                text_color: palette.background.base.text,
+                border: Border {
+                    radius: 4.0.into(),
+                    width: 1.0,
+                    color: Color::from_rgb(0.75, 0.55, 0.0),
+                },
+                shadow: Default::default(),
+                snap: Default::default(),
+            },
+            iced::widget::button::Status::Active => iced::widget::button::Style {
+                background: Some(iced::Background::Color(warning_color)),
+                text_color: palette.background.base.text,
+                border: Border {
+                    radius: 4.0.into(),
+                    width: 1.0,
+                    color: Color::from_rgb(0.85, 0.65, 0.0),
+                },
+                shadow: Default::default(),
+                snap: Default::default(),
+            },
+            iced::widget::button::Status::Pressed => iced::widget::button::Style {
+                background: Some(iced::Background::Color(Color::from_rgb(0.75, 0.55, 0.0))),
+                text_color: palette.background.base.text,
+                border: Border {
+                    radius: 4.0.into(),
+                    width: 1.0,
+                    color: Color::from_rgb(0.65, 0.45, 0.0),
+                },
+                shadow: Default::default(),
+                snap: Default::default(),
+            },
+            iced::widget::button::Status::Disabled => iced::widget::button::Style {
+                background: Some(iced::Background::Color(Color::from_rgba(0.95, 0.75, 0.0, 0.5))),
+                text_color: Color::from_rgba(0.5, 0.5, 0.5, 0.5),
+                border: Border {
+                    radius: 4.0.into(),
+                    width: 1.0,
+                    color: Color::from_rgba(0.85, 0.65, 0.0, 0.5),
+                },
+                shadow: Default::default(),
+                snap: Default::default(),
+            },
+        }
+    }
 }
 
 impl ProtonupGui {
@@ -315,10 +378,8 @@ impl ProtonupGui {
                 self.tools.clear();
                 for app in &self.detected_apps {
                     let compat_tool = app.as_app().default_compatibility_tool();
-                    self.tools.push(ToolDownload::new(
-                        compat_tool.name,
-                        app.to_string(),
-                    ));
+                    self.tools
+                        .push(ToolDownload::new(compat_tool.name, app.to_string()));
                 }
 
                 // Store the handle so we can abort the task later
@@ -338,7 +399,7 @@ impl ProtonupGui {
                     |result| match result {
                         Ok((app_inst, _tools)) => Message::AppInstallationDetected(app_inst),
                         Err(e) => Message::SelectionError(e),
-                    }
+                    },
                 )
             }
 
@@ -352,7 +413,7 @@ impl ProtonupGui {
                     |result| match result {
                         Ok((app_inst, _tools)) => Message::AppInstallationDetected(app_inst),
                         Err(e) => Message::SelectionError(e),
-                    }
+                    },
                 )
             }
 
@@ -365,12 +426,10 @@ impl ProtonupGui {
                 Task::none()
             }
 
-            Message::ToggleTool(index) => {
-                if let Some(pos) = self.selected_tool_indices.iter().position(|&i| i == index) {
-                    self.selected_tool_indices.remove(pos);
-                } else {
-                    self.selected_tool_indices.push(index);
-                }
+            Message::ToolSelected(index) => {
+                // Replace selection with single tool (radio button behavior)
+                self.selected_tool_indices.clear();
+                self.selected_tool_indices.push(index);
                 Task::none()
             }
 
@@ -386,11 +445,9 @@ impl ProtonupGui {
                         }
 
                         // Create custom app installation
-                        self.app_installation = Some(
-                            AppInstallations::new_custom_app_install(
-                                self.custom_path_input.clone()
-                            )
-                        );
+                        self.app_installation = Some(AppInstallations::new_custom_app_install(
+                            self.custom_path_input.clone(),
+                        ));
 
                         // Fetch all available tools for custom location
                         self.available_tools = libprotonup::sources::CompatTools.clone();
@@ -415,10 +472,7 @@ impl ProtonupGui {
                 self.selection_step = SelectionStep::SelectingVersions;
                 self.global_status = format!("Fetching releases for {}...", tool.name);
 
-                Task::perform(
-                    download::fetch_releases(tool),
-                    Message::VersionsFetched
-                )
+                Task::perform(download::fetch_releases(tool), Message::VersionsFetched)
             }
 
             Message::VersionsFetched(releases) => {
@@ -431,13 +485,15 @@ impl ProtonupGui {
 
                 // Check if any selected tool has architecture variants
                 self.has_variant_tools = self.selected_tool_indices.iter().any(|&idx| {
-                    self.available_tools.get(idx).is_some_and(|t| t.has_multiple_asset_variations)
+                    self.available_tools
+                        .get(idx)
+                        .is_some_and(|t| t.has_multiple_asset_variations)
                 });
 
                 if self.has_variant_tools {
                     // Show architecture selection next
                     self.selection_step = SelectionStep::SelectingArchitecture;
-                    self.selected_arch_variant = Some(2);  // Default to v2
+                    self.selected_arch_variant = Some(2); // Default to v2
                 } else {
                     // No variants, proceed to version selection
                     self.selection_step = SelectionStep::SelectingVersions;
@@ -446,7 +502,11 @@ impl ProtonupGui {
             }
 
             Message::ToggleVersion(index) => {
-                if let Some(pos) = self.selected_version_indices.iter().position(|&i| i == index) {
+                if let Some(pos) = self
+                    .selected_version_indices
+                    .iter()
+                    .position(|&i| i == index)
+                {
                     self.selected_version_indices.remove(pos);
                 } else {
                     self.selected_version_indices.push(index);
@@ -460,7 +520,8 @@ impl ProtonupGui {
             }
 
             Message::StartSelectedDownloads => {
-                if self.selected_tool_indices.is_empty() || self.selected_version_indices.is_empty() {
+                if self.selected_tool_indices.is_empty() || self.selected_version_indices.is_empty()
+                {
                     self.global_status = "Please select tools and versions".to_string();
                     return Task::none();
                 }
@@ -469,7 +530,8 @@ impl ProtonupGui {
                 let mut tools_and_versions = Vec::new();
                 for &tool_idx in &self.selected_tool_indices {
                     let tool = self.available_tools[tool_idx].clone();
-                    let versions: Vec<Release> = self.selected_version_indices
+                    let versions: Vec<Release> = self
+                        .selected_version_indices
                         .iter()
                         .map(|&v_idx| self.available_versions[v_idx].clone())
                         .collect();
@@ -504,7 +566,11 @@ impl ProtonupGui {
             }
 
             Message::ToggleReinstall(index) => {
-                if let Some(pos) = self.force_reinstall_indices.iter().position(|&i| i == index) {
+                if let Some(pos) = self
+                    .force_reinstall_indices
+                    .iter()
+                    .position(|&i| i == index)
+                {
                     self.force_reinstall_indices.remove(pos);
                 } else {
                     self.force_reinstall_indices.push(index);
@@ -514,7 +580,8 @@ impl ProtonupGui {
 
             Message::ConfirmReinstallSelection => {
                 // Build the set of tool names that should be force reinstalled
-                let force_reinstall_names: HashSet<String> = self.force_reinstall_indices
+                let force_reinstall_names: HashSet<String> = self
+                    .force_reinstall_indices
                     .iter()
                     .filter_map(|&i| self.already_installed_tools.get(i))
                     .map(|t| t.name.clone())
@@ -524,7 +591,8 @@ impl ProtonupGui {
 
             Message::DownloadUpdate(update) => match update {
                 DownloadUpdate::ToolProgress(progress) => {
-                    if let Some(tool) = self.tools.iter_mut().find(|t| t.name == progress.tool_name) {
+                    if let Some(tool) = self.tools.iter_mut().find(|t| t.name == progress.tool_name)
+                    {
                         tool.update_from_progress(&progress);
                     }
                     Task::none()
@@ -538,15 +606,13 @@ impl ProtonupGui {
                 DownloadUpdate::Finished(result) => {
                     // Clear the handle since the task is done
                     self.download_handle = None;
-                    
+
                     match result {
                         Ok(versions) => {
                             self.global_progress = 100.0;
                             self.global_phase = DownloadPhase::Complete;
-                            self.global_status = format!(
-                                "✓ Success! Installed {} tools.",
-                                versions.len()
-                            );
+                            self.global_status =
+                                format!("✓ Success! Installed {} tools.", versions.len());
                             self.download_complete = Some(Ok(versions));
                         }
                         Err(e) => {
@@ -573,6 +639,15 @@ impl ProtonupGui {
             Message::BackToInitial => {
                 self.reset_to_initial();
                 self.app_mode = AppMode::None;
+                Task::none()
+            }
+
+            Message::BackToToolSelection => {
+                // Go back to tool selection step, clear version selection
+                self.selection_step = SelectionStep::SelectingTools;
+                self.selected_version_indices.clear();
+                self.available_versions.clear();
+                self.selected_tool = None;
                 Task::none()
             }
 
@@ -614,17 +689,15 @@ impl ProtonupGui {
                 Task::none()
             }
 
-            Message::OpenFolderPicker => {
-                Task::perform(
-                    async {
-                        rfd::AsyncFileDialog::new()
-                            .pick_folder()
-                            .await
-                            .map(|handle| handle.path().to_path_buf())
-                    },
-                    Message::FolderPicked,
-                )
-            }
+            Message::OpenFolderPicker => Task::perform(
+                async {
+                    rfd::AsyncFileDialog::new()
+                        .pick_folder()
+                        .await
+                        .map(|handle| handle.path().to_path_buf())
+                },
+                Message::FolderPicked,
+            ),
 
             Message::FolderPicked(Some(path)) => {
                 self.custom_path_input = path.to_string_lossy().to_string();
@@ -680,11 +753,13 @@ impl ProtonupGui {
 
             Message::DeleteSelectedVersions => {
                 // Collect all selected versions with their paths
-                let selected: Vec<(usize, usize, PathBuf)> = self.app_installations_views
+                let selected: Vec<(usize, usize, PathBuf)> = self
+                    .app_installations_views
                     .iter()
                     .enumerate()
                     .flat_map(|(app_idx, view)| {
-                        view.versions.iter()
+                        view.versions
+                            .iter()
                             .enumerate()
                             .filter(|(_, v)| v.selected_for_deletion)
                             .map(move |(ver_idx, v)| (app_idx, ver_idx, v.path.clone()))
@@ -699,10 +774,7 @@ impl ProtonupGui {
 
                 self.manage_status = format!("Deleting {} version(s)...", selected.len());
 
-                Task::perform(
-                    Self::delete_versions(selected),
-                    Message::DeleteCompleted,
-                )
+                Task::perform(Self::delete_versions(selected), Message::DeleteCompleted)
             }
 
             Message::DeleteCompleted(result) => {
@@ -727,10 +799,11 @@ impl ProtonupGui {
                 // Update the views with scanned versions
                 for (i, view) in self.app_installations_views.iter_mut().enumerate() {
                     if let Some((_, vers)) = versions.get(i) {
-                        view.versions = vers.iter()
+                        view.versions = vers
+                            .iter()
                             .map(|(parent_path, name)| InstalledVersion {
                                 name: name.clone(),
-                                path: parent_path.join(name),  // Construct full path: parent_dir/version_name
+                                path: parent_path.join(name), // Construct full path: parent_dir/version_name
                                 selected_for_deletion: false,
                             })
                             .collect();
@@ -739,16 +812,24 @@ impl ProtonupGui {
                 }
 
                 // Update status
-                let total_versions: usize = self.app_installations_views.iter()
+                let total_versions: usize = self
+                    .app_installations_views
+                    .iter()
                     .map(|v| v.versions.len())
                     .sum();
-                self.manage_status = format!("Found {} version(s) across {} app(s)", total_versions, self.app_installations_views.len());
+                self.manage_status = format!(
+                    "Found {} version(s) across {} app(s)",
+                    total_versions,
+                    self.app_installations_views.len()
+                );
                 Task::none()
             }
         }
     }
 
-    async fn detect_app_and_fetch_tools(app: App) -> Result<(AppInstallations, Vec<CompatTool>), String> {
+    async fn detect_app_and_fetch_tools(
+        app: App,
+    ) -> Result<(AppInstallations, Vec<CompatTool>), String> {
         // Detect installation
         let installations = app.detect_installation_method().await;
         if installations.is_empty() {
@@ -773,8 +854,9 @@ impl ProtonupGui {
         for app in libprotonup::apps::APP_INSTALLATIONS_VARIANTS.iter() {
             let versions = app.list_installed_versions().await.unwrap_or_default();
             // Convert Folder to (PathBuf, String)
-            let version_tuples: Vec<(PathBuf, String)> = versions.into_iter()
-                .map(|f| (f.0.0.clone(), f.0.1.clone()))
+            let version_tuples: Vec<(PathBuf, String)> = versions
+                .into_iter()
+                .map(|f| (f.0 .0.clone(), f.0 .1.clone()))
                 .collect();
             results.push((app.clone(), version_tuples));
         }
@@ -782,12 +864,14 @@ impl ProtonupGui {
     }
 
     /// Delete selected versions
-    async fn delete_versions(selected: Vec<(usize, usize, PathBuf)>) -> Result<Vec<String>, String> {
+    async fn delete_versions(
+        selected: Vec<(usize, usize, PathBuf)>,
+    ) -> Result<Vec<String>, String> {
         let mut deleted = vec![];
         for (_app_idx, _ver_idx, path) in selected {
             // Expand tilde in path if present
-            let expanded_path = libprotonup::utils::expand_tilde(&path)
-                .unwrap_or_else(|| path.clone());
+            let expanded_path =
+                libprotonup::utils::expand_tilde(&path).unwrap_or_else(|| path.clone());
 
             if let Err(e) = tokio::fs::remove_dir_all(&expanded_path).await {
                 eprintln!("Error deleting {}: {}", expanded_path.display(), e);
@@ -810,7 +894,8 @@ impl ProtonupGui {
         for (tool, versions) in &tools_and_versions {
             for version in versions {
                 let install_name = tool.installation_name(&version.tag_name);
-                let mut install_path = PathBuf::from(app_installation.default_install_dir().as_str());
+                let mut install_path =
+                    PathBuf::from(app_installation.default_install_dir().as_str());
                 install_path.push(&install_name);
 
                 if files::check_if_exists(&install_path).await {
@@ -839,7 +924,8 @@ impl ProtonupGui {
         self.tools.clear();
         for &tool_idx in &self.selected_tool_indices {
             let tool = self.available_tools[tool_idx].clone();
-            let versions: Vec<Release> = self.selected_version_indices
+            let versions: Vec<Release> = self
+                .selected_version_indices
                 .iter()
                 .map(|&v_idx| self.available_versions[v_idx].clone())
                 .collect();
@@ -848,7 +934,10 @@ impl ProtonupGui {
             for version in &versions {
                 self.tools.push(ToolDownload::new(
                     format!("{} {}", tool.name, version.tag_name),
-                    self.app_installation.as_ref().map(|a| a.to_string()).unwrap_or_default(),
+                    self.app_installation
+                        .as_ref()
+                        .map(|a| a.to_string())
+                        .unwrap_or_default(),
                 ));
             }
 
@@ -922,10 +1011,7 @@ impl ProtonupGui {
     }
 
     fn view_sidebar(&self) -> Element<'_, Message> {
-        let mut column = Column::new()
-            .spacing(10)
-            .padding(10)
-            .width(220);
+        let mut column = Column::new().spacing(10).padding(10).width(220);
 
         // Logo at top
         let logo_handle = Handle::from_path(LOGO_PATH);
@@ -953,105 +1039,86 @@ impl ProtonupGui {
         // Show loading spinner when downloading
         if is_downloading {
             column = column.push(
-                Container::new(
-                    Circular::new()
-                        .size(40.0)
-                        .bar_height(4.0),
-                )
-                .center_x(Length::Fill)
-                .padding(10),
+                Container::new(Circular::new().size(40.0).bar_height(4.0))
+                    .center_x(Length::Fill)
+                    .padding(10),
             );
 
             column = column.push(
-                Container::new(
-                    text("Download in progress...").size(12)
-                )
-                .center_x(Length::Fill),
+                Container::new(text("Download in progress...").size(12)).center_x(Length::Fill),
             );
         }
 
         // Show completion status when done
         if is_complete {
             column = column.push(
-                Container::new(
-                    text("Completed ✅").size(14)
-                )
-                .center_x(Length::Fill)
-                .padding(10),
+                Container::new(text("Completed ✅").size(14))
+                    .center_x(Length::Fill)
+                    .padding(10),
             );
         }
 
         // Action buttons (disabled when downloading or when already selected)
         let quick_update_disabled = is_downloading || self.app_mode == AppMode::QuickUpdate;
-        column = column.push(
-            if quick_update_disabled {
-                button(text("Quick Update").size(14))
-                    .padding(10)
-                    .width(Length::Fill)
-            } else {
-                button(text("Quick Update").size(14))
-                    .on_press(Message::SelectQuickUpdate)
-                    .padding(10)
-                    .width(Length::Fill)
-            },
-        );
+        column = column.push(if quick_update_disabled {
+            button(text("Quick Update").size(14))
+                .padding(10)
+                .width(Length::Fill)
+        } else {
+            button(text("Quick Update").size(14))
+                .on_press(Message::SelectQuickUpdate)
+                .padding(10)
+                .width(Length::Fill)
+        });
 
         let steam_disabled = is_downloading || self.app_mode == AppMode::DownloadForSteam;
-        column = column.push(
-            if steam_disabled {
-                button(text("Download for Steam").size(14))
-                    .padding(10)
-                    .width(Length::Fill)
-            } else {
-                button(text("Download for Steam").size(14))
-                    .on_press(Message::SelectDownloadForSteam)
-                    .padding(10)
-                    .width(Length::Fill)
-            },
-        );
+        column = column.push(if steam_disabled {
+            button(text("Download for Steam").size(14))
+                .padding(10)
+                .width(Length::Fill)
+        } else {
+            button(text("Download for Steam").size(14))
+                .on_press(Message::SelectDownloadForSteam)
+                .padding(10)
+                .width(Length::Fill)
+        });
 
         let lutris_disabled = is_downloading || self.app_mode == AppMode::DownloadForLutris;
-        column = column.push(
-            if lutris_disabled {
-                button(text("Download for Lutris").size(14))
-                    .padding(10)
-                    .width(Length::Fill)
-            } else {
-                button(text("Download for Lutris").size(14))
-                    .on_press(Message::SelectDownloadForLutris)
-                    .padding(10)
-                    .width(Length::Fill)
-            },
-        );
+        column = column.push(if lutris_disabled {
+            button(text("Download for Lutris").size(14))
+                .padding(10)
+                .width(Length::Fill)
+        } else {
+            button(text("Download for Lutris").size(14))
+                .on_press(Message::SelectDownloadForLutris)
+                .padding(10)
+                .width(Length::Fill)
+        });
 
         let custom_disabled = is_downloading || self.app_mode == AppMode::DownloadForCustom;
-        column = column.push(
-            if custom_disabled {
-                button(text("Download for Custom Location").size(14))
-                    .padding(10)
-                    .width(Length::Fill)
-            } else {
-                button(text("Download for Custom Location").size(14))
-                    .on_press(Message::SelectDownloadForCustom)
-                    .padding(10)
-                    .width(Length::Fill)
-            },
-        );
+        column = column.push(if custom_disabled {
+            button(text("Download for Custom Location").size(14))
+                .padding(10)
+                .width(Length::Fill)
+        } else {
+            button(text("Download for Custom Location").size(14))
+                .on_press(Message::SelectDownloadForCustom)
+                .padding(10)
+                .width(Length::Fill)
+        });
 
         // Manage Existing Installations button
         let manage_disabled = is_downloading || self.app_mode == AppMode::ManageInstallations;
-        column = column.push(
-            if manage_disabled {
-                button(text("Manage Existing Installations").size(14))
-                    .padding(10)
-                    .width(Length::Fill)
-            } else {
-                button(text("Manage Existing Installations").size(14))
-                    .on_press(Message::SelectManageInstallations)
-                    .padding(10)
-                    .width(Length::Fill)
-            },
-        );
+        column = column.push(if manage_disabled {
+            button(text("Manage Existing Installations").size(14))
+                .padding(10)
+                .width(Length::Fill)
+        } else {
+            button(text("Manage Existing Installations").size(14))
+                .on_press(Message::SelectManageInstallations)
+                .padding(10)
+                .width(Length::Fill)
+        });
 
         // Cancel button (only when downloading)
         if is_downloading {
@@ -1059,7 +1126,8 @@ impl ProtonupGui {
                 button(text("Cancel").size(14))
                     .on_press(Message::Cancel)
                     .padding(10)
-                    .width(Length::Fill),
+                    .width(Length::Fill)
+                    .style(warning_button_style()),
             );
         }
 
@@ -1071,29 +1139,22 @@ impl ProtonupGui {
             button(text("Close").size(14))
                 .on_press(Message::CloseRequested)
                 .padding(10)
-                .width(Length::Fill),
+                .width(Length::Fill)
+                .style(warning_button_style()),
         );
 
-        container(column)
-            .style(container::rounded_box)
-            .into()
+        container(column).style(container::rounded_box).into()
     }
 
     fn view_main_content(&self) -> Element<'_, Message> {
         let content: Element<Message> = {
             // If no action selected, show placeholder
             if self.app_mode == AppMode::None {
-                container(
-                    center(
-                        text("⬅️ Choose your option")
-                            .size(18),
-                    )
-                )
-                .width(Fill)
-                .height(Fill)
-                .into()
+                container(center(text("⬅️ Choose your option").size(18)))
+                    .width(Fill)
+                    .height(Fill)
+                    .into()
             }
-
             // Show download progress when downloading
             else if self.download_started && self.selection_step == SelectionStep::Downloading {
                 Column::new()
@@ -1101,30 +1162,18 @@ impl ProtonupGui {
                     .push(self.view_download_progress())
                     .into()
             }
-
             // Otherwise show existing selection windows
             else {
                 match &self.mode {
-                    GuiMode::QuickUpdate => {
-                        self.view_quick_update()
-                    }
-                    GuiMode::DownloadForSteam | GuiMode::DownloadForLutris | GuiMode::DownloadForCustom => {
-                        self.view_selection_flow()
-                    }
-                    GuiMode::ManageInstallations => {
-                        self.view_manage_installations()
-                    }
-                    _ => {
-                        container(
-                            center(
-                                text("⬅️ Choose your option")
-                                    .size(18),
-                            )
-                        )
+                    GuiMode::QuickUpdate => self.view_quick_update(),
+                    GuiMode::DownloadForSteam
+                    | GuiMode::DownloadForLutris
+                    | GuiMode::DownloadForCustom => self.view_selection_flow(),
+                    GuiMode::ManageInstallations => self.view_manage_installations(),
+                    _ => container(center(text("⬅️ Choose your option").size(18)))
                         .width(Fill)
                         .height(Fill)
-                        .into()
-                    }
+                        .into(),
                 }
             }
         };
@@ -1139,7 +1188,7 @@ impl ProtonupGui {
 
     fn view_initial_buttons(&self) -> Element<'_, Message> {
         let mut row = Row::new().spacing(10);
-        
+
         if !self.scan_complete {
             row = row.push(text("Scanning...").size(14));
         } else if self.detected_apps.is_empty() {
@@ -1161,7 +1210,7 @@ impl ProtonupGui {
                     .padding(10),
             );
         }
-        
+
         row.into()
     }
 
@@ -1174,41 +1223,30 @@ impl ProtonupGui {
 
     fn view_selection_flow(&self) -> Element<'_, Message> {
         // Custom location needs path selection first
-        if self.mode == GuiMode::DownloadForCustom && self.selection_step == SelectionStep::Initial {
+        if self.mode == GuiMode::DownloadForCustom && self.selection_step == SelectionStep::Initial
+        {
             return self.view_custom_location_selection();
         }
 
         match &self.selection_step {
-            SelectionStep::Initial => {
-                text("Initializing...").size(14).into()
-            }
-            SelectionStep::SelectingTools => {
-                self.view_tool_selection()
-            }
-            SelectionStep::SelectingVersions => {
-                self.view_version_selection()
-            }
-            SelectionStep::SelectingArchitecture => {
-                self.view_architecture_selection()
-            }
-            SelectionStep::ConfirmReinstall => {
-                self.view_confirm_reinstall()
-            }
+            SelectionStep::Initial => text("Initializing...").size(14).into(),
+            SelectionStep::SelectingTools => self.view_tool_selection(),
+            SelectionStep::SelectingVersions => self.view_version_selection(),
+            SelectionStep::SelectingArchitecture => self.view_architecture_selection(),
+            SelectionStep::ConfirmReinstall => self.view_confirm_reinstall(),
             SelectionStep::Downloading => {
                 // Spinner is shown in sidebar, progress bars in main content
                 text("Preparing downloads...").size(14).into()
             }
-            SelectionStep::Complete => {
-                Column::new()
-                    .spacing(10)
-                    .push(text("Download complete!").size(14))
-                    .push(
-                        button(text("Back to Main Menu").size(14))
-                            .on_press(Message::BackToInitial)
-                            .padding(10),
-                    )
-                    .into()
-            }
+            SelectionStep::Complete => Column::new()
+                .spacing(10)
+                .push(text("Download complete!").size(14))
+                .push(
+                    button(text("Back to Main Menu").size(14))
+                        .on_press(Message::BackToInitial)
+                        .padding(10),
+                )
+                .into(),
         }
     }
 
@@ -1220,17 +1258,17 @@ impl ProtonupGui {
         };
 
         let mut column = Column::new().spacing(10);
-        column = column.push(text(format!("Select tools for {}:", app_name)).size(16));
+        column = column.push(text(format!("Select tool for {}:", app_name)).size(16));
 
         if self.available_tools.is_empty() {
             column = column.push(text("Loading tools...").size(14));
         } else {
             for (index, tool) in self.available_tools.iter().enumerate() {
-                let is_selected = self.selected_tool_indices.contains(&index);
                 column = column.push(
                     Row::new()
                         .spacing(10)
-                        .push(checkbox(is_selected).on_toggle(move |_| Message::ToggleTool(index)))
+                        .align_y(Center)
+                        .push(radio("", index, self.selected_tool_indices.first().copied(), Message::ToolSelected))
                         .push(text(&tool.name).size(14)),
                 );
             }
@@ -1252,7 +1290,11 @@ impl ProtonupGui {
     }
 
     fn view_version_selection(&self) -> Element<'_, Message> {
-        let tool_name = self.selected_tool.as_ref().map(|t| t.name.as_str()).unwrap_or("Tool");
+        let tool_name = self
+            .selected_tool
+            .as_ref()
+            .map(|t| t.name.as_str())
+            .unwrap_or("Tool");
 
         let mut column = Column::new().spacing(10);
         column = column.push(text(format!("Select versions for {}:", tool_name)).size(16));
@@ -1265,7 +1307,9 @@ impl ProtonupGui {
                 column = column.push(
                     Row::new()
                         .spacing(10)
-                        .push(checkbox(is_selected).on_toggle(move |_| Message::ToggleVersion(index)))
+                        .push(
+                            checkbox(is_selected).on_toggle(move |_| Message::ToggleVersion(index)),
+                        )
                         .push(text(&release.tag_name).size(14)),
                 );
             }
@@ -1279,7 +1323,7 @@ impl ProtonupGui {
 
         column = column.push(
             button(text("Back").size(14))
-                .on_press(Message::ToolSelectionConfirmed)
+                .on_press(Message::BackToToolSelection)
                 .padding(10),
         );
 
@@ -1289,13 +1333,10 @@ impl ProtonupGui {
     fn view_architecture_selection(&self) -> Element<'_, Message> {
         let mut column = Column::new().spacing(10);
 
-        column = column.push(
-            text("Select CPU Architecture Variant:").size(16)
-        );
+        column = column.push(text("Select CPU Architecture Variant:").size(16));
 
         column = column.push(
-            text("Some tools offer optimized builds for different CPU architectures.")
-                .size(12)
+            text("Some tools offer optimized builds for different CPU architectures.").size(12),
         );
 
         // Architecture variants: (code, name, description)
@@ -1312,7 +1353,9 @@ impl ProtonupGui {
                 Row::new()
                     .spacing(10)
                     .align_y(Center)
-                    .push(checkbox(is_selected).on_toggle(move |_| Message::SelectArchitecture(code)))
+                    .push(
+                        checkbox(is_selected).on_toggle(move |_| Message::SelectArchitecture(code)),
+                    )
                     .push(
                         Column::new()
                             .push(text(name).size(14))
@@ -1339,9 +1382,7 @@ impl ProtonupGui {
     fn view_custom_location_selection(&self) -> Element<'_, Message> {
         let mut column = Column::new().spacing(10);
 
-        column = column.push(
-            text("Select Installation Directory:").size(16)
-        );
+        column = column.push(text("Select Installation Directory:").size(16));
 
         column = column.push(
             text("Enter a path or use the folder picker to select where compatibility tools will be installed.").size(12)
@@ -1351,35 +1392,33 @@ impl ProtonupGui {
         column = column.push(
             text_input("Enter path...", &self.custom_path_input)
                 .on_input(Message::CustomPathInput)
-                .padding(10)
+                .padding(10),
         );
 
         // Folder picker button
         column = column.push(
             button(text("📁 Browse...").size(14))
                 .on_press(Message::OpenFolderPicker)
-                .padding(10)
+                .padding(10),
         );
 
         // Show error if any
         if let Some(ref error) = self.path_error {
-            column = column.push(
-                text(error).size(12).color([1.0, 0.3, 0.3])
-            );
+            column = column.push(text(error).size(12).color([1.0, 0.3, 0.3]));
         }
 
         // Continue button
         column = column.push(
             button(text("Continue").size(14))
                 .on_press(Message::ToolSelectionConfirmed)
-                .padding(10)
+                .padding(10),
         );
 
         // Back button
         column = column.push(
             button(text("Back").size(14))
                 .on_press(Message::BackToInitial)
-                .padding(10)
+                .padding(10),
         );
 
         scrollable(column).into()
@@ -1389,14 +1428,10 @@ impl ProtonupGui {
         let mut main_column = Column::new().spacing(20);
 
         // Status message
-        main_column = main_column.push(
-            text(&self.manage_status).size(14)
-        );
+        main_column = main_column.push(text(&self.manage_status).size(14));
 
         if let Some(ref error) = self.manage_error {
-            main_column = main_column.push(
-                text(error).size(12).color([1.0, 0.3, 0.3])
-            );
+            main_column = main_column.push(text(error).size(12).color([1.0, 0.3, 0.3]));
         }
 
         // App installations grid (side by side)
@@ -1410,7 +1445,10 @@ impl ProtonupGui {
                 Row::new()
                     .spacing(10)
                     .align_y(Center)
-                    .push(checkbox(view.selected).on_toggle(move |_| Message::AppSelectionToggled(app_idx)))
+                    .push(
+                        checkbox(view.selected)
+                            .on_toggle(move |_| Message::AppSelectionToggled(app_idx)),
+                    )
                     .push(text(format!("{}", view.app)).size(14)),
             );
 
@@ -1426,7 +1464,10 @@ impl ProtonupGui {
                         Row::new()
                             .spacing(10)
                             .align_y(Center)
-                            .push(checkbox(version.selected_for_deletion).on_toggle(move |_| Message::VersionToggled(app_idx, ver_idx)))
+                            .push(
+                                checkbox(version.selected_for_deletion)
+                                    .on_toggle(move |_| Message::VersionToggled(app_idx, ver_idx)),
+                            )
                             .push(text(&version.name).size(12)),
                     );
                 }
@@ -1438,19 +1479,18 @@ impl ProtonupGui {
         main_column = main_column.push(row);
 
         // Delete button
-        let has_selections = self.app_installations_views.iter()
+        let has_selections = self
+            .app_installations_views
+            .iter()
             .any(|v| v.versions.iter().any(|ver| ver.selected_for_deletion));
 
-        main_column = main_column.push(
-            if has_selections {
-                button(text("Delete Selected").size(14))
-                    .on_press(Message::DeleteSelectedVersions)
-                    .padding(10)
-            } else {
-                button(text("Delete Selected").size(14))
-                    .padding(10)
-            },
-        );
+        main_column = main_column.push(if has_selections {
+            button(text("Delete Selected").size(14))
+                .on_press(Message::DeleteSelectedVersions)
+                .padding(10)
+        } else {
+            button(text("Delete Selected").size(14)).padding(10)
+        });
 
         // Back button
         main_column = main_column.push(
@@ -1469,13 +1509,9 @@ impl ProtonupGui {
     fn view_confirm_reinstall(&self) -> Element<'_, Message> {
         let mut column = Column::new().spacing(10);
 
-        column = column.push(
-            text("The following tools are already installed:").size(16)
-        );
+        column = column.push(text("The following tools are already installed:").size(16));
 
-        column = column.push(
-            text("Select which ones you want to reinstall:").size(14)
-        );
+        column = column.push(text("Select which ones you want to reinstall:").size(14));
 
         if self.already_installed_tools.is_empty() {
             column = column.push(text("No tools to reinstall.").size(14));
@@ -1485,7 +1521,10 @@ impl ProtonupGui {
                 column = column.push(
                     Row::new()
                         .spacing(10)
-                        .push(checkbox(is_selected).on_toggle(move |_| Message::ToggleReinstall(index)))
+                        .push(
+                            checkbox(is_selected)
+                                .on_toggle(move |_| Message::ToggleReinstall(index)),
+                        )
                         .push(text(&tool.name).size(14)),
                 );
             }
@@ -1529,9 +1568,8 @@ impl ProtonupGui {
         if let Some(ref result) = self.download_complete {
             match result {
                 Ok(versions) => {
-                    column = column.push(
-                        text("✓ All tools installed successfully!").color([0.3, 1.0, 0.3]),
-                    );
+                    column = column
+                        .push(text("✓ All tools installed successfully!").color([0.3, 1.0, 0.3]));
                     for version in versions {
                         column = column.push(text(format!("  • {}", version)).size(12));
                     }
@@ -1542,9 +1580,7 @@ impl ProtonupGui {
                     );
                 }
                 Err(e) => {
-                    column = column.push(
-                        text(format!("✗ Failed: {}", e)).color([1.0, 0.3, 0.3]),
-                    );
+                    column = column.push(text(format!("✗ Failed: {}", e)).color([1.0, 0.3, 0.3]));
                     column = column.push(
                         button(text("Try Again").size(14))
                             .on_press(Message::StartSelectedDownloads)
@@ -1562,17 +1598,12 @@ impl ProtonupGui {
 
         // App scanning subscription
         if !self.scan_complete {
-            subscriptions.push(
-                time::every(Duration::from_millis(100))
-                    .map(|_| Message::ScanApps)
-            );
+            subscriptions.push(time::every(Duration::from_millis(100)).map(|_| Message::ScanApps));
         }
 
         // Window frames subscription for spinner animation when downloading
         if self.download_started && self.selection_step == SelectionStep::Downloading {
-            subscriptions.push(
-                window::frames().map(|_| Message::TickSpinner)
-            );
+            subscriptions.push(window::frames().map(|_| Message::TickSpinner));
         }
 
         Subscription::batch(subscriptions)
