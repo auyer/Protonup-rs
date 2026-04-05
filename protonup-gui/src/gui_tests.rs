@@ -34,6 +34,9 @@ mod tests {
             app_mode: AppMode::None,
             custom_path_input: String::new(),
             path_error: None,
+            app_installations_views: vec![],
+            manage_status: String::new(),
+            manage_error: None,
         }
     }
 
@@ -93,6 +96,9 @@ mod tests {
             app_mode: AppMode::None,
             custom_path_input: String::new(),
             path_error: None,
+            app_installations_views: vec![],
+            manage_status: String::new(),
+            manage_error: None,
         };
         let mut ui = simulator(model.view());
 

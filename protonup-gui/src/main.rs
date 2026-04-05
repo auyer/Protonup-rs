@@ -83,6 +83,14 @@ enum Message {
     CustomPathInput(String),
     OpenFolderPicker,
     FolderPicked(Option<PathBuf>),
+
+    // Manage existing installations
+    SelectManageInstallations,
+    AppSelectionToggled(usize),
+    VersionToggled(usize, usize),
+    DeleteSelectedVersions,
+    DeleteCompleted(Result<Vec<String>, String>),
+    VersionsScanned(Vec<(AppInstallations, Vec<(PathBuf, String)>)>),
 }
 
 /// GUI mode - what the user is doing
@@ -94,6 +102,7 @@ enum GuiMode {
     DownloadForSteam,
     DownloadForLutris,
     DownloadForCustom,
+    ManageInstallations,
 }
 
 /// Which action was selected in the sidebar
@@ -105,6 +114,7 @@ enum AppMode {
     DownloadForSteam,
     DownloadForLutris,
     DownloadForCustom,
+    ManageInstallations,
 }
 
 /// Current step in the selection flow
@@ -192,6 +202,24 @@ impl ToolDownload {
     }
 }
 
+/// Represents an installed compatibility tool version
+#[derive(Debug, Clone)]
+struct InstalledVersion {
+    name: String,
+    path: PathBuf,
+    selected_for_deletion: bool,
+}
+
+/// Represents a single app installation view in the manage screen
+#[derive(Debug)]
+struct AppInstallationView {
+    app: AppInstallations,
+    selected: bool,
+    versions: Vec<InstalledVersion>,
+    loading: bool,
+    error: Option<String>,
+}
+
 #[derive(Debug, Default)]
 struct ProtonupGui {
     // App detection
@@ -239,6 +267,11 @@ struct ProtonupGui {
     // Custom location state
     custom_path_input: String,
     path_error: Option<String>,
+
+    // Manage installations state
+    app_installations_views: Vec<AppInstallationView>,
+    manage_status: String,
+    manage_error: Option<String>,
 }
 
 impl ProtonupGui {
@@ -603,6 +636,115 @@ impl ProtonupGui {
                 // User cancelled picker
                 Task::none()
             }
+
+            Message::SelectManageInstallations => {
+                self.app_mode = AppMode::ManageInstallations;
+                self.mode = GuiMode::ManageInstallations;
+                self.manage_status = "Scanning for installed versions...".to_string();
+                self.manage_error = None;
+
+                // Initialize app installation views with all selected (Detect All default)
+                self.app_installations_views = libprotonup::apps::APP_INSTALLATIONS_VARIANTS
+                    .iter()
+                    .map(|app| AppInstallationView {
+                        app: app.clone(),
+                        selected: true,
+                        versions: vec![],
+                        loading: true,
+                        error: None,
+                    })
+                    .collect();
+
+                Task::perform(
+                    Self::scan_all_installed_versions(),
+                    Message::VersionsScanned,
+                )
+            }
+
+            Message::AppSelectionToggled(index) => {
+                // If toggling an individual app, uncheck Detect All
+                if let Some(view) = self.app_installations_views.get_mut(index) {
+                    view.selected = !view.selected;
+                }
+                Task::none()
+            }
+
+            Message::VersionToggled(app_index, version_index) => {
+                if let Some(view) = self.app_installations_views.get_mut(app_index) {
+                    if let Some(version) = view.versions.get_mut(version_index) {
+                        version.selected_for_deletion = !version.selected_for_deletion;
+                    }
+                }
+                Task::none()
+            }
+
+            Message::DeleteSelectedVersions => {
+                // Collect all selected versions with their paths
+                let selected: Vec<(usize, usize, PathBuf)> = self.app_installations_views
+                    .iter()
+                    .enumerate()
+                    .flat_map(|(app_idx, view)| {
+                        view.versions.iter()
+                            .enumerate()
+                            .filter(|(_, v)| v.selected_for_deletion)
+                            .map(move |(ver_idx, v)| (app_idx, ver_idx, v.path.clone()))
+                            .collect::<Vec<_>>()
+                    })
+                    .collect();
+
+                if selected.is_empty() {
+                    self.manage_status = "No versions selected for deletion".to_string();
+                    return Task::none();
+                }
+
+                self.manage_status = format!("Deleting {} version(s)...", selected.len());
+
+                Task::perform(
+                    Self::delete_versions(selected),
+                    Message::DeleteCompleted,
+                )
+            }
+
+            Message::DeleteCompleted(result) => {
+                match result {
+                    Ok(deleted) => {
+                        self.manage_status = format!("✓ Deleted {} version(s)", deleted.len());
+                        // Rescan to update the list
+                        Task::perform(
+                            Self::scan_all_installed_versions(),
+                            Message::VersionsScanned,
+                        )
+                    }
+                    Err(e) => {
+                        self.manage_error = Some(e);
+                        self.manage_status = "Error deleting versions".to_string();
+                        Task::none()
+                    }
+                }
+            }
+
+            Message::VersionsScanned(versions) => {
+                // Update the views with scanned versions
+                for (i, view) in self.app_installations_views.iter_mut().enumerate() {
+                    if let Some((_, vers)) = versions.get(i) {
+                        view.versions = vers.iter()
+                            .map(|(parent_path, name)| InstalledVersion {
+                                name: name.clone(),
+                                path: parent_path.join(name),  // Construct full path: parent_dir/version_name
+                                selected_for_deletion: false,
+                            })
+                            .collect();
+                        view.loading = false;
+                    }
+                }
+
+                // Update status
+                let total_versions: usize = self.app_installations_views.iter()
+                    .map(|v| v.versions.len())
+                    .sum();
+                self.manage_status = format!("Found {} version(s) across {} app(s)", total_versions, self.app_installations_views.len());
+                Task::none()
+            }
         }
     }
 
@@ -623,6 +765,39 @@ impl ProtonupGui {
         }
 
         Ok((app_inst, tools))
+    }
+
+    /// Scan all app installations for installed versions
+    async fn scan_all_installed_versions() -> Vec<(AppInstallations, Vec<(PathBuf, String)>)> {
+        let mut results = vec![];
+        for app in libprotonup::apps::APP_INSTALLATIONS_VARIANTS.iter() {
+            let versions = app.list_installed_versions().await.unwrap_or_default();
+            // Convert Folder to (PathBuf, String)
+            let version_tuples: Vec<(PathBuf, String)> = versions.into_iter()
+                .map(|f| (f.0.0.clone(), f.0.1.clone()))
+                .collect();
+            results.push((app.clone(), version_tuples));
+        }
+        results
+    }
+
+    /// Delete selected versions
+    async fn delete_versions(selected: Vec<(usize, usize, PathBuf)>) -> Result<Vec<String>, String> {
+        let mut deleted = vec![];
+        for (_app_idx, _ver_idx, path) in selected {
+            // Expand tilde in path if present
+            let expanded_path = libprotonup::utils::expand_tilde(&path)
+                .unwrap_or_else(|| path.clone());
+
+            if let Err(e) = tokio::fs::remove_dir_all(&expanded_path).await {
+                eprintln!("Error deleting {}: {}", expanded_path.display(), e);
+            } else {
+                if let Some(name) = expanded_path.file_name() {
+                    deleted.push(name.to_string_lossy().to_string());
+                }
+            }
+        }
+        Ok(deleted)
     }
 
     /// Check which tools are already installed
@@ -710,6 +885,11 @@ impl ProtonupGui {
         self.global_progress = 0.0;
         self.download_complete = None;
         self.download_handle = None;
+
+        // Clear manage installations state
+        self.app_installations_views.clear();
+        self.manage_status = String::new();
+        self.manage_error = None;
     }
 
     fn view(&self) -> Element<'_, Message> {
@@ -858,6 +1038,21 @@ impl ProtonupGui {
             },
         );
 
+        // Manage Existing Installations button
+        let manage_disabled = is_downloading || self.app_mode == AppMode::ManageInstallations;
+        column = column.push(
+            if manage_disabled {
+                button(text("Manage Existing Installations").size(14))
+                    .padding(10)
+                    .width(Length::Fill)
+            } else {
+                button(text("Manage Existing Installations").size(14))
+                    .on_press(Message::SelectManageInstallations)
+                    .padding(10)
+                    .width(Length::Fill)
+            },
+        );
+
         // Cancel button (only when downloading)
         if is_downloading {
             column = column.push(
@@ -915,6 +1110,9 @@ impl ProtonupGui {
                     }
                     GuiMode::DownloadForSteam | GuiMode::DownloadForLutris | GuiMode::DownloadForCustom => {
                         self.view_selection_flow()
+                    }
+                    GuiMode::ManageInstallations => {
+                        self.view_manage_installations()
                     }
                     _ => {
                         container(
@@ -1185,6 +1383,87 @@ impl ProtonupGui {
         );
 
         scrollable(column).into()
+    }
+
+    fn view_manage_installations(&self) -> Element<'_, Message> {
+        let mut main_column = Column::new().spacing(20);
+
+        // Status message
+        main_column = main_column.push(
+            text(&self.manage_status).size(14)
+        );
+
+        if let Some(ref error) = self.manage_error {
+            main_column = main_column.push(
+                text(error).size(12).color([1.0, 0.3, 0.3])
+            );
+        }
+
+        // App installations grid (side by side)
+        let mut row = Row::new().spacing(20);
+
+        for (app_idx, view) in self.app_installations_views.iter().enumerate() {
+            let mut col = Column::new().spacing(10).width(Length::Fill);
+
+            // App title with checkbox
+            col = col.push(
+                Row::new()
+                    .spacing(10)
+                    .align_y(Center)
+                    .push(checkbox(view.selected).on_toggle(move |_| Message::AppSelectionToggled(app_idx)))
+                    .push(text(format!("{}", view.app)).size(14)),
+            );
+
+            col = col.push(rule::horizontal(1));
+
+            if view.loading {
+                col = col.push(text("Scanning...").size(12));
+            } else if view.versions.is_empty() {
+                col = col.push(text("No versions found").size(12).color([0.6, 0.6, 0.6]));
+            } else {
+                for (ver_idx, version) in view.versions.iter().enumerate() {
+                    col = col.push(
+                        Row::new()
+                            .spacing(10)
+                            .align_y(Center)
+                            .push(checkbox(version.selected_for_deletion).on_toggle(move |_| Message::VersionToggled(app_idx, ver_idx)))
+                            .push(text(&version.name).size(12)),
+                    );
+                }
+            }
+
+            row = row.push(container(col).padding(10).style(container::rounded_box));
+        }
+
+        main_column = main_column.push(row);
+
+        // Delete button
+        let has_selections = self.app_installations_views.iter()
+            .any(|v| v.versions.iter().any(|ver| ver.selected_for_deletion));
+
+        main_column = main_column.push(
+            if has_selections {
+                button(text("Delete Selected").size(14))
+                    .on_press(Message::DeleteSelectedVersions)
+                    .padding(10)
+            } else {
+                button(text("Delete Selected").size(14))
+                    .padding(10)
+            },
+        );
+
+        // Back button
+        main_column = main_column.push(
+            button(text("Back to Main Menu").size(14))
+                .on_press(Message::BackToInitial)
+                .padding(10),
+        );
+
+        container(scrollable(main_column))
+            .padding(20)
+            .width(Fill)
+            .height(Fill)
+            .into()
     }
 
     fn view_confirm_reinstall(&self) -> Element<'_, Message> {
