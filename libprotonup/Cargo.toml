@@ -5,7 +5,7 @@ edition = "2024"
 authors = ["Auyer <auyer@rcpassos.me>"]
 repository = "https://github.com/auyer/protonup-rs"
 license = "GPL-3.0"
-readme = "../docs/docs.md"
+readme = "./README.md"
 
 description = "Library for Custom Proton Download and installation"
 

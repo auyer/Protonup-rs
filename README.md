@@ -1,6 +1,6 @@
 # Protonup-rs
 
-Lib, CLI and GUI(wip) program to automate the installation and update of Linux Gaming Compatibility tools, like ProtonGE, Luxtorpeda, Boxtron and others.
+Lib, CLI and GUI program to automate the installation and update of Linux Gaming Compatibility tools, like ProtonGE, Luxtorpeda, Boxtron and others.
 
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/10372/badge)](https://www.bestpractices.dev/projects/10372)
 
@@ -71,6 +71,7 @@ Options:
 ```
 
 **`--for` argument behavior:**
+
 - `steam` / `Steam` - Install to Steam (Native or Flatpak)
 - `lutris` / `Lutris` - Install to Lutris (Native or Flatpak)
 - `<path>` - Any other value is treated as a custom installation path
@@ -139,9 +140,12 @@ Code docs available in the [docs/docs.md](./docs/docs.md) file, and default gene
 
 ### Roadmap
 
-1. GUI:
-  Not ready for usage. I made a few experiments with different libs, and decided to use the iced/cosmic framework.
-  I left the [base structure](https://github.com/auyer/Protonup-rs/tree/feature/gui), and hope to get to it someday or to receive contributions.
+The GUI is implemented and functional using the iced framework.
+Future improvements may include:
+
+- Additional UI polish and refinements
+- More compatibility tools support
+- Enhanced error handling and user feedback
 
 ## Feedbacks & Contributing
 
@@ -155,7 +159,6 @@ Thanks!
 
 ### Roles and Maintainers
 
-This project is maintained only by the creator [@auyer](https://rcpassos.me)
+This project is maintained only by the creator [@auyer](https://rcpassos.me).
 
-Maintaining this project does not take a lot of effort.
-The project is open to having other contributors, specially if implementing a GUI.
+The project is open to having other contributors.
