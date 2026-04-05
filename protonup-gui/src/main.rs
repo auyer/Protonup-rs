@@ -1,4 +1,4 @@
-use iced::widget::{button, center, checkbox, container, image, progress_bar, rule, text, Column, Container, Row, scrollable, space};
+use iced::widget::{button, center, checkbox, container, image, progress_bar, rule, text, text_input, Column, Container, Row, scrollable, space};
 use iced::widget::image::Handle;
 use iced::task;
 use iced::{Center, ContentFit, Element, Fill, Task, Subscription, Length};
@@ -77,6 +77,12 @@ enum Message {
 
     // Layout
     CloseRequested,
+
+    // Custom location flow
+    SelectDownloadForCustom,
+    CustomPathInput(String),
+    OpenFolderPicker,
+    FolderPicked(Option<PathBuf>),
 }
 
 /// GUI mode - what the user is doing
@@ -87,6 +93,7 @@ enum GuiMode {
     QuickUpdate,
     DownloadForSteam,
     DownloadForLutris,
+    DownloadForCustom,
 }
 
 /// Which action was selected in the sidebar
@@ -97,6 +104,7 @@ enum AppMode {
     QuickUpdate,
     DownloadForSteam,
     DownloadForLutris,
+    DownloadForCustom,
 }
 
 /// Current step in the selection flow
@@ -227,6 +235,10 @@ struct ProtonupGui {
 
     // Layout state
     app_mode: AppMode,  // Track which action was selected
+
+    // Custom location state
+    custom_path_input: String,
+    path_error: Option<String>,
 }
 
 impl ProtonupGui {
@@ -291,7 +303,7 @@ impl ProtonupGui {
                 Task::perform(
                     Self::detect_app_and_fetch_tools(App::Steam),
                     |result| match result {
-                        Ok((app_inst, tools)) => Message::AppInstallationDetected(app_inst),
+                        Ok((app_inst, _tools)) => Message::AppInstallationDetected(app_inst),
                         Err(e) => Message::SelectionError(e),
                     }
                 )
@@ -305,7 +317,7 @@ impl ProtonupGui {
                 Task::perform(
                     Self::detect_app_and_fetch_tools(App::Lutris),
                     |result| match result {
-                        Ok((app_inst, tools)) => Message::AppInstallationDetected(app_inst),
+                        Ok((app_inst, _tools)) => Message::AppInstallationDetected(app_inst),
                         Err(e) => Message::SelectionError(e),
                     }
                 )
@@ -330,17 +342,46 @@ impl ProtonupGui {
             }
 
             Message::ToolSelectionConfirmed => {
+                // Handle custom location mode
+                if self.mode == GuiMode::DownloadForCustom {
+                    // If app_installation is not set, we're at the path selection step
+                    if self.app_installation.is_none() {
+                        // Validate path
+                        if self.custom_path_input.is_empty() {
+                            self.path_error = Some("Please enter a valid path".to_string());
+                            return Task::none();
+                        }
+
+                        // Create custom app installation
+                        self.app_installation = Some(
+                            AppInstallations::new_custom_app_install(
+                                self.custom_path_input.clone()
+                            )
+                        );
+
+                        // Fetch all available tools for custom location
+                        self.available_tools = libprotonup::sources::CompatTools.clone();
+                        self.selected_tool_indices.clear();
+                        self.selection_step = SelectionStep::SelectingTools;
+                        self.global_status = "Select tools to install".to_string();
+                        return Task::none();
+                    }
+
+                    // If app_installation is already set, we're at tool selection - proceed normally
+                    // Fall through to the normal tool selection logic below
+                }
+
                 if self.selected_tool_indices.is_empty() {
                     self.global_status = "Please select at least one tool".to_string();
                     return Task::none();
                 }
-                
+
                 // Get the first selected tool for version selection
                 let tool = self.available_tools[self.selected_tool_indices[0]].clone();
                 self.selected_tool = Some(tool.clone());
                 self.selection_step = SelectionStep::SelectingVersions;
                 self.global_status = format!("Fetching releases for {}...", tool.name);
-                
+
                 Task::perform(
                     download::fetch_releases(tool),
                     Message::VersionsFetched
@@ -357,7 +398,7 @@ impl ProtonupGui {
 
                 // Check if any selected tool has architecture variants
                 self.has_variant_tools = self.selected_tool_indices.iter().any(|&idx| {
-                    self.available_tools.get(idx).map_or(false, |t| t.has_multiple_asset_variations)
+                    self.available_tools.get(idx).is_some_and(|t| t.has_multiple_asset_variations)
                 });
 
                 if self.has_variant_tools {
@@ -522,6 +563,46 @@ impl ProtonupGui {
             Message::CloseRequested => {
                 std::process::exit(0);
             }
+
+            Message::SelectDownloadForCustom => {
+                self.app_mode = AppMode::DownloadForCustom;
+                self.mode = GuiMode::DownloadForCustom;
+                self.selection_step = SelectionStep::Initial;
+                self.custom_path_input = std::env::current_dir()
+                    .map(|p| p.to_string_lossy().to_string())
+                    .unwrap_or_default();
+                self.path_error = None;
+                Task::none()
+            }
+
+            Message::CustomPathInput(path) => {
+                self.custom_path_input = path;
+                self.path_error = None;
+                Task::none()
+            }
+
+            Message::OpenFolderPicker => {
+                Task::perform(
+                    async {
+                        rfd::AsyncFileDialog::new()
+                            .pick_folder()
+                            .await
+                            .map(|handle| handle.path().to_path_buf())
+                    },
+                    Message::FolderPicked,
+                )
+            }
+
+            Message::FolderPicked(Some(path)) => {
+                self.custom_path_input = path.to_string_lossy().to_string();
+                self.path_error = None;
+                Task::none()
+            }
+
+            Message::FolderPicked(None) => {
+                // User cancelled picker
+                Task::none()
+            }
         }
     }
 
@@ -631,7 +712,7 @@ impl ProtonupGui {
         self.download_handle = None;
     }
 
-    fn view(&self) -> Element<Message> {
+    fn view(&self) -> Element<'_, Message> {
         // Header
         let header = container(
             Row::new()
@@ -660,7 +741,7 @@ impl ProtonupGui {
             .into()
     }
 
-    fn view_sidebar(&self) -> Element<Message> {
+    fn view_sidebar(&self) -> Element<'_, Message> {
         let mut column = Column::new()
             .spacing(10)
             .padding(10)
@@ -763,6 +844,20 @@ impl ProtonupGui {
             },
         );
 
+        let custom_disabled = is_downloading || self.app_mode == AppMode::DownloadForCustom;
+        column = column.push(
+            if custom_disabled {
+                button(text("Download for Custom Location").size(14))
+                    .padding(10)
+                    .width(Length::Fill)
+            } else {
+                button(text("Download for Custom Location").size(14))
+                    .on_press(Message::SelectDownloadForCustom)
+                    .padding(10)
+                    .width(Length::Fill)
+            },
+        );
+
         // Cancel button (only when downloading)
         if is_downloading {
             column = column.push(
@@ -789,7 +884,7 @@ impl ProtonupGui {
             .into()
     }
 
-    fn view_main_content(&self) -> Element<Message> {
+    fn view_main_content(&self) -> Element<'_, Message> {
         let content: Element<Message> = {
             // If no action selected, show placeholder
             if self.app_mode == AppMode::None {
@@ -818,7 +913,7 @@ impl ProtonupGui {
                     GuiMode::QuickUpdate => {
                         self.view_quick_update()
                     }
-                    GuiMode::DownloadForSteam | GuiMode::DownloadForLutris => {
+                    GuiMode::DownloadForSteam | GuiMode::DownloadForLutris | GuiMode::DownloadForCustom => {
                         self.view_selection_flow()
                     }
                     _ => {
@@ -844,7 +939,7 @@ impl ProtonupGui {
             .into()
     }
 
-    fn view_initial_buttons(&self) -> Element<Message> {
+    fn view_initial_buttons(&self) -> Element<'_, Message> {
         let mut row = Row::new().spacing(10);
         
         if !self.scan_complete {
@@ -872,14 +967,19 @@ impl ProtonupGui {
         row.into()
     }
 
-    fn view_quick_update(&self) -> Element<Message> {
+    fn view_quick_update(&self) -> Element<'_, Message> {
         Column::new()
             .spacing(10)
             .push(text("Quick Update in progress...").size(14))
             .into()
     }
 
-    fn view_selection_flow(&self) -> Element<Message> {
+    fn view_selection_flow(&self) -> Element<'_, Message> {
+        // Custom location needs path selection first
+        if self.mode == GuiMode::DownloadForCustom && self.selection_step == SelectionStep::Initial {
+            return self.view_custom_location_selection();
+        }
+
         match &self.selection_step {
             SelectionStep::Initial => {
                 text("Initializing...").size(14).into()
@@ -914,7 +1014,7 @@ impl ProtonupGui {
         }
     }
 
-    fn view_tool_selection(&self) -> Element<Message> {
+    fn view_tool_selection(&self) -> Element<'_, Message> {
         let app_name = match self.mode {
             GuiMode::DownloadForSteam => "Steam",
             GuiMode::DownloadForLutris => "Lutris",
@@ -953,7 +1053,7 @@ impl ProtonupGui {
         scrollable(column).into()
     }
 
-    fn view_version_selection(&self) -> Element<Message> {
+    fn view_version_selection(&self) -> Element<'_, Message> {
         let tool_name = self.selected_tool.as_ref().map(|t| t.name.as_str()).unwrap_or("Tool");
 
         let mut column = Column::new().spacing(10);
@@ -988,7 +1088,7 @@ impl ProtonupGui {
         scrollable(column).into()
     }
 
-    fn view_architecture_selection(&self) -> Element<Message> {
+    fn view_architecture_selection(&self) -> Element<'_, Message> {
         let mut column = Column::new().spacing(10);
 
         column = column.push(
@@ -1038,7 +1138,56 @@ impl ProtonupGui {
         scrollable(column).into()
     }
 
-    fn view_confirm_reinstall(&self) -> Element<Message> {
+    fn view_custom_location_selection(&self) -> Element<'_, Message> {
+        let mut column = Column::new().spacing(10);
+
+        column = column.push(
+            text("Select Installation Directory:").size(16)
+        );
+
+        column = column.push(
+            text("Enter a path or use the folder picker to select where compatibility tools will be installed.").size(12)
+        );
+
+        // Text input with current path
+        column = column.push(
+            text_input("Enter path...", &self.custom_path_input)
+                .on_input(Message::CustomPathInput)
+                .padding(10)
+        );
+
+        // Folder picker button
+        column = column.push(
+            button(text("📁 Browse...").size(14))
+                .on_press(Message::OpenFolderPicker)
+                .padding(10)
+        );
+
+        // Show error if any
+        if let Some(ref error) = self.path_error {
+            column = column.push(
+                text(error).size(12).color([1.0, 0.3, 0.3])
+            );
+        }
+
+        // Continue button
+        column = column.push(
+            button(text("Continue").size(14))
+                .on_press(Message::ToolSelectionConfirmed)
+                .padding(10)
+        );
+
+        // Back button
+        column = column.push(
+            button(text("Back").size(14))
+                .on_press(Message::BackToInitial)
+                .padding(10)
+        );
+
+        scrollable(column).into()
+    }
+
+    fn view_confirm_reinstall(&self) -> Element<'_, Message> {
         let mut column = Column::new().spacing(10);
 
         column = column.push(
@@ -1078,7 +1227,7 @@ impl ProtonupGui {
         scrollable(column).into()
     }
 
-    fn view_download_progress(&self) -> Element<Message> {
+    fn view_download_progress(&self) -> Element<'_, Message> {
         let mut column = Column::new().spacing(10);
 
         for tool in &self.tools {

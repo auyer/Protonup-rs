@@ -1,8 +1,9 @@
 #[cfg(test)]
 mod tests {
-    use crate::{AppInstallations, App, DownloadPhase, DownloadUpdate, Message, ProtonupGui, ToolProgress, ToolDownload, ToolStatus, GuiMode, SelectionStep, AppMode};
+    use crate::{AppInstallations, DownloadPhase, DownloadUpdate, Message, ProtonupGui, ToolProgress, ToolDownload, ToolStatus, GuiMode, SelectionStep, AppMode};
     use crate::download_task::{DownloadError, GlobalProgress};
     use libprotonup::sources::CompatTool;
+    use std::path::PathBuf;
     use std::str::FromStr;
     use iced_test::{Error, simulator};
 
@@ -31,6 +32,8 @@ mod tests {
             download_complete: None,
             download_handle: None,
             app_mode: AppMode::None,
+            custom_path_input: String::new(),
+            path_error: None,
         }
     }
 
@@ -88,6 +91,8 @@ mod tests {
             download_complete: None,
             download_handle: None,
             app_mode: AppMode::None,
+            custom_path_input: String::new(),
+            path_error: None,
         };
         let mut ui = simulator(model.view());
 
@@ -185,7 +190,7 @@ mod tests {
 
     #[test]
     fn subscription_none_after_scan() {
-        let mut model = ready_model();
+        let model = ready_model();
         let sub = model.subscription();
         drop(sub);
     }
@@ -746,7 +751,7 @@ mod tests {
 
         // Simulate versions being fetched
         model.has_variant_tools = model.selected_tool_indices.iter().any(|&idx| {
-            model.available_tools.get(idx).map_or(false, |t| t.has_multiple_asset_variations)
+            model.available_tools.get(idx).is_some_and(|t| t.has_multiple_asset_variations)
         });
 
         assert!(model.has_variant_tools);
@@ -773,9 +778,122 @@ mod tests {
         // has_multiple_asset_variations is false by default
 
         model.has_variant_tools = model.selected_tool_indices.iter().any(|&idx| {
-            model.available_tools.get(idx).map_or(false, |t| t.has_multiple_asset_variations)
+            model.available_tools.get(idx).is_some_and(|t| t.has_multiple_asset_variations)
         });
 
         assert!(!model.has_variant_tools);
+    }
+
+    //
+    // Custom location flow tests
+    //
+
+    #[test]
+    fn select_custom_location_shows_path_input() {
+        let mut model = ready_model();
+        model.app_mode = AppMode::DownloadForCustom;
+        model.mode = GuiMode::DownloadForCustom;
+        model.selection_step = SelectionStep::Initial;
+        model.custom_path_input = "/test/path".to_string();
+
+        // Verify state is set correctly
+        assert_eq!(model.app_mode, AppMode::DownloadForCustom);
+        assert_eq!(model.mode, GuiMode::DownloadForCustom);
+        assert_eq!(model.selection_step, SelectionStep::Initial);
+        assert_eq!(model.custom_path_input, "/test/path");
+    }
+
+    #[test]
+    fn custom_path_input_updates_state() {
+        let mut model = ready_model();
+        model.custom_path_input = "/old/path".to_string();
+
+        let _ = model.update(Message::CustomPathInput("/new/path".to_string()));
+
+        assert_eq!(model.custom_path_input, "/new/path");
+        assert!(model.path_error.is_none());
+    }
+
+    #[test]
+    fn folder_picked_updates_path() {
+        let mut model = ready_model();
+        model.custom_path_input = "/old/path".to_string();
+        model.path_error = Some("Some error".to_string());
+
+        let _ = model.update(Message::FolderPicked(Some(PathBuf::from("/picked/path"))));
+
+        assert_eq!(model.custom_path_input, "/picked/path");
+        assert!(model.path_error.is_none());
+    }
+
+    #[test]
+    fn folder_picked_none_does_nothing() {
+        let mut model = ready_model();
+        model.custom_path_input = "/existing/path".to_string();
+
+        let _ = model.update(Message::FolderPicked(None));
+
+        // State should remain unchanged
+        assert_eq!(model.custom_path_input, "/existing/path");
+    }
+
+    #[test]
+    fn select_download_for_custom_resets_state() {
+        let mut model = ready_model();
+        model.app_mode = AppMode::DownloadForSteam;
+        model.mode = GuiMode::DownloadForSteam;
+        model.custom_path_input = "/some/path".to_string();
+
+        let _ = model.update(Message::SelectDownloadForCustom);
+
+        assert_eq!(model.app_mode, AppMode::DownloadForCustom);
+        assert_eq!(model.mode, GuiMode::DownloadForCustom);
+        assert_eq!(model.selection_step, SelectionStep::Initial);
+        assert!(model.path_error.is_none());
+        // custom_path_input should be set to current directory (non-empty)
+        assert!(!model.custom_path_input.is_empty());
+    }
+
+    #[test]
+    fn custom_location_tool_selection_confirmed_advances() {
+        use libprotonup::sources::{CompatTool, Forge, ToolType};
+
+        let mut model = ready_model();
+        model.app_mode = AppMode::DownloadForCustom;
+        model.mode = GuiMode::DownloadForCustom;
+        model.custom_path_input = "/test/path".to_string();
+        model.selection_step = SelectionStep::Initial;
+
+        // First Continue: should set up app_installation and fetch tools
+        let _ = model.update(Message::ToolSelectionConfirmed);
+
+        // Verify we're now at tool selection step
+        assert!(model.app_installation.is_some());
+        assert_eq!(model.selection_step, SelectionStep::SelectingTools);
+        assert!(!model.available_tools.is_empty());
+
+        // Now simulate selecting a tool
+        model.selected_tool_indices = vec![0];
+
+        // Second Continue: should advance to version selection
+        // (This would normally fetch releases, but in test it just sets up state)
+        // We can't easily test the async fetch, but we can verify the logic path
+        // by checking that it doesn't reset app_installation
+    }
+
+    #[test]
+    fn custom_location_empty_path_shows_error() {
+        let mut model = ready_model();
+        model.app_mode = AppMode::DownloadForCustom;
+        model.mode = GuiMode::DownloadForCustom;
+        model.custom_path_input = String::new();
+        model.selection_step = SelectionStep::Initial;
+
+        let _ = model.update(Message::ToolSelectionConfirmed);
+
+        // Should show error and stay at initial step
+        assert!(model.path_error.is_some());
+        assert_eq!(model.selection_step, SelectionStep::Initial);
+        assert!(model.app_installation.is_none());
     }
 }

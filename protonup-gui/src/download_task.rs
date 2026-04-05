@@ -139,7 +139,7 @@ pub fn run_quick_update(force: bool) -> (Task<DownloadUpdate>, task::Handle) {
             }
         },
         // Transform the final result into DownloadUpdate::Finished
-        |result| DownloadUpdate::Finished(result),
+        DownloadUpdate::Finished,
     )
     .abortable();
 
@@ -157,7 +157,7 @@ pub fn download_selected_tools(
     arch_variant: Option<u8>,
 ) -> (Task<DownloadUpdate>, task::Handle) {
     let progress = Arc::new(Mutex::new(())); // Dummy lock for compatibility
-    let progress_for_sipper = progress.clone();
+    let _progress_for_sipper = progress.clone();
 
     // Create the sipper straw that runs the download logic
     let straw = sipper(async move |mut progress_sender| {
@@ -209,7 +209,7 @@ pub fn download_selected_tools(
                 })
             }
         },
-        |result| DownloadUpdate::Finished(result),
+        DownloadUpdate::Finished,
     )
     .abortable();
 

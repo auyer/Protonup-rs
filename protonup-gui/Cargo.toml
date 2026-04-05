@@ -11,6 +11,7 @@ iced = { version = "0.14", features = ["tokio", "sipper", "image", "canvas", "ad
 iced_futures = { version = "0.14", features = ["tokio"] }
 libprotonup = { path = "../libprotonup", version = "0.11.0" }
 lyon_algorithms = "1.0"
+rfd = "0.15"
 
 tokio = { version = "1.50", features = ["sync"] }
 futures-util = "0.3"
