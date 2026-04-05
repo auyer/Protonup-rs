@@ -63,6 +63,14 @@ impl Forge {
             Forge::Custom(url) => url,
         }
     }
+
+    // A method to get the user-facing url
+    pub fn get_user_url(&self) -> &str {
+        match self {
+            Forge::GitHub => "https://github.com/",
+            Forge::Custom(url) => url,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

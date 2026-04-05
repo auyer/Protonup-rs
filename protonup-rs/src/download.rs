@@ -1,10 +1,9 @@
-use std::str::FromStr;
-
 use anyhow::{Context, Result, anyhow, bail};
 use futures_util::stream::FuturesUnordered;
 use futures_util::{StreamExt, future, stream};
 use indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle};
 use inquire::{Select, Text};
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use tokio::fs;
 use tokio::fs::{File, OpenOptions};
@@ -13,7 +12,6 @@ use tokio::sync::OnceCell;
 
 use libprotonup::{
     apps,
-    constants::DEFAULT_STEAM_TOOL,
     downloads::{self, Download, Release},
     files, hashing,
     sources::{CompatTool, CompatTools},
@@ -161,6 +159,9 @@ pub async fn run_quick_downloads(force: bool, whats_new: bool) -> Result<Vec<Rel
 
     let joins = FuturesUnordered::new();
     let mut releases: Vec<Release> = vec![];
+
+    let mut release_and_compat_refs: Vec<(Release, CompatTool)> = vec![];
+
     for app_inst in found_apps {
         let compat_tool = app_inst.as_app().default_compatibility_tool();
 
@@ -190,6 +191,11 @@ pub async fn run_quick_downloads(force: bool, whats_new: bool) -> Result<Vec<Rel
             continue;
         }
 
+        // if should show release notes, populate this list with the tools to show
+        if whats_new {
+            release_and_compat_refs.push((release.clone(), compat_tool.clone()));
+        }
+
         joins.push(download_validate_unpack(
             release.clone(),
             app_inst,
@@ -200,49 +206,23 @@ pub async fn run_quick_downloads(force: bool, whats_new: bool) -> Result<Vec<Rel
         releases.push(release);
     }
 
-    // Show release notes before downloading if --whats-new was passed
-    const WHATS_NEW_LINES: usize = 40;
-    let default_tool = CompatTool::from_str(DEFAULT_STEAM_TOOL).unwrap();
-
+    // Show what is new for each app being downloaded
     if whats_new {
-        println!();
-        println!("  ┌{}┐", "─".repeat(50));
-        println!("  │ {:^48} │", "Release Notes");
-        println!("  └{}┘", "─".repeat(50));
+        let mut seen_tags = HashSet::new();
 
-        let releases_to_show: Vec<Release> = if releases.is_empty() {
-            match downloads::list_releases(&default_tool).await {
-                Ok(mut release_list) => vec![release_list.remove(0)],
-                Err(e) => {
-                    println!("\n  (could not fetch release notes: {})", e);
-                    println!();
-                    vec![]
-                }
-            }
-        } else {
-            releases.clone()
-        };
+        // filter list to avoid showing the same app tag twice
+        let release_and_compat_refs: Vec<(Release, CompatTool)> = release_and_compat_refs
+            .into_iter()
+            .filter(|(release, _compat)| {
+                // We insert a reference to the tag_name into the HashSet
+                // so we don't have to allocate/clone Strings!
+                seen_tags.insert(release.tag_name.clone())
+            })
+            .collect();
 
-        for release in &releases_to_show {
-            let url = format!(
-                "https://github.com/{}/{}/releases/tag/{}",
-                default_tool.repository_account, default_tool.repository_name, release.tag_name
-            );
-            println!("\n  {}: {}", release.tag_name, url);
-            match &release.body {
-                Some(body) => {
-                    let all_lines: Vec<&str> = body.lines().collect();
-                    let notes = all_lines[..all_lines.len().min(WHATS_NEW_LINES)].join("\n");
-                    if all_lines.len() > WHATS_NEW_LINES {
-                        println!("\n{}\n  ⋯ [truncated]", notes);
-                    } else {
-                        println!("\n{}", notes);
-                    }
-                }
-                None => println!("\n  (no release notes)"),
-            }
+        for (release, compat_tool) in release_and_compat_refs {
+            show_whatsnew(&release, &compat_tool).await;
         }
-        println!();
     }
 
     joins
@@ -256,6 +236,42 @@ pub async fn run_quick_downloads(force: bool, whats_new: bool) -> Result<Vec<Rel
     multi_progress.clear().unwrap();
 
     Ok(releases)
+}
+
+async fn show_whatsnew(release: &Release, compat_tool: &CompatTool) {
+    // Show release notes before downloading if --whats-new was passed
+    const WHATS_NEW_LINES: usize = 40;
+
+    println!();
+    println!("  ┌{}┐", "─".repeat(50));
+    println!("  │ {:^48} │", "Release Notes");
+    println!("  └{}┘", "─".repeat(50));
+
+    // if release.body.is_none() || release.body.as_ref().is_some_and(|s| s.is_empty()) {
+    //     release.body = Some("\n  (could not fetch release notes)".to_string());
+    // }
+
+    let url = format!(
+        "{}{}/{}/releases/tag/{}",
+        compat_tool.forge.get_user_url(),
+        compat_tool.repository_account,
+        compat_tool.repository_name,
+        release.tag_name
+    );
+    println!("\n  {}: {}", release.tag_name, url);
+    match &release.body {
+        Some(body) => {
+            let all_lines: Vec<&str> = body.lines().collect();
+            let notes = all_lines[..all_lines.len().min(WHATS_NEW_LINES)].join("\n");
+            if all_lines.len() > WHATS_NEW_LINES {
+                println!("\n{}\n  ⋯ [truncated]", notes);
+            } else {
+                println!("\n{}", notes);
+            }
+        }
+        None => println!("\n  (no release notes)"),
+    }
+    println!();
 }
 
 /// Start the Download for the selected app
