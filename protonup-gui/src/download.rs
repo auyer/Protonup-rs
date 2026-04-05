@@ -1,5 +1,5 @@
 //! GUI-adapted download module that wraps libprotonup with progress reporting.
-//! 
+//!
 //! This module provides functions that report progress through callback functions,
 //! which are then sent through the sipper's progress channel.
 
@@ -45,13 +45,7 @@ pub struct ProgressWriter<W, F> {
 }
 
 impl<W, F> ProgressWriter<W, F> {
-    pub fn new(
-        inner: W,
-        send_progress: F,
-        total: u64,
-        tool: String,
-        phase: DownloadPhase,
-    ) -> Self {
+    pub fn new(inner: W, send_progress: F, total: u64, tool: String, phase: DownloadPhase) -> Self {
         Self {
             inner,
             send_progress,
@@ -118,13 +112,7 @@ pub struct ProgressReader<R, F> {
 }
 
 impl<R, F> ProgressReader<R, F> {
-    pub fn new(
-        inner: R,
-        send_progress: F,
-        total: u64,
-        tool: String,
-        phase: DownloadPhase,
-    ) -> Self {
+    pub fn new(inner: R, send_progress: F, total: u64, tool: String, phase: DownloadPhase) -> Self {
         Self {
             inner,
             send_progress,
@@ -173,10 +161,7 @@ impl<R: AsyncRead + Unpin, F: Fn(SipProgress) + Send + Unpin> AsyncRead for Prog
 }
 
 /// Main entry point: runs quick downloads with progress reporting through callback
-pub async fn run_with_progress_callback<F>(
-    send_progress: F,
-    force: bool,
-) -> Result<Vec<Release>>
+pub async fn run_with_progress_callback<F>(send_progress: F, force: bool) -> Result<Vec<Release>>
 where
     F: Fn(SipProgress) + Send + Sync + Clone + Unpin + 'static,
 {
@@ -258,9 +243,10 @@ where
         // Handle tools with multiple architecture variants
         let download = if compat_tool.has_multiple_asset_variations {
             let variants = release.get_all_download_variants(app_inst, &compat_tool);
-            variants.into_iter().next().unwrap_or_else(|| {
-                release.get_download_info(app_inst, &compat_tool)
-            })
+            variants
+                .into_iter()
+                .next()
+                .unwrap_or_else(|| release.get_download_info(app_inst, &compat_tool))
         } else {
             release.get_download_info(app_inst, &compat_tool)
         };
@@ -272,7 +258,10 @@ where
             send_progress(SipProgress::new(
                 DownloadPhase::Complete,
                 &tool_name,
-                &format!("{} {} already installed, skipping", tool_name, download.version),
+                &format!(
+                    "{} {} already installed, skipping",
+                    tool_name, download.version
+                ),
                 100.0,
             ));
             continue;
@@ -286,7 +275,10 @@ where
     send_progress(SipProgress::new(
         DownloadPhase::Downloading,
         "",
-        &format!("Downloading {} tools in parallel...", downloads_to_run.len()),
+        &format!(
+            "Downloading {} tools in parallel...",
+            downloads_to_run.len()
+        ),
         20.0,
     ));
 
@@ -304,7 +296,8 @@ where
                 compat_tool,
                 progress_callback,
                 display_name.clone(),
-            ).await;
+            )
+            .await;
             (display_name, result)
         }));
     }
@@ -340,7 +333,11 @@ where
     send_progress(SipProgress::new(
         DownloadPhase::Complete,
         "",
-        &format!("Done! Installed {}/{} tools.", success_count, releases.len()),
+        &format!(
+            "Done! Installed {}/{} tools.",
+            success_count,
+            releases.len()
+        ),
         100.0,
     ));
 
@@ -353,7 +350,7 @@ async fn download_validate_unpack_with_progress<F>(
     for_app: apps::AppInstallations,
     compat_tool: CompatTool,
     send_progress: F,
-    display_name: String,  // e.g., "GEProton GE-Proton9-27"
+    display_name: String, // e.g., "GEProton GE-Proton9-27"
 ) -> Result<()>
 where
     F: Fn(SipProgress) + Send + Sync + Clone + Unpin + 'static,
@@ -369,7 +366,8 @@ where
     ));
 
     // Download file
-    let file = download_file_with_progress(&download, send_progress.clone(), display_name.clone()).await?;
+    let file =
+        download_file_with_progress(&download, send_progress.clone(), display_name.clone()).await?;
 
     // Phase: Validate
     send_progress(SipProgress::new(
@@ -390,7 +388,8 @@ where
             sum_type: hash_sum_info.sum_type.clone(),
         };
 
-        validate_file_with_progress(&download.file_name, &file, hash_sum, send_progress.clone()).await?;
+        validate_file_with_progress(&download.file_name, &file, hash_sum, send_progress.clone())
+            .await?;
     }
 
     // Phase: Unpack
@@ -405,16 +404,20 @@ where
     let install_name = compat_tool.installation_name(&download.version);
     let install_path = install_dir.join(&install_name);
     if files::check_if_exists(&install_path).await {
-        fs::remove_dir_all(&install_path)
-            .await
-            .with_context(|| format!("Error removing existing install at {}", install_path.display()))?;
+        fs::remove_dir_all(&install_path).await.with_context(|| {
+            format!(
+                "Error removing existing install at {}",
+                install_path.display()
+            )
+        })?;
     }
 
     // Unpack
     let file_metadata = fs::metadata(&file).await?;
 
     // Open the compressed file
-    let compressed_file = File::open(&file).await
+    let compressed_file = File::open(&file)
+        .await
         .with_context(|| format!("Error opening compressed file {}", file.display()))?;
 
     // Wrap the file with ProgressReader to track compressed bytes read
@@ -577,11 +580,14 @@ where
                     variants
                         .into_iter()
                         .find(|d| d.file_name.contains(variant_name))
-                        .unwrap_or_else(|| release.get_download_info(&app_installation, compat_tool))
+                        .unwrap_or_else(|| {
+                            release.get_download_info(&app_installation, compat_tool)
+                        })
                 } else {
                     // Default to v2 or first available
-                    architecture_variants::select_default_variant(&variants)
-                        .unwrap_or_else(|| release.get_download_info(&app_installation, compat_tool))
+                    architecture_variants::select_default_variant(&variants).unwrap_or_else(|| {
+                        release.get_download_info(&app_installation, compat_tool)
+                    })
                 }
             } else {
                 release.get_download_info(&app_installation, compat_tool)
@@ -591,9 +597,9 @@ where
             let display_name = format!("{} {}", compat_tool.name, release.tag_name);
             let mut download_path = PathBuf::from(&app_installation.default_install_dir().as_str());
             download_path.push(compat_tool.installation_name(&download.version));
-            
-            if !force_reinstall_names.contains(&display_name) 
-                && files::check_if_exists(&download_path.clone()).await 
+
+            if !force_reinstall_names.contains(&display_name)
+                && files::check_if_exists(&download_path.clone()).await
             {
                 send_progress(SipProgress::new(
                     DownloadPhase::Complete,
@@ -605,7 +611,12 @@ where
             }
 
             releases.push(release.clone());
-            downloads_to_run.push((download, app_installation.clone(), compat_tool.clone(), release.clone()));
+            downloads_to_run.push((
+                download,
+                app_installation.clone(),
+                compat_tool.clone(),
+                release.clone(),
+            ));
         }
     }
 
@@ -621,7 +632,10 @@ where
     // Phase 2: Run all downloads in parallel using tokio::spawn
     send_progress(SipProgress::global(
         DownloadPhase::Downloading,
-        &format!("Downloading {} tools in parallel...", downloads_to_run.len()),
+        &format!(
+            "Downloading {} tools in parallel...",
+            downloads_to_run.len()
+        ),
         20.0,
     ));
 
@@ -639,7 +653,8 @@ where
                 compat_tool,
                 progress_callback,
                 display_name.clone(),
-            ).await;
+            )
+            .await;
             (display_name, result)
         }));
     }
@@ -674,7 +689,11 @@ where
     // Mark complete
     send_progress(SipProgress::global(
         DownloadPhase::Complete,
-        &format!("Done! Installed {}/{} tools.", success_count, releases.len()),
+        &format!(
+            "Done! Installed {}/{} tools.",
+            success_count,
+            releases.len()
+        ),
         100.0,
     ));
 

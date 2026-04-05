@@ -89,14 +89,12 @@ pub fn extract_variants(downloads: &[Download]) -> Vec<ArchitectureVariant> {
         .collect();
 
     // Sort by variant priority (x86_64 < v2 < v3 < v4)
-    variants.sort_by_key(|v| {
-        match v.name.as_str() {
-            "x86_64" => 1,
-            "x86_64_v2" => 2,
-            "x86_64_v3" => 3,
-            "x86_64_v4" => 4,
-            _ => 99,
-        }
+    variants.sort_by_key(|v| match v.name.as_str() {
+        "x86_64" => 1,
+        "x86_64_v2" => 2,
+        "x86_64_v3" => 3,
+        "x86_64_v4" => 4,
+        _ => 99,
     });
 
     variants
@@ -121,9 +119,18 @@ mod tests {
     #[test]
     fn test_get_architecture_variant() {
         assert_eq!(get_architecture_variant("proton-cachyos-x86_64.tar.gz"), 1);
-        assert_eq!(get_architecture_variant("proton-cachyos-x86_64_v2.tar.gz"), 2);
-        assert_eq!(get_architecture_variant("proton-cachyos-x86_64_v3.tar.gz"), 3);
-        assert_eq!(get_architecture_variant("proton-cachyos-x86_64_v4.tar.gz"), 4);
+        assert_eq!(
+            get_architecture_variant("proton-cachyos-x86_64_v2.tar.gz"),
+            2
+        );
+        assert_eq!(
+            get_architecture_variant("proton-cachyos-x86_64_v3.tar.gz"),
+            3
+        );
+        assert_eq!(
+            get_architecture_variant("proton-cachyos-x86_64_v4.tar.gz"),
+            4
+        );
         assert_eq!(get_architecture_variant("some-other-file.tar.gz"), 0);
     }
 

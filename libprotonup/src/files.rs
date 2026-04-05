@@ -79,10 +79,7 @@ impl<R: AsyncBufRead + Unpin> Decompressor<R> {
         } else if path_str.ends_with("tar.zst") || path_str.ends_with("tar.zstd") {
             Ok(Decompressor::Zstd(ZstdDecoder::new(reader)))
         } else {
-            Err(Error::msg(format!(
-                "unsupported compression: {}",
-                path_str
-            )))
+            Err(Error::msg(format!("unsupported compression: {}", path_str)))
         }
     }
 }
@@ -432,4 +429,3 @@ mod test {
         assert_eq!(fs::read_to_string(file2).unwrap(), "more content");
     }
 }
-

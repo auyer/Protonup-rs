@@ -6,8 +6,8 @@
 use anyhow::{Result, anyhow};
 use inquire::Select;
 
-use libprotonup::downloads::Download;
 use libprotonup::architecture_variants;
+use libprotonup::downloads::Download;
 
 /// Menu for selecting proton cachyos architecture variant.
 ///
@@ -22,16 +22,14 @@ pub fn select_architecture_variant(
         return Err(anyhow!("No architecture variants available"));
     }
 
-    if quick_mode {
-        if let Some(default) = architecture_variants::select_default_variant(&variants) {
-            println!(
-                "Selected {} by default",
-                architecture_variants::get_variant_name(
-                    architecture_variants::get_architecture_variant(&default.file_name)
-                )
-            );
-            return Ok(default);
-        }
+    if quick_mode && let Some(default) = architecture_variants::select_default_variant(&variants) {
+        println!(
+            "Selected {} by default",
+            architecture_variants::get_variant_name(
+                architecture_variants::get_architecture_variant(&default.file_name)
+            )
+        );
+        return Ok(default);
     }
 
     // Extract and sort variants using libprotonup

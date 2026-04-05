@@ -10,8 +10,8 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use libprotonup::apps::AppInstallations;
-use libprotonup::sources::CompatTool;
 use libprotonup::downloads::Release;
+use libprotonup::sources::CompatTool;
 
 use crate::download::{self, DownloadPhase};
 
@@ -43,7 +43,7 @@ pub struct GlobalProgress {
 /// Internal progress type for sipper
 #[derive(Debug, Clone)]
 pub(crate) struct SipProgress {
-    pub tool_name: Option<String>,  // None = global progress
+    pub tool_name: Option<String>, // None = global progress
     pub phase: DownloadPhase,
     pub percent: f32,
     pub status_message: String,
@@ -54,11 +54,15 @@ impl SipProgress {
         Self {
             percent,
             phase,
-            tool_name: if tool_name.is_empty() { None } else { Some(tool_name.to_string()) },
+            tool_name: if tool_name.is_empty() {
+                None
+            } else {
+                Some(tool_name.to_string())
+            },
             status_message: status_message.to_string(),
         }
     }
-    
+
     pub fn global(phase: DownloadPhase, status_message: &str, percent: f32) -> Self {
         Self {
             percent,
@@ -87,25 +91,26 @@ pub fn run_quick_update(force: bool) -> (Task<DownloadUpdate>, task::Handle) {
         // Run the actual download logic with progress callback
         // We use a synchronous channel to forward progress from the callback to the sipper
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<SipProgress>();
-        
+
         // Spawn a task that forwards progress from the channel to the sipper
         let forward_task = tokio::spawn(async move {
             while let Some(progress) = rx.recv().await {
                 let _ = progress_sender.send(progress).await;
             }
         });
-        
+
         // Run the download with the channel sender as callback
         let result = download::run_with_progress_callback(
             move |progress: SipProgress| {
                 let _ = tx.send(progress);
             },
             force,
-        ).await;
-        
+        )
+        .await;
+
         // Clean up the forward task
         forward_task.abort();
-        
+
         // Map result to Ok/Err
         match result {
             Ok(releases) => {
@@ -115,7 +120,7 @@ pub fn run_quick_update(force: bool) -> (Task<DownloadUpdate>, task::Handle) {
             Err(e) => Err(DownloadError::IoError(e.to_string())),
         }
     });
-    
+
     // Wrap in Task::sip with progress and result mapping
     let (task, handle) = Task::sip(
         straw,
@@ -178,7 +183,8 @@ pub fn download_selected_tools(
             },
             force_reinstall_names,
             arch_variant,
-        ).await;
+        )
+        .await;
 
         forward_task.abort();
 
@@ -190,7 +196,7 @@ pub fn download_selected_tools(
             Err(e) => Err(DownloadError::IoError(e.to_string())),
         }
     });
-    
+
     let (task, handle) = Task::sip(
         straw,
         |sip_progress: SipProgress| {
@@ -278,11 +284,7 @@ mod tests {
 
     #[test]
     fn sip_progress_global_is_clone() {
-        let p = SipProgress::global(
-            DownloadPhase::FetchingReleases,
-            "Fetching...",
-            10.0,
-        );
+        let p = SipProgress::global(DownloadPhase::FetchingReleases, "Fetching...", 10.0);
         let _p2 = p.clone();
     }
 }

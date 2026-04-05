@@ -451,14 +451,9 @@ async fn download_validate_unpack_with_download(
     let decompressor = files::Decompressor::from_reader(buf_reader, &path_str)
         .with_context(|| format!("Error checking file type of {}", file.display()))?;
 
-    files::unpack_file(
-        &compat_tool,
-        &download,
-        decompressor,
-        &install_dir,
-    )
-    .await
-    .with_context(|| format!("Error unpacking {}", file.display()))?;
+    files::unpack_file(&compat_tool, &download, decompressor, &install_dir)
+        .await
+        .with_context(|| format!("Error unpacking {}", file.display()))?;
 
     unpack_progress_bar.set_style(get_message_bar_style().await);
     unpack_progress_bar.finish_with_message(format!(
