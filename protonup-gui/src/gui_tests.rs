@@ -6,7 +6,6 @@ mod tests {
         SelectionStep, ToolDownload, ToolProgress, ToolStatus,
     };
     use iced_test::{simulator, Error};
-    use libprotonup::downloads::Release;
     use libprotonup::sources::CompatTool;
     use std::path::PathBuf;
     use std::str::FromStr;
@@ -150,13 +149,13 @@ mod tests {
     }
 
     #[test]
-    fn tools_fetched_does_not_crash() {
+    fn tool_selected_does_not_crash() {
         let mut model = ProtonupGui::default();
 
-        let _ = model.update(Message::ToolsFetched(vec![]));
+        let _ = model.update(Message::ToolSelected(0));
 
-        // Should not crash
-        assert!(true);
+        // Should not crash, and tool should be selected
+        assert_eq!(model.selected_tool_indices, vec![0]);
     }
 
     #[test]
@@ -173,21 +172,12 @@ mod tests {
         let mut model = ready_model();
         model.mode = GuiMode::DownloadForSteam;
         model.selection_step = SelectionStep::SelectingTools;
+        model.download_started = true;
 
         let _ = model.update(Message::BackToInitial);
 
         assert_eq!(model.mode, GuiMode::Initial);
         assert_eq!(model.selection_step, SelectionStep::Initial);
-    }
-
-    #[test]
-    fn restart_resets_and_rescans() {
-        let mut model = ready_model();
-        model.download_started = true;
-
-        let _ = model.update(Message::Restart);
-
-        assert_eq!(model.mode, GuiMode::Initial);
         assert!(!model.download_started);
     }
 
@@ -217,7 +207,7 @@ mod tests {
             "Steam".to_string(),
         ));
 
-        model.update(Message::DownloadUpdate(DownloadUpdate::ToolProgress(
+        let _ = model.update(Message::DownloadUpdate(DownloadUpdate::ToolProgress(
             ToolProgress {
                 tool_name: "GEProton".to_string(),
                 phase: DownloadPhase::Downloading,
@@ -234,7 +224,7 @@ mod tests {
     fn global_progress_update() {
         let mut model = ProtonupGui::default();
 
-        model.update(Message::DownloadUpdate(DownloadUpdate::GlobalProgress(
+        let _ = model.update(Message::DownloadUpdate(DownloadUpdate::GlobalProgress(
             GlobalProgress {
                 phase: DownloadPhase::Downloading,
                 status_message: "Downloading tools...".to_string(),
@@ -250,7 +240,7 @@ mod tests {
     fn download_finished_success() {
         let mut model = ProtonupGui::default();
 
-        model.update(Message::DownloadUpdate(DownloadUpdate::Finished(Ok(vec![
+        let _ = model.update(Message::DownloadUpdate(DownloadUpdate::Finished(Ok(vec![
             "GE-Proton9-27".to_string(),
         ]))));
 
@@ -264,7 +254,7 @@ mod tests {
     fn download_finished_error() {
         let mut model = ProtonupGui::default();
 
-        model.update(Message::DownloadUpdate(DownloadUpdate::Finished(Err(
+        let _ = model.update(Message::DownloadUpdate(DownloadUpdate::Finished(Err(
             DownloadError::IoError("test error".to_string()),
         ))));
 
@@ -404,7 +394,7 @@ mod tests {
         ));
 
         // Simulate download progress with matching name
-        model.update(Message::DownloadUpdate(DownloadUpdate::ToolProgress(
+        let _ = model.update(Message::DownloadUpdate(DownloadUpdate::ToolProgress(
             ToolProgress {
                 tool_name: "GEProton GE-Proton9-27".to_string(),
                 phase: DownloadPhase::Downloading,
@@ -427,7 +417,7 @@ mod tests {
         ));
 
         // Simulate progress with WRONG name (just version, like the bug)
-        model.update(Message::DownloadUpdate(DownloadUpdate::ToolProgress(
+        let _ = model.update(Message::DownloadUpdate(DownloadUpdate::ToolProgress(
             ToolProgress {
                 tool_name: "GE-Proton9-27".to_string(), // WRONG - missing tool name prefix
                 phase: DownloadPhase::Downloading,
@@ -450,7 +440,7 @@ mod tests {
         ));
 
         // Simulate validation progress
-        model.update(Message::DownloadUpdate(DownloadUpdate::ToolProgress(
+        let _ = model.update(Message::DownloadUpdate(DownloadUpdate::ToolProgress(
             ToolProgress {
                 tool_name: "GEProton GE-Proton9-27".to_string(),
                 phase: DownloadPhase::Validating,
@@ -472,7 +462,7 @@ mod tests {
         ));
 
         // Simulate unpacking progress
-        model.update(Message::DownloadUpdate(DownloadUpdate::ToolProgress(
+        let _ = model.update(Message::DownloadUpdate(DownloadUpdate::ToolProgress(
             ToolProgress {
                 tool_name: "GEProton GE-Proton9-27".to_string(),
                 phase: DownloadPhase::Unpacking,
@@ -494,7 +484,7 @@ mod tests {
         ));
 
         // Simulate completion
-        model.update(Message::DownloadUpdate(DownloadUpdate::ToolProgress(
+        let _ = model.update(Message::DownloadUpdate(DownloadUpdate::ToolProgress(
             ToolProgress {
                 tool_name: "GEProton GE-Proton9-27".to_string(),
                 phase: DownloadPhase::Complete,
@@ -504,7 +494,7 @@ mod tests {
         )));
 
         assert_eq!(model.tools[0].progress, 100.0);
-        assert_eq!(model.tools[0].status, ToolStatus::Complete);
+        assert_eq!(model.tools[0].status, ToolStatus::_Complete);
     }
 
     #[test]
@@ -520,7 +510,7 @@ mod tests {
         ));
 
         // Update first tool
-        model.update(Message::DownloadUpdate(DownloadUpdate::ToolProgress(
+        let _ = model.update(Message::DownloadUpdate(DownloadUpdate::ToolProgress(
             ToolProgress {
                 tool_name: "GEProton GE-Proton9-27".to_string(),
                 phase: DownloadPhase::Downloading,
@@ -530,7 +520,7 @@ mod tests {
         )));
 
         // Update second tool
-        model.update(Message::DownloadUpdate(DownloadUpdate::ToolProgress(
+        let _ = model.update(Message::DownloadUpdate(DownloadUpdate::ToolProgress(
             ToolProgress {
                 tool_name: "GEProton GE-Proton9-26".to_string(),
                 phase: DownloadPhase::Validating,
@@ -552,11 +542,13 @@ mod tests {
 
     #[test]
     fn toggle_reinstall_adds_and_removes() {
-        let mut model = ProtonupGui::default();
-        model.already_installed_tools = vec![
-            ToolDownload::new("GEProton GE-Proton9-27".to_string(), "Steam".to_string()),
-            ToolDownload::new("GEProton GE-Proton9-26".to_string(), "Steam".to_string()),
-        ];
+        let mut model = ProtonupGui {
+            already_installed_tools: vec![
+                ToolDownload::new("GEProton GE-Proton9-27".to_string(), "Steam".to_string()),
+                ToolDownload::new("GEProton GE-Proton9-26".to_string(), "Steam".to_string()),
+            ],
+            ..Default::default()
+        };
 
         // Toggle first tool
         let _ = model.update(Message::ToggleReinstall(0));

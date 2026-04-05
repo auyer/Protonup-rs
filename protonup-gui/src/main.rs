@@ -27,7 +27,7 @@ use circular::Circular;
 mod download;
 mod download_task;
 use download::DownloadPhase;
-use download_task::{DownloadUpdate, ToolProgress};
+use download_task::{DownloadError, DownloadUpdate, ToolProgress};
 
 #[cfg(test)]
 mod gui_tests;
@@ -44,7 +44,6 @@ enum Message {
     SelectDownloadForLutris,
 
     // Tool selection
-    ToolsFetched(Vec<CompatTool>), // Unused, kept for compatibility
     AppInstallationDetected(AppInstallations),
     ToolSelected(usize),
     ToolSelectionConfirmed,
@@ -68,7 +67,6 @@ enum Message {
     // Navigation
     BackToInitial,
     BackToToolSelection,
-    Restart,
 
     // Errors
     SelectionError(String),
@@ -131,7 +129,6 @@ enum SelectionStep {
     SelectingArchitecture, // NEW: Show architecture variant selection
     ConfirmReinstall,
     Downloading,
-    Complete,
 }
 
 /// Tracks the state of a single tool download
@@ -139,7 +136,6 @@ enum SelectionStep {
 struct ToolDownload {
     name: String,
     app_target: String,
-    version: Option<String>,
     phase: DownloadPhase,
     progress: f32,
     status: ToolStatus,
@@ -152,7 +148,7 @@ enum ToolStatus {
     Downloading,
     Validating,
     Unpacking,
-    Complete,
+    _Complete,
     Error(String),
 }
 
@@ -161,7 +157,6 @@ impl ToolDownload {
         Self {
             name,
             app_target,
-            version: None,
             phase: DownloadPhase::DetectingApps,
             progress: 0.0,
             status: ToolStatus::Pending,
@@ -186,7 +181,7 @@ impl ToolDownload {
                 self.status = ToolStatus::Unpacking;
             }
             DownloadPhase::Complete => {
-                self.status = ToolStatus::Complete;
+                self.status = ToolStatus::_Complete;
             }
             DownloadPhase::Error => {
                 self.status = ToolStatus::Error(progress.status_message.clone());
@@ -204,7 +199,7 @@ impl ToolDownload {
                 format!("{} - Validating... {:.1}%", self.name, self.progress)
             }
             ToolStatus::Unpacking => format!("{} - Installing... {:.1}%", self.name, self.progress),
-            ToolStatus::Complete => format!("{} - ✓ Installed", self.name),
+            ToolStatus::_Complete => format!("{} - ✓ Installed", self.name),
             ToolStatus::Error(msg) => format!("{} - ✗ Error: {}", self.name, msg),
         }
     }
@@ -225,7 +220,6 @@ struct AppInstallationView {
     selected: bool,
     versions: Vec<InstalledVersion>,
     loading: bool,
-    error: Option<String>,
 }
 
 #[derive(Debug, Default)]
@@ -357,11 +351,6 @@ impl ProtonupGui {
                             .join(", ")
                     );
                 }
-                Task::none()
-            }
-
-            Message::ToolsFetched(_tools) => {
-                // This message is no longer used - tools are fetched via AppInstallationDetected
                 Task::none()
             }
 
@@ -616,9 +605,10 @@ impl ProtonupGui {
                             self.download_complete = Some(Ok(versions));
                         }
                         Err(e) => {
+                            let DownloadError::IoError(error_msg) = e;
                             self.global_phase = DownloadPhase::Error;
-                            self.global_status = format!("✗ Error: {:?}", e);
-                            self.download_complete = Some(Err(format!("{:?}", e)));
+                            self.global_status = format!("✗ Error: {}", error_msg);
+                            self.download_complete = Some(Err(error_msg));
                         }
                     }
                     Task::none()
@@ -649,12 +639,6 @@ impl ProtonupGui {
                 self.available_versions.clear();
                 self.selected_tool = None;
                 Task::none()
-            }
-
-            Message::Restart => {
-                self.reset_to_initial();
-                self.app_mode = AppMode::None;
-                Task::perform(list_installed_apps(), Message::AppsScanned)
             }
 
             Message::SelectionError(e) => {
@@ -724,7 +708,6 @@ impl ProtonupGui {
                         selected: true,
                         versions: vec![],
                         loading: true,
-                        error: None,
                     })
                     .collect();
 
@@ -1186,34 +1169,6 @@ impl ProtonupGui {
             .into()
     }
 
-    fn view_initial_buttons(&self) -> Element<'_, Message> {
-        let mut row = Row::new().spacing(10);
-
-        if !self.scan_complete {
-            row = row.push(text("Scanning...").size(14));
-        } else if self.detected_apps.is_empty() {
-            row = row.push(text("No apps detected").color([1.0, 0.3, 0.3]).size(14));
-        } else {
-            row = row.push(
-                button(text("Quick Update").size(14))
-                    .on_press(Message::SelectQuickUpdate)
-                    .padding(10),
-            );
-            row = row.push(
-                button(text("Download for Steam").size(14))
-                    .on_press(Message::SelectDownloadForSteam)
-                    .padding(10),
-            );
-            row = row.push(
-                button(text("Download for Lutris").size(14))
-                    .on_press(Message::SelectDownloadForLutris)
-                    .padding(10),
-            );
-        }
-
-        row.into()
-    }
-
     fn view_quick_update(&self) -> Element<'_, Message> {
         Column::new()
             .spacing(10)
@@ -1238,15 +1193,6 @@ impl ProtonupGui {
                 // Spinner is shown in sidebar, progress bars in main content
                 text("Preparing downloads...").size(14).into()
             }
-            SelectionStep::Complete => Column::new()
-                .spacing(10)
-                .push(text("Download complete!").size(14))
-                .push(
-                    button(text("Back to Main Menu").size(14))
-                        .on_press(Message::BackToInitial)
-                        .padding(10),
-                )
-                .into(),
         }
     }
 
@@ -1550,7 +1496,7 @@ impl ProtonupGui {
 
         for tool in &self.tools {
             let status_color = match &tool.status {
-                ToolStatus::Complete => [0.3, 1.0, 0.3],
+                ToolStatus::_Complete => [0.3, 1.0, 0.3],
                 ToolStatus::Error(_) => [1.0, 0.3, 0.3],
                 _ => [1.0, 1.0, 1.0],
             };

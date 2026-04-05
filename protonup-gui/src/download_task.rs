@@ -77,9 +77,6 @@ impl SipProgress {
 #[derive(Debug, Clone)]
 pub enum DownloadError {
     IoError(String),
-    ValidationError(String),
-    UnpackError(String),
-    NoAppsFound,
 }
 
 /// Creates a streaming task that runs quick downloads and reports progress
