@@ -3748,21 +3748,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "protonup-gui"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "futures-util",
- "iced",
- "iced_futures",
- "iced_test",
- "libprotonup",
- "lyon_algorithms",
- "rfd",
- "tokio",
-]
-
-[[package]]
 name = "protonup-rs"
 version = "0.11.0"
 dependencies = [
@@ -3773,6 +3758,21 @@ dependencies = [
  "indicatif",
  "inquire",
  "libprotonup",
+ "tokio",
+]
+
+[[package]]
+name = "protonup-rsui"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "futures-util",
+ "iced",
+ "iced_futures",
+ "iced_test",
+ "libprotonup",
+ "lyon_algorithms",
+ "rfd",
  "tokio",
 ]
 
