@@ -195,7 +195,7 @@ pub async fn run_cli_mode(
         releases
             .iter()
             .map(|release| {
-                let variants = release.get_all_download_variants(&app_inst, &compat_tool);
+                let variants = release.get_all_download_variants(&compat_tool);
                 architecture_variants::select_architecture_variant(
                     &release.tag_name,
                     variants,
@@ -210,7 +210,7 @@ pub async fn run_cli_mode(
     } else {
         releases
             .iter()
-            .map(|release| release.get_download_info(&app_inst, &compat_tool))
+            .map(|release| release.get_download_info(&compat_tool))
             .collect()
     };
 

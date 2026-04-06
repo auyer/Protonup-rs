@@ -157,17 +157,29 @@ pub async fn run_quick_downloads(force: bool, whats_new: bool) -> Result<Vec<Rel
 
     let multi_progress = MultiProgress::with_draw_target(ProgressDrawTarget::stderr_with_hz(20));
 
+    // Group apps by their default compatibility tool
+    let mut tool_to_apps: std::collections::HashMap<
+        String,
+        (CompatTool, Vec<apps::AppInstallations>),
+    > = std::collections::HashMap::new();
+
+    for app_inst in &found_apps {
+        let compat_tool = app_inst.as_app().default_compatibility_tool();
+        let tool_name = compat_tool.name.clone();
+        tool_to_apps
+            .entry(tool_name)
+            .or_insert_with(|| (compat_tool, Vec::new()))
+            .1
+            .push(app_inst.clone());
+    }
+
     let joins = FuturesUnordered::new();
     let mut releases: Vec<Release> = vec![];
-
     let mut release_and_compat_refs: Vec<(Release, CompatTool)> = vec![];
 
-    for app_inst in found_apps {
-        let compat_tool = app_inst.as_app().default_compatibility_tool();
-
+    for (_, (compat_tool, apps_for_tool)) in tool_to_apps {
         // Get the latest Download info for the compat_tool
         let release = match downloads::list_releases(&compat_tool).await {
-            // Get the Download info from the first item on the list, the latest version
             Ok(mut release_list) => release_list.remove(0),
             Err(e) => {
                 eprintln!(
@@ -179,15 +191,24 @@ pub async fn run_quick_downloads(force: bool, whats_new: bool) -> Result<Vec<Rel
 
         // Handle tools with multiple architecture variants
         let download = if compat_tool.has_multiple_asset_variations {
-            let variants = release.get_all_download_variants(&app_inst, &compat_tool);
+            let variants = release.get_all_download_variants(&compat_tool);
             architecture_variants::select_architecture_variant(&release.tag_name, variants, true)?
         } else {
-            release.get_download_info(&app_inst, &compat_tool)
+            release.get_download_info(&compat_tool)
         };
 
-        let mut download_path = PathBuf::from(&app_inst.default_install_dir().as_str());
-        download_path.push(compat_tool.installation_name(&download.version));
-        if files::check_if_exists(&download_path.clone()).await && !force {
+        // Check if any app in the group needs installation
+        let mut needs_install = false;
+        for app_inst in &apps_for_tool {
+            let mut download_path = PathBuf::from(&app_inst.default_install_dir().as_str());
+            download_path.push(compat_tool.installation_name(&download.version));
+            if !files::check_if_exists(&download_path).await || force {
+                needs_install = true;
+                break;
+            }
+        }
+
+        if !needs_install {
             continue;
         }
 
@@ -198,7 +219,7 @@ pub async fn run_quick_downloads(force: bool, whats_new: bool) -> Result<Vec<Rel
 
         joins.push(download_validate_unpack(
             release.clone(),
-            app_inst,
+            apps_for_tool,
             compat_tool,
             multi_progress.clone(),
         ));
@@ -386,7 +407,7 @@ pub async fn download_to_selected_app(app: Option<apps::App>) -> Result<Vec<Rele
         releases
             .iter()
             .map(|release| {
-                let variants = release.get_all_download_variants(&app_inst, &selected_tool);
+                let variants = release.get_all_download_variants(&selected_tool);
 
                 architecture_variants::select_architecture_variant(
                     &release.tag_name,
@@ -399,7 +420,7 @@ pub async fn download_to_selected_app(app: Option<apps::App>) -> Result<Vec<Rele
     } else {
         releases
             .iter()
-            .map(|release| release.get_download_info(&app_inst, &selected_tool))
+            .map(|release| release.get_download_info(&selected_tool))
             .collect()
     };
 
@@ -409,11 +430,11 @@ pub async fn download_to_selected_app(app: Option<apps::App>) -> Result<Vec<Rele
         // let release = release.clone();
         let progress = multi_progress.clone();
         let tool = selected_tool.clone();
-        let app_inst = app_inst.clone();
+        let for_apps = vec![app_inst.clone()];
 
         // Handle tools with multiple architecture variants
         tokio::spawn(async move {
-            download_validate_unpack_with_download(download.clone(), app_inst, tool, progress).await
+            download_validate_unpack_with_download(download.clone(), for_apps, tool, progress).await
         })
     });
 
@@ -439,21 +460,21 @@ pub async fn download_to_selected_app(app: Option<apps::App>) -> Result<Vec<Rele
 
 async fn download_validate_unpack(
     release: Release,
-    for_app: apps::AppInstallations,
+    for_apps: Vec<apps::AppInstallations>,
     compat_tool: CompatTool,
     multi_progress: MultiProgress,
 ) -> Result<()> {
-    let download = release.get_download_info(&for_app, &compat_tool);
-    download_validate_unpack_with_download(download, for_app, compat_tool, multi_progress).await
+    let download = release.get_download_info(&compat_tool);
+    download_validate_unpack_with_download(download, for_apps, compat_tool, multi_progress).await
 }
 
 async fn download_validate_unpack_with_download(
     download: Download,
-    for_app: apps::AppInstallations,
+    for_apps: Vec<apps::AppInstallations>,
     compat_tool: CompatTool,
     multi_progress: MultiProgress,
 ) -> Result<()> {
-    let install_dir = for_app.installation_dir(&compat_tool).unwrap();
+    // Download ONCE
     let file = download_file(&download, multi_progress.clone())
         .await
         .with_context(|| {
@@ -462,6 +483,8 @@ async fn download_validate_unpack_with_download(
                 download.version
             )
         })?;
+
+    // Validate ONCE
     match download.hash_sum {
         Some(ref git_hash_sum) => {
             let hash_content = &downloads::download_file_into_memory(&git_hash_sum.sum_content)
@@ -484,47 +507,44 @@ async fn download_validate_unpack_with_download(
         }
     }
 
-    let install_name = compat_tool.installation_name(&download.version);
-    let install_path = install_dir.join(install_name.clone());
-    if files::check_if_exists(&install_path).await {
-        fs::remove_dir_all(&install_path).await.with_context(|| {
-            format!(
-                "Error removing existing install at {}",
-                install_path.display()
-            )
-        })?;
-    }
+    // Unpack to EACH app
+    for for_app in &for_apps {
+        let install_dir = for_app.installation_dir(&compat_tool).unwrap();
+        let install_name = compat_tool.installation_name(&download.version);
+        let install_path = install_dir.join(&install_name);
 
-    let unpack_progress_bar = init_unpack_progress(&install_dir.clone(), &file, multi_progress)
+        if files::check_if_exists(&install_path).await {
+            fs::remove_dir_all(&install_path).await.with_context(|| {
+                format!(
+                    "Error removing existing install at {}",
+                    install_path.display()
+                )
+            })?;
+        }
+
+        let unpack_progress_bar =
+            init_unpack_progress(&install_dir.clone(), &file, multi_progress.clone())
+                .await
+                .with_context(|| format!("Error unpacking {}", file.display()))?;
+
+        let decompressor = files::Decompressor::from_path(&file)
+            .await
+            .with_context(|| format!("Error checking file type of {}", file.display()))?;
+
+        files::unpack_file(
+            &compat_tool,
+            &download,
+            unpack_progress_bar.wrap_async_read(decompressor),
+            &install_dir,
+        )
         .await
         .with_context(|| format!("Error unpacking {}", file.display()))?;
 
-    let decompressor = files::Decompressor::from_path(&file)
-        .await
-        .with_context(|| format!("Error checking file type of {}", file.display()))?;
+        unpack_progress_bar.set_style(get_message_bar_style().await);
+        unpack_progress_bar
+            .finish_with_message(format!("Done! {} installed to {}", compat_tool, for_app));
+    }
 
-    files::unpack_file(
-        &compat_tool,
-        &download,
-        unpack_progress_bar.wrap_async_read(decompressor),
-        &install_dir,
-    )
-    .await
-    .with_context(|| format!("Error unpacking {}", file.display()))?;
-
-    unpack_progress_bar.set_style(get_message_bar_style().await);
-    unpack_progress_bar.finish_with_message(format!(
-        "Done! {} installed in {}/{}\nYour app might require a restart to detect {}",
-        compat_tool,
-        download
-            .for_app
-            .installation_dir(&compat_tool)
-            .unwrap()
-            .to_str()
-            .unwrap(),
-        install_name,
-        compat_tool
-    ));
     Ok(())
 }
 

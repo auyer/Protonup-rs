@@ -37,14 +37,10 @@ impl std::fmt::Display for Release {
 
 impl Release {
     /// Returns a Download struct corresponding to the Release
-    /// For most tools, where there is no variation in a single release
-    pub fn get_download_info(
-        &self,
-        for_app: &apps::AppInstallations,
-        compat_tool: &CompatTool,
-    ) -> Download {
+    /// The download is independent of the target app - the same file is downloaded
+    /// regardless of where it will be installed.
+    pub fn get_download_info(&self, compat_tool: &CompatTool) -> Download {
         let mut download: Download = Download {
-            for_app: for_app.to_owned(),
             version: self.tag_name.clone(),
             ..Download::default()
         };
@@ -78,11 +74,7 @@ impl Release {
 
     /// Returns all Download structs corresponding to the Release for tools with multiple asset variations
     /// This is used for tools like ProtonCachyOS that offer builds optimized for different CPU microarchitectures
-    pub fn get_all_download_variants(
-        &self,
-        for_app: &apps::AppInstallations,
-        compat_tool: &CompatTool,
-    ) -> Vec<Download> {
+    pub fn get_all_download_variants(&self, compat_tool: &CompatTool) -> Vec<Download> {
         // Create a map from base filename to hash file URL
         let mut asset_hashsum_map: std::collections::HashMap<
             String,
@@ -139,9 +131,9 @@ impl Release {
                     file_name: asset.name.clone(),
                     download_url: asset.browser_download_url.clone(),
                     size: asset.size as u64,
-                    for_app: for_app.to_owned(),
                     version: self.tag_name.clone(),
                     hash_sum,
+                    ..Download::default()
                 });
             }
         }
