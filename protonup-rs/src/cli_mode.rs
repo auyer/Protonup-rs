@@ -115,7 +115,7 @@ fn find_release_by_version(
 /// This is a non-interactive mode that downloads the specified tool/version.
 ///
 /// # Arguments
-/// * `tool` - Compatibility tool name (e.g., "GEProton", "WineGE")
+/// * `tool` - Compatibility tool name (e.g., "GEProton", "Luxtorpeda")
 /// * `version` - Version to install (use "latest" for the latest version)
 /// * `for_target` - Target for installation: "steam", "lutris", or a custom path. None for auto-detect.
 /// * `force` - Force overwrite existing installations

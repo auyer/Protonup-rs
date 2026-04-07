@@ -37,7 +37,7 @@ struct Opt {
     #[arg(short, long)]
     force: bool,
 
-    /// Compatibility tool to install (e.g., GEProton, WineGE, Luxtorpeda)
+    /// Compatibility tool to install (e.g., GEProton, Luxtorpeda)
     #[arg(long)]
     tool: Option<String>,
 

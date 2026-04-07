@@ -6,7 +6,7 @@
 
 ## Overview
 
-ProtonUp-rs is a tool for managing compatibility tools (like Proton, WineGE) for apps like Steam and Lutris. It handles downloading, verifying, and installing tools from GitHub repositories.
+ProtonUp-rs is a tool for managing compatibility tools (like GEProton, and Luxtorpeda) for apps like Steam and Lutris. It handles downloading, verifying, and installing tools from GitHub repositories.
 
 ---
 
@@ -29,7 +29,7 @@ Use CLI arguments for automation or scripting. When any of `--tool`, `--version`
 protonup-rs --tool GEProton
 
 # Install specific version for Lutris
-protonup-rs --tool WineGE --version 8.26 --for lutris
+protonup-rs --tool GEProton --version 8.26 --for lutris
 
 # Install to custom path
 protonup-rs --tool GEProton --version latest --for ~/.local/steam
@@ -42,7 +42,7 @@ protonup-rs --tool GEProton --for steam --force
 
 | Argument | Description |
 |----------|-------------|
-| `--tool <TOOL>` | Compatibility tool name (e.g., `GEProton`, `WineGE`, `Luxtorpeda`) |
+| `--tool <TOOL>` | Compatibility tool name (e.g., `GEProton`, `Luxtorpeda`) |
 | `--version <VERSION>` | Version to install. Use `latest` for the latest version |
 | `--for <TARGET>` | Installation target: `steam`, `lutris`, or a custom path |
 | `--force` | Overwrite existing installations |
@@ -128,7 +128,7 @@ pub struct CompatTool {
 
 **Preconfigured Tools**:
 
-- GEProton, WineGE, Luxtorpeda, Boxtron, DXVK, etc.
+- GEProton, Luxtorpeda, Boxtron, DXVK, etc.
 
 Adding new tools should be a simple process. All data related to them are stored in the [sources.ron](libprotonup/src/sources.ron) file.
 Functionality like templating is optional, and not necessary for all tools.
@@ -215,7 +215,7 @@ utils::expand_tilde("~/.steam") // => "/home/user/.steam"
 
 ```rust
 pub const DEFAULT_STEAM_TOOL: &str = "GEProton";
-pub const DEFAULT_LUTRIS_TOOL: &str = "WineGE";
+pub const DEFAULT_LUTRIS_TOOL: &str = "GEProton";
 pub const USER_AGENT: &str = "protoup-rs/vX.Y.Z";
 ```
 
