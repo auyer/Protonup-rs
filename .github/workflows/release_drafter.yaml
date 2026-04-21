@@ -7,7 +7,7 @@ on:
       - main
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   update-release-draft:
@@ -16,6 +16,29 @@ jobs:
       contents: write
       pull-requests: read
     steps:
-      - uses: release-drafter/release-drafter@b1476f6e6eb133afa41ed8589daba6dc69b4d3f5 #v6.1.0
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+
+      - name: Get merged PRs since last release
+        id: changes
+        run: |
+          set -euo pipefail
+          LAST_RELEASE=$(gh release list --limit 1 --json tagName --jq '.[0].tagName' 2>/dev/null || echo "")
+          if [ -z "$LAST_RELEASE" ]; then
+            PRS=$(gh pr list --state merged --limit 50 --json title,number,author --jq '.[] | "- " + .title + " @" + .author.login + " (#" + (.number | tostring) + ")"')
+          else
+            PRS=$(gh pr list --state merged --limit 50 --json title,number,author --jq '.[] | "- " + .title + " @" + .author.login + " (#" + (.number | tostring) + ")"')
+          fi
+          echo "changes<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$PRS" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create draft release
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda #v3.0.0
+        with:
+          draft: true
+          body: |
+            ${{ steps.changes.outputs.changes }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

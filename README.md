@@ -70,6 +70,7 @@ Options:
 ```
 
 **`--for` argument behavior:**
+
 - `steam` / `Steam` - Install to Steam (Native or Flatpak)
 - `lutris` / `Lutris` - Install to Lutris (Native or Flatpak)
 - `<path>` - Any other value is treated as a custom installation path
@@ -77,7 +78,7 @@ Options:
 
 ---
 
-## Installing
+## Installing (Available for x86 and ARM !)
 
 ### Clickable download (Steam Deck Friendly)
 
@@ -96,13 +97,14 @@ Options:
 Does the same as the installer above, but from the command line
 
 ```bash
-sh -c 'if curl -S -s -L -O --output-dir /tmp/ --connect-timeout 60 https://github.com/auyer/Protonup-rs/releases/latest/download/protonup-rs-linux-amd64.tar.gz ; then tar -xvzf /tmp/protonup-rs-linux-amd64.tar.gz -C /tmp/ && mv /tmp/protonup-rs ${HOME}/.local/bin/ && [[ "$SHELL" == *"bash"* ]] && [ "$SHELL" = "/bin/bash" ] && echo "export PATH=\"$PATH:${HOME}/.local/bin\"" >> ${HOME}/.bashrc || ([ "$SHELL" = "/bin/zsh" ] && echo "export PATH=\"$PATH:${HOME}/.local/bin\"" >> ${HOME}/.zshrc ) && rm /tmp/protonup-rs-linux-amd64.tar.gz; else echo "Something went wrong, please report this if it is a bug"; read; fi'
+sh -c 'ARCH=$(uname -m | sed "s/x86_64/amd64/;s/aarch64/arm64/"); FILE="protonup-rs-linux-$ARCH.tar.gz"; if curl -S -s -L -O --output-dir /tmp/ --connect-timeout 60 "https://github.com/auyer/Protonup-rs/releases/latest/download/$FILE" ; then tar -xvzf "/tmp/$FILE" -C /tmp/ && mkdir -p ${HOME}/.local/bin && mv /tmp/protonup-rs ${HOME}/.local/bin/ && (echo "$SHELL" | grep -q "bash" && echo "export PATH=\"\$PATH:${HOME}/.local/bin\"" >> ${HOME}/.bashrc || echo "$SHELL" | grep -q "zsh" && echo "export PATH=\"\$PATH:${HOME}/.local/bin\"" >> ${HOME}/.zshrc); rm "/tmp/$FILE"; else echo "Something went wrong, please report this if it is a bug"; read; fi'
 ```
 
 This assumes `/usr/bin` is in your path. You may change this to any other location (in your path `echo $PATH`).
 
 ### Or manually
 
+The instructions below refer to `amd64` (x86) release. If using ARM, just replace with `arm64`.
 Get the latest binary:
 [Download link](https://github.com/auyer/Protonup-rs/releases/latest/download/protonup-rs-linux-amd64.zip)
 

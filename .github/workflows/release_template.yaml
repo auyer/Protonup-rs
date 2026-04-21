@@ -1,0 +1,148 @@
+name: Release
+
+on:
+  workflow_call:
+    inputs:
+      pre_release:
+        description: 'Enable pre-release mode (skip publishing)'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  actions: read # To read the workflow path.
+  id-token: write # To sign the provenance.
+  contents: write # To add assets to a release.
+  attestations: write # add slsa attestations
+  checks: write
+
+jobs:
+  release:
+    env:
+      PRE_RELEASE: ${{ inputs.pre_release || false }}
+    outputs:
+      hashes: ${{ steps.hash.outputs.hashes }}
+      published_version: ${{ steps.published_version.outputs.published_version }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            arch: amd64
+          - os: ubuntu-24.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.os }}
+    name: "Build Release Artifacts"
+    permissions:
+      contents: write
+      checks: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+
+      - name: Log pre-release mode
+        if: env.PRE_RELEASE == 'true'
+        run: echo "PRE_RELEASE mode enabled - skipping crates.io publishing"
+
+      - name: SET CURRENT_VERSION
+        run: |
+          CURRENT_VERSION=$(grep '^version = ' protonup-rs/Cargo.toml | head -1 | sed 's/version = "//;s/"//')
+          echo "CURRENT_VERSION=$CURRENT_VERSION" >> "$GITHUB_ENV"
+
+      - name: SET RELEASE TAG
+        run: |
+          set -euo pipefail
+          if [ "$PRE_RELEASE" = "true" ]; then
+            echo "RELEASE_TAG=pre-release-$CURRENT_VERSION-$(date -u +'%Y-%m-%d')" >> "$GITHUB_ENV"
+            echo "RELEASE_TITLE=pre-release build - $CURRENT_VERSION-$(date -u +'%Y-%m-%d')" >> "$GITHUB_ENV"
+          else
+            echo "RELEASE_TAG=v$CURRENT_VERSION" >> "$GITHUB_ENV"
+            echo "RELEASE_TITLE=v$CURRENT_VERSION" >> "$GITHUB_ENV"
+          fi
+
+      - name: Update local toolchain
+        run: |
+          rustup update
+          rustup component add clippy
+          rustup install stable
+
+      - name: Install cargo-deb
+        run: cargo install cargo-deb
+
+      - name: Install Alien for RPM conversion
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y alien dpkg-dev debhelper build-essential
+
+      - name: Run cargo build
+        run: cargo build --release
+
+      - name: Run cargo-deb to build a debian package
+        run: cargo-deb -p protonup-rs --compress-type gzip --deb-version $CURRENT_VERSION
+
+      - name: Convert DEB to RPM
+        run: |
+          cd target/debian
+          alien -k --to-rpm protonup-rs_${CURRENT_VERSION}_${{ matrix.arch }}.deb
+          # Rename RPM files to consistent naming: protonup-rs_0.11.0_amd64.rpm
+          for rpm in protonup-rs-*.rpm; do
+            new_rpm="protonup-rs_${CURRENT_VERSION}_${{ matrix.arch }}.rpm"
+            mv "$rpm" "$new_rpm"
+          done
+          mv *.deb *.rpm ../release/
+
+      - name: Compress binary release artifacts
+        run: |
+          cd ./target/release
+          zip protonup-rs-linux-${{ matrix.arch }}.zip protonup-rs
+          tar -czvf protonup-rs-linux-${{ matrix.arch }}.tar.gz protonup-rs
+
+      - name: Generate hashes
+        id: hash
+        run: |
+          cd target/release/
+          sha256sum $(echo *.zip *.deb *.rpm *.gz ) > sha256sums_${{ matrix.arch }}.txt
+          echo "hashes=$(cat sha256sums_${{ matrix.arch }}.txt | base64 -w0 )" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release and upload artifacts
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda #v3.0.0
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: ${{ env.RELEASE_TITLE }}
+          body: ${{ env.RELEASE_TITLE }}
+          draft: true
+          prerelease: ${{ env.PRE_RELEASE == 'true' }}
+          generate_release_notes: false
+          append: true
+          files: |
+            target/release/protonup-rs**.{gz,zip,rpm,deb}
+            target/release/sha256sums_${{ matrix.arch }}.txt
+            protonup-rs-install.desktop
+
+      - name: Output Tag Name
+        id: published_version
+        run: |
+          set -euo pipefail
+          echo "published_version=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/attest-build-provenance@c074443f1aee8d4aeeae555aebba3282517141b2 # v2.2.3
+        if: env.PRE_RELEASE != 'true'
+        with:
+          subject-path: |
+            target/release/protonup-rs*.gz
+            target/release/protonup-rs*.zip
+            target/release/protonup-rs*.deb
+            target/release/protonup-rs*.rpm
+
+  provenance:
+    if: ${{ !inputs.pre_release }}
+    needs: [release]
+    permissions:
+      actions: read
+      id-token: write
+      contents: write
+      attestations: write
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0
+    with:
+      base64-subjects: "${{ needs.release.outputs.hashes }}"
+      upload-assets: true
+      upload-tag-name: ${{ needs.release.outputs.published_version }}
