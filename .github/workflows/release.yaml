@@ -30,4 +30,4 @@ jobs:
     name: 'Release'
     uses: ./.github/workflows/release_template.yaml
     with:
-      pre_release: ${{ github.event.inputs.pre_release || false }}
+      pre_release: ${{ inputs.pre_release == true }}
