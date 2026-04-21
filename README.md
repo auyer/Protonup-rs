@@ -18,7 +18,6 @@ These are the tools that are currently supported by this project.
 | Project Name      | GitHub Repository |
 |-------------------|-------------------|
 | GEProton          | [GloriousEggroll/proton-ge-custom](https://github.com/GloriousEggroll/proton-ge-custom) |
-| WineGE            | [GloriousEggroll/wine-ge-custom](https://github.com/GloriousEggroll/wine-ge-custom) |
 | Luxtorpeda        | [luxtorpeda-dev/luxtorpeda](https://github.com/luxtorpeda-dev/luxtorpeda) |
 | Boxtron           | [dreamer/boxtron](https://github.com/dreamer/boxtron) |
 | VKD3D-Proton      | [HansKristian-Work/vkd3d-proton](https://github.com/HansKristian-Work/vkd3d-proton) |
@@ -49,7 +48,7 @@ For automation or scripting, you can use CLI arguments to skip the TUI:
 protonup-rs --tool GEProton
 
 # Install specific version for Lutris
-protonup-rs --tool WineGE --version 8.26 --for lutris
+protonup-rs --tool GEProton --version 8.26 --for lutris
 
 # Install to custom path
 protonup-rs --tool GEProton --version latest --for ~/.local/steam
@@ -64,7 +63,7 @@ protonup-rs --tool GEProton --for steam --force
 Options:
   -q, --quick-download     Skip Menu, auto detect apps and download using default parameters
   -f, --force              Force install for existing apps during quick downloads
-      --tool <TOOL>        Compatibility tool to install (e.g., GEProton, WineGE, Luxtorpeda)
+      --tool <TOOL>        Compatibility tool to install (e.g., GEProton, Luxtorpeda)
       --version <VERSION>  Version to install (use "latest" for the latest version)
       --for <FOR>          Target for installation. Use "steam", "lutris", or a custom path. If omitted, auto-detects based on tool compatibility
   -h, --help               Print help
@@ -79,12 +78,13 @@ Options:
 
 ---
 
-## Installing
+## Installing (Available for x86 and ARM !)
 
 ### Clickable download (Steam Deck Friendly)
 
 - download .desktop file
-- run it
+- drag the file from the Downloads folder to your desktop
+- run it (double click)
 - open a new terminal window to run `protonup-rs`
 
 <h3 align="center">
@@ -98,15 +98,20 @@ Options:
 Does the same as the installer above, but from the command line
 
 ```bash
-sh -c 'if curl -S -s -L -O --output-dir /tmp/ --connect-timeout 60 https://github.com/auyer/Protonup-rs/releases/latest/download/protonup-rs-linux-amd64.tar.gz ; then tar -xvzf /tmp/protonup-rs-linux-amd64.tar.gz -C /tmp/ && mv /tmp/protonup-rs ${HOME}/.local/bin/ && [[ "$SHELL" == *"bash"* ]] && [ "$SHELL" = "/bin/bash" ] && echo "export PATH=\"$PATH:${HOME}/.local/bin\"" >> ${HOME}/.bashrc || ([ "$SHELL" = "/bin/zsh" ] && echo "export PATH=\"$PATH:${HOME}/.local/bin\"" >> ${HOME}/.zshrc ) && rm /tmp/protonup-rs-linux-amd64.tar.gz; else echo "Something went wrong, please report this if it is a bug"; read; fi'
+sh -c 'ARCH=$(uname -m | sed "s/x86_64/amd64/;s/aarch64/arm64/"); FILE="protonup-rs-linux-$ARCH.tar.gz"; if curl -S -s -L -O --output-dir /tmp/ --connect-timeout 60 "https://github.com/auyer/Protonup-rs/releases/latest/download/$FILE" ; then tar -xvzf "/tmp/$FILE" -C /tmp/ && mkdir -p ${HOME}/.local/bin && mv /tmp/protonup-rs ${HOME}/.local/bin/ && (echo "$SHELL" | grep -q "bash" && echo "export PATH=\"\$PATH:${HOME}/.local/bin\"" >> ${HOME}/.bashrc || echo "$SHELL" | grep -q "zsh" && echo "export PATH=\"\$PATH:${HOME}/.local/bin\"" >> ${HOME}/.zshrc); rm "/tmp/$FILE"; else echo "Something went wrong, please report this if it is a bug"; read; fi'
 ```
 
 This assumes `/usr/bin` is in your path. You may change this to any other location (in your path `echo $PATH`).
 
 ### Or manually
 
+The instructions below refer to `amd64` (x86) release. If using ARM, just replace with `arm64`.
 Get the latest binary:
-[Download link](https://github.com/auyer/Protonup-rs/releases/latest/download/protonup-rs-linux-amd64.zip)
+
+Most devices (Intel, AMD, Steam Deck...): [Download link (x86)](https://github.com/auyer/Protonup-rs/releases/latest/download/protonup-rs-linux-amd64.zip)
+
+if using arm (raspberry pi, phones, Asahi users, Qualcomm laptop...):
+[Download link (ARM64)](https://github.com/auyer/Protonup-rs/releases/latest/download/protonup-rs-linux-arm64.zip)
 
 It is a single binary. You can just run it, or add it to your path so you can call it from anywhere.
 

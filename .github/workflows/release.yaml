@@ -1,0 +1,33 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - v*
+  workflow_dispatch:
+    inputs:
+      pre_release:
+        description: 'Enable pre-release mode (skip crates.io publishing, create draft pre-release)'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  actions: read # To read the workflow path.
+  id-token: write # To sign the provenance.
+  contents: write # To add assets to a release.
+  attestations: write # add slsa attestations
+  checks: write
+
+jobs:
+  publish:
+    if: ${{ !inputs.pre_release }}
+    name: 'Publish'
+    uses: ./.github/workflows/publish_template.yaml
+  release:
+    needs: [publish]
+    if: ${{ always() }}
+    name: 'Release'
+    uses: ./.github/workflows/release_template.yaml
+    with:
+      pre_release: ${{ inputs.pre_release == true }}

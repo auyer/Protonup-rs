@@ -1,7 +1,7 @@
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub const DEFAULT_STEAM_TOOL: &str = "GEProton";
-pub const DEFAULT_LUTRIS_TOOL: &str = "WineGE";
+pub const DEFAULT_LUTRIS_TOOL: &str = "GEProton";
 
 pub const USER_AGENT: &str = "protoup-rs";
 

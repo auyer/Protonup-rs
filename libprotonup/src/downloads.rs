@@ -18,10 +18,13 @@ pub type ReleaseList = Vec<Release>;
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Release {
     /// API URL of the Release
-    url: Option<String>,
+    pub url: Option<String>,
     /// Tag name of the Release, examples "8.7-GE-1-Lol" "GE-Proton8-5"
     pub tag_name: String,
     name: String,
+    /// Release notes / changelog
+    #[serde(default)]
+    pub body: Option<String>,
     /// Asset list for each Release, usually the tar.gz/tar.xz file and a sha512sum file for integrity checking
     assets: Vec<Asset>,
 }
@@ -286,7 +289,7 @@ mod tests {
         let conditions = &[
             (
                 sources::CompatTool::from_str(constants::DEFAULT_LUTRIS_TOOL).unwrap(),
-                "Get WineGE",
+                "Get GEProton",
             ),
             (
                 sources::CompatTool::from_str(constants::DEFAULT_STEAM_TOOL).unwrap(),
@@ -330,7 +333,7 @@ mod tests {
         let conditions = &[
             (
                 sources::CompatTool::from_str(constants::DEFAULT_LUTRIS_TOOL).unwrap(),
-                "Get WineGE",
+                "Get GEProton",
             ),
             (
                 sources::CompatTool::from_str(constants::DEFAULT_STEAM_TOOL).unwrap(),
@@ -363,7 +366,7 @@ mod tests {
         let empty = "".to_owned();
 
         let test_cases = vec![
-            // "GE-Proton
+            // "GEProton
             (
                 Download {
                     file_name: "GE-Proton9-27.tar.gz".to_owned(),
@@ -376,18 +379,18 @@ mod tests {
                 CompatTool::from_str("GEProton").unwrap(),
                 "GE-Proton9-27",
             ),
-            // WineGE
+            // Luxtorpeda
             (
                 Download {
-                    file_name: "wine-lutris-GE-Proton8-26-x86_64.tar.xz".to_owned(),
-                    version: "GE-Proton8-26".to_owned(),
+                    file_name: "Luxtorpeda-v76.2.0.tar.xz".to_owned(),
+                    version: "v76.2.0".to_owned(),
                     for_app: apps::AppInstallations::Steam,
                     hash_sum: None,
                     size: 0,
                     download_url: empty.clone(),
                 },
-                CompatTool::from_str("WineGE").unwrap(),
-                "GE-Wine8-26",
+                CompatTool::from_str("Luxtorpeda").unwrap(),
+                "Luxtorpeda-v76.2.0",
             ),
         ];
 
