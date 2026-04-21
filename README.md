@@ -83,7 +83,8 @@ Options:
 ### Clickable download (Steam Deck Friendly)
 
 - download .desktop file
-- run it
+- drag the file from the Downloads folder to your desktop
+- run it (double click)
 - open a new terminal window to run `protonup-rs`
 
 <h3 align="center">
