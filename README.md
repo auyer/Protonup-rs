@@ -106,7 +106,9 @@ This assumes `/usr/bin` is in your path. You may change this to any other locati
 
 The instructions below refer to `amd64` (x86) release. If using ARM, just replace with `arm64`.
 Get the latest binary:
-[Download link](https://github.com/auyer/Protonup-rs/releases/latest/download/protonup-rs-linux-amd64.zip)
+Most devices: [Download link (x86)](https://github.com/auyer/Protonup-rs/releases/latest/download/protonup-rs-linux-amd64.zip)
+if using arm (raspberry pi, phones, Asahi users, Qualcomm laptop...):
+[Download link (ARM64)](https://github.com/auyer/Protonup-rs/releases/latest/download/protonup-rs-linux-arm64.zip)
 
 It is a single binary. You can just run it, or add it to your path so you can call it from anywhere.
 
