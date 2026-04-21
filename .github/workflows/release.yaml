@@ -12,16 +12,22 @@ on:
         default: false
         type: boolean
 
-permissions: read-all
+permissions:
+  actions: read # To read the workflow path.
+  id-token: write # To sign the provenance.
+  contents: write # To add assets to a release.
+  attestations: write # add slsa attestations
+  checks: write
 
 jobs:
   publish:
-    if: github.event.inputs.pre_release != 'true'
+    if: ${{ !inputs.pre_release }}
     name: 'Publish'
     uses: ./.github/workflows/publish_template.yaml
   release:
     needs: [publish]
+    if: ${{ always() }}
     name: 'Release'
     uses: ./.github/workflows/release_template.yaml
     with:
-      pre_release: ${{ github.event.inputs.pre_release == 'true' || false }}
+      pre_release: ${{ github.event.inputs.pre_release || false }}
