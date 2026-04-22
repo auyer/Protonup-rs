@@ -24,6 +24,7 @@ jobs:
     if: ${{ !inputs.pre_release }}
     name: 'Publish'
     uses: ./.github/workflows/publish_template.yaml
+    secrets: inherit
   release:
     needs: [publish]
     if: ${{ always() }}
