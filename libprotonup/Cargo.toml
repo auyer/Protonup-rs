@@ -7,7 +7,7 @@ repository = "https://github.com/auyer/protonup-rs"
 license = "GPL-3.0"
 readme = "./README.md"
 
-description = "Library for Custom Proton Download and installation"
+description = "Library for Download and installation of Custom Gaming Compatibility tools like Proton"
 
 [dependencies]
 arcstr = "1.2"

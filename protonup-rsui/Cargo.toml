@@ -1,12 +1,29 @@
 [package]
 name = "protonup-rsui"
 version = "1.0.0-rc0"
-edition = "2021"
+edition = "2024"
 authors = ["Auyer <auyer@rcpassos.me>"]
 repository = "https://github.com/auyer/protonup-rs"
-license = "Apache-2.0"
+license = "GPL-3.0"
+readme = "../README.md"
+
+description = "A Rust GUI app to automate the installation and update of Linux Gaming Compatibility tools, like ProtonGE, Luxtorpeda, Boxtron and others"
+
+[package.metadata.deb]
+maintainer = "Auyer <auyer@rcpassos.me>"
+copyright = "2024, Auyer <auyer@rcpassos.me>"
+extended-description = "A Rust GUI app to automate the installation and update of Linux Gaming Compatibility tools, like ProtonGE, Luxtorpeda, Boxtron and others"
+depends = "$auto"
+section = "utility"
+priority = "optional"
+assets = [
+    ["target/release/protonup-rsui", "usr/bin/", "755"],
+    ["../README.md", "usr/share/doc/protonup-rs/README", "644"],
+	  # TODO: desktop launchers, icons etc
+]
 
 [dependencies]
+
 iced = { version = "0.14", features = ["tokio", "sipper", "image", "canvas", "advanced"] }
 iced_futures = { version = "0.14", features = ["tokio"] }
 libprotonup = { path = "../libprotonup", version = "1.0.0-rc0" }
