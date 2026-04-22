@@ -1,12 +1,11 @@
 use iced::task;
 use iced::time;
-use iced::widget::image::Handle;
 use iced::widget::{
     button, center, checkbox, container, image, progress_bar, radio, rule, scrollable, space, text,
     text_input, Column, Container, Row,
 };
 use iced::window;
-use iced::{Center, ContentFit, Element, Fill, Length, Subscription, Task, Color, Border};
+use iced::{Border, Center, Color, ContentFit, Element, Fill, Length, Subscription, Task};
 
 use libprotonup::apps::{list_installed_apps, App, AppInstallations};
 use libprotonup::downloads::Release;
@@ -17,8 +16,11 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 use std::time::Duration;
 
-// Logo path
-const LOGO_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/protonup--rs-logo.png");
+// This embeds the bytes directly into the binary
+const LOGO_BYTES: &[u8] = include_bytes!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/protonup--rs-logo.png"
+));
 
 mod circular;
 mod easing;
@@ -222,7 +224,7 @@ struct AppInstallationView {
     loading: bool,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 struct ProtonupGui {
     // App detection
     detected_apps: Vec<AppInstallations>,
@@ -274,10 +276,49 @@ struct ProtonupGui {
     app_installations_views: Vec<AppInstallationView>,
     manage_status: String,
     manage_error: Option<String>,
+
+    // Persistent image handle (created once, reused across all view calls)
+    logo_handle: image::Handle,
+}
+
+impl Default for ProtonupGui {
+    fn default() -> Self {
+        Self {
+            detected_apps: Vec::new(),
+            scan_complete: false,
+            mode: GuiMode::default(),
+            selection_step: SelectionStep::default(),
+            available_tools: Vec::new(),
+            selected_tool_indices: Vec::new(),
+            selected_tool: None,
+            available_versions: Vec::new(),
+            selected_version_indices: Vec::new(),
+            selected_arch_variant: None,
+            has_variant_tools: false,
+            app_installation: None,
+            already_installed_tools: Vec::new(),
+            force_reinstall_indices: Vec::new(),
+            download_started: false,
+            tools: Vec::new(),
+            global_phase: DownloadPhase::default(),
+            global_status: String::new(),
+            global_progress: 0.0,
+            download_complete: None,
+            download_handle: None,
+            app_mode: AppMode::default(),
+            custom_path_input: String::new(),
+            path_error: None,
+            app_installations_views: Vec::new(),
+            manage_status: String::new(),
+            manage_error: None,
+            logo_handle: image::Handle::from_bytes(LOGO_BYTES),
+        }
+    }
 }
 
 /// Warning button style (yellow/orange for cautionary actions like Cancel/Close)
-fn warning_button_style() -> impl Fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style {
+fn warning_button_style(
+) -> impl Fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style {
     |theme, status| {
         let palette = theme.extended_palette();
         let warning_color = Color::from_rgb(0.6, 0.5, 0.2); // Yellow-orange warning color
@@ -317,7 +358,9 @@ fn warning_button_style() -> impl Fn(&iced::Theme, iced::widget::button::Status)
                 snap: Default::default(),
             },
             iced::widget::button::Status::Disabled => iced::widget::button::Style {
-                background: Some(iced::Background::Color(Color::from_rgba(0.95, 0.75, 0.0, 0.5))),
+                background: Some(iced::Background::Color(Color::from_rgba(
+                    0.95, 0.75, 0.0, 0.5,
+                ))),
                 text_color: Color::from_rgba(0.5, 0.5, 0.5, 0.5),
                 border: Border {
                     radius: 4.0.into(),
@@ -726,11 +769,10 @@ impl ProtonupGui {
             }
 
             Message::VersionToggled(app_index, version_index) => {
-                if let Some(view) = self.app_installations_views.get_mut(app_index) {
-                    if let Some(version) = view.versions.get_mut(version_index) {
+                if let Some(view) = self.app_installations_views.get_mut(app_index)
+                    && let Some(version) = view.versions.get_mut(version_index) {
                         version.selected_for_deletion = !version.selected_for_deletion;
                     }
-                }
                 Task::none()
             }
 
@@ -997,7 +1039,7 @@ impl ProtonupGui {
         let mut column = Column::new().spacing(10).padding(10).width(220);
 
         // Logo at top
-        let logo_handle = Handle::from_path(LOGO_PATH);
+        let logo_handle = &self.logo_handle;
         column = column.push(
             Container::new(
                 image(logo_handle)
@@ -1214,7 +1256,12 @@ impl ProtonupGui {
                     Row::new()
                         .spacing(10)
                         .align_y(Center)
-                        .push(radio("", index, self.selected_tool_indices.first().copied(), Message::ToolSelected))
+                        .push(radio(
+                            "",
+                            index,
+                            self.selected_tool_indices.first().copied(),
+                            Message::ToolSelected,
+                        ))
                         .push(text(&tool.name).size(14)),
                 );
             }

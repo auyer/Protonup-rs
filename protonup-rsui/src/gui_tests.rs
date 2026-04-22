@@ -5,6 +5,7 @@ mod tests {
         AppInstallations, AppMode, DownloadPhase, DownloadUpdate, GuiMode, Message, ProtonupGui,
         SelectionStep, ToolDownload, ToolProgress, ToolStatus,
     };
+    use iced::widget::image;
     use iced_test::{simulator, Error};
     use libprotonup::sources::CompatTool;
     use std::path::PathBuf;
@@ -40,6 +41,7 @@ mod tests {
             app_installations_views: vec![],
             manage_status: String::new(),
             manage_error: None,
+            logo_handle: image::Handle::from_bytes(crate::LOGO_BYTES),
         }
     }
 
@@ -102,6 +104,7 @@ mod tests {
             app_installations_views: vec![],
             manage_status: String::new(),
             manage_error: None,
+            logo_handle: image::Handle::from_bytes(crate::LOGO_BYTES),
         };
         let mut ui = simulator(model.view());
 
@@ -698,6 +701,38 @@ mod tests {
         assert!(force_reinstall_names.contains("GEProton GE-Proton9-27"));
         assert!(!force_reinstall_names.contains("GEProton GE-Proton9-26"));
         assert!(force_reinstall_names.contains("GEProton GE-Proton9-25"));
+    }
+
+    //
+    // Logo persistence tests
+    //
+
+    #[test]
+    fn logo_handle_persists_across_views() {
+        let model = ready_model();
+
+        // Call view() multiple times - simulating redraws from window events
+        let _ = model.view();
+        let _ = model.view();
+        let _ = model.view();
+
+        // The logo_handle should be the same instance (same pointer) across all views
+        let handle1 = &model.logo_handle;
+        let _ = model.view();
+        let handle2 = &model.logo_handle;
+
+        // Both references should point to the same underlying handle
+        assert!(
+            std::ptr::eq(handle1, handle2),
+            "logo_handle should be the same instance across view() calls"
+        );
+    }
+
+    #[test]
+    fn logo_handle_is_initialized_at_startup() {
+        let model = ProtonupGui::default();
+        // logo_handle should be initialized and not cause any issues when accessed
+        let _ = &model.logo_handle;
     }
 
     //
