@@ -206,11 +206,13 @@ where
     // Phase 1: Fetch releases and prepare downloads
     for app_inst in &found_apps {
         let compat_tool = app_inst.as_app().default_compatibility_tool();
+        // Use tool name + app for unique matching with GUI tool entries
         let tool_name = compat_tool.name.clone();
+        let tool_id = format!("{} ({})", tool_name, app_inst.as_app());
 
         send_progress(SipProgress::new(
             DownloadPhase::FetchingReleases,
-            &tool_name,
+            &tool_id,
             &format!("Fetching releases for {}...", tool_name),
             10.0,
         ));
@@ -221,7 +223,7 @@ where
                 if release_list.is_empty() {
                     send_progress(SipProgress::new(
                         DownloadPhase::Error,
-                        &tool_name,
+                        &tool_id,
                         &format!("No releases found for {}", tool_name),
                         0.0,
                     ));
@@ -232,7 +234,7 @@ where
             Err(e) => {
                 send_progress(SipProgress::new(
                     DownloadPhase::Error,
-                    &tool_name,
+                    &tool_id,
                     &format!("Failed to fetch releases: {}", e),
                     0.0,
                 ));
@@ -257,7 +259,7 @@ where
         if files::check_if_exists(&download_path.clone()).await && !force {
             send_progress(SipProgress::new(
                 DownloadPhase::Complete,
-                &tool_name,
+                &tool_id,
                 &format!(
                     "{} {} already installed, skipping",
                     tool_name, download.version
@@ -284,10 +286,10 @@ where
 
     let mut handles = Vec::new();
 
-    for (download, app_inst, compat_tool, release) in downloads_to_run {
+    for (download, app_inst, compat_tool, _release) in downloads_to_run {
         let progress_callback = send_progress.clone();
-        // Use combined tool name + version to match GUI ToolDownload entries
-        let display_name: String = format!("{} {}", compat_tool.name, release.tag_name);
+        // Use tool name + app to match GUI ToolDownload entries
+        let display_name: String = format!("{} ({})", compat_tool.name, app_inst.as_app());
 
         handles.push(tokio::spawn(async move {
             let result = download_validate_unpack_with_progress(

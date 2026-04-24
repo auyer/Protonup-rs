@@ -141,6 +141,7 @@ enum SelectionStep {
 #[derive(Debug, Clone)]
 struct ToolDownload {
     name: String,
+    #[allow(dead_code)]
     app_target: String,
     phase: DownloadPhase,
     progress: f32,
@@ -634,8 +635,12 @@ impl ProtonupGui {
                     self.tools.clear();
                     for app in &self.detected_apps {
                         let compat_tool = app.as_app().default_compatibility_tool();
+                        let app_name = app.as_app().to_string();
                         self.tools
-                            .push(ToolDownload::new(compat_tool.name, app.to_string()));
+                            .push(ToolDownload::new(
+                                format!("{} ({})", compat_tool.name, app_name),
+                                app_name,
+                            ));
                     }
 
                     // Store the handle so we can abort the task later
@@ -654,8 +659,12 @@ impl ProtonupGui {
                 self.tools.clear();
                 for app in &self.detected_apps {
                     let compat_tool = app.as_app().default_compatibility_tool();
+                    let app_name = app.as_app().to_string();
                     self.tools
-                        .push(ToolDownload::new(compat_tool.name, app.to_string()));
+                        .push(ToolDownload::new(
+                            format!("{} ({})", compat_tool.name, app_name),
+                            app_name,
+                        ));
                 }
 
                 // Store the handle so we can abort the task later
@@ -1009,51 +1018,29 @@ impl ProtonupGui {
     }
 
     /// Check if quick update tools are already installed
-    async fn check_quick_update_installed(
+    /// Uses local filesystem checks only — no network calls
+    pub(crate) async fn check_quick_update_installed(
         detected_apps: Vec<AppInstallations>,
     ) -> Vec<(String, bool)> {
-        use libprotonup::downloads;
-        use tokio::time::{timeout, Duration};
-
         let mut results = Vec::new();
         
         for app_inst in &detected_apps {
             let compat_tool = app_inst.as_app().default_compatibility_tool();
             let tool_name = compat_tool.name.clone();
             
-            // Fetch latest release
-            let release_result = timeout(
-                Duration::from_secs(10),
-                downloads::list_releases(&compat_tool)
-            ).await;
+            // Check locally if the default tool is installed
+            let is_installed = match app_inst.list_installed_versions().await {
+                Ok(versions) => {
+                    // The default tool (GEProton) creates folders named like "GE-Proton9-27" or "Proton9-27"
+                    versions.iter().any(|folder| {
+                        let name = &folder.0 .1;
+                        name.starts_with("GE-Proton") || name.starts_with("Proton-")
+                    })
+                }
+                Err(_) => false,
+            };
             
-            match release_result {
-                Ok(Ok(mut release_list)) => {
-                    if release_list.is_empty() {
-                        results.push((tool_name, false)); // No releases available
-                        continue;
-                    }
-                    
-                    let latest_release = release_list.remove(0);
-                    let install_name = compat_tool.installation_name(&latest_release.tag_name);
-                    let mut install_path = PathBuf::from(app_inst.default_install_dir().as_str());
-                    install_path.push(&install_name);
-                    
-                    // Check if already installed
-                    let is_installed = files::check_if_exists(&install_path).await;
-                    results.push((tool_name, is_installed));
-                }
-                Ok(Err(e)) => {
-                    // Network error or API failure
-                    eprintln!("Failed to fetch releases for {}: {}", tool_name, e);
-                    results.push((tool_name, false));
-                }
-                Err(_) => {
-                    // Timeout
-                    eprintln!("Timeout fetching releases for {}", tool_name);
-                    results.push((tool_name, false));
-                }
-            }
+            results.push((tool_name, is_installed));
         }
         
         results
@@ -1743,7 +1730,7 @@ impl ProtonupGui {
             column = column.push(
                 Column::new()
                     .spacing(5)
-                    .push(text(format!("{} for {}", tool.name, tool.app_target)).size(12))
+                    .push(text(format!("{}", tool.name)).size(12))
                     .push(progress_bar(0.0..=100.0, tool.progress))
                     .push(text(tool.status_text()).size(10).color(status_color)),
             );

@@ -1034,8 +1034,8 @@ mod tests {
         assert_eq!(model.quick_update_status, QuickUpdateStatus::InProgress);
         assert_eq!(model.global_status, "Starting Quick Update...");
         assert!(!model.tools.is_empty()); // Tools should be populated
-        assert_eq!(model.tools[0].name, "GEProton");
-        assert_eq!(model.tools[0].app_target, "Steam \"Native\"");
+        assert_eq!(model.tools[0].name, "GEProton (Steam)");
+        assert_eq!(model.tools[0].app_target, "Steam");
     }
 
     #[test]
@@ -1118,5 +1118,108 @@ mod tests {
         
         // Verify checking state
         assert_eq!(model.quick_update_status, QuickUpdateStatus::Checking);
+    }
+    
+    #[tokio::test]
+    async fn check_quick_update_installed_returns_true_when_tool_folder_exists() {
+        let tmp = tempfile::tempdir().unwrap();
+        let tool_dir = tmp.path().join("GE-Proton9-27");
+        tokio::fs::create_dir(&tool_dir).await.unwrap();
+        
+        let detected_apps = vec![AppInstallations::Custom(
+            tmp.path().to_str().unwrap().to_string()
+        )];
+        
+        let results = ProtonupGui::check_quick_update_installed(detected_apps).await;
+        
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].0, "GEProton");
+        assert!(results[0].1, "check_quick_update_installed should return true when GEProton folder exists");
+    }
+    
+    #[test]
+    fn quick_update_checked_with_two_apps_creates_distinctly_named_tools() {
+        let mut model = ready_model();
+        model.app_mode = AppMode::QuickUpdate;
+        model.mode = GuiMode::QuickUpdate;
+        model.quick_update_status = QuickUpdateStatus::Checking;
+        model.detected_apps = vec![AppInstallations::Steam, AppInstallations::Lutris];
+        
+        // Simulate some tools not installed for both apps
+        let results = vec![
+            ("GEProton".to_string(), false),
+            ("GEProton".to_string(), false),
+        ];
+        
+        let _ = model.update(Message::QuickUpdateChecked(results));
+        
+        assert_eq!(model.tools.len(), 2);
+        assert_eq!(model.tools[0].name, "GEProton (Steam)");
+        assert_eq!(model.tools[1].name, "GEProton (Lutris)");
+        // Tools must have distinct names for correct progress routing
+        assert_ne!(model.tools[0].name, model.tools[1].name);
+    }
+    
+    #[test]
+    fn quick_update_progress_routes_to_correct_tool_by_unique_name() {
+        let mut model = ready_model();
+        model.app_mode = AppMode::QuickUpdate;
+        model.mode = GuiMode::QuickUpdate;
+        model.quick_update_status = QuickUpdateStatus::InProgress;
+        model.detected_apps = vec![AppInstallations::Steam, AppInstallations::Lutris];
+        
+        // Populate tools as QuickUpdateChecked would
+        model.tools.push(ToolDownload::new(
+            "GEProton (Steam)".to_string(),
+            "Steam".to_string(),
+        ));
+        model.tools.push(ToolDownload::new(
+            "GEProton (Lutris)".to_string(),
+            "Lutris".to_string(),
+        ));
+        
+        // Simulate progress for Steam tool
+        let steam_progress = ToolProgress {
+            tool_name: "GEProton (Steam)".to_string(),
+            phase: DownloadPhase::Downloading,
+            percent: 50.0,
+            status_message: "Downloading...".to_string(),
+        };
+        let _ = model.update(Message::DownloadUpdate(
+            DownloadUpdate::ToolProgress(steam_progress),
+        ));
+        
+        assert_eq!(model.tools[0].progress, 50.0); // Steam updated
+        assert_eq!(model.tools[1].progress, 0.0);  // Lutris unchanged
+        
+        // Simulate progress for Lutris tool
+        let lutris_progress = ToolProgress {
+            tool_name: "GEProton (Lutris)".to_string(),
+            phase: DownloadPhase::Downloading,
+            percent: 75.0,
+            status_message: "Downloading...".to_string(),
+        };
+        let _ = model.update(Message::DownloadUpdate(
+            DownloadUpdate::ToolProgress(lutris_progress),
+        ));
+        
+        assert_eq!(model.tools[0].progress, 50.0); // Steam unchanged
+        assert_eq!(model.tools[1].progress, 75.0); // Lutris updated
+    }
+    
+    #[test]
+    fn force_reinstall_creates_distinctly_named_tools() {
+        let mut model = ready_model();
+        model.app_mode = AppMode::QuickUpdate;
+        model.mode = GuiMode::QuickUpdate;
+        model.quick_update_status = QuickUpdateStatus::AllUpToDate(vec!["GEProton".to_string()]);
+        model.detected_apps = vec![AppInstallations::Steam, AppInstallations::Lutris];
+        
+        let _ = model.update(Message::ForceReinstall);
+        
+        assert_eq!(model.tools.len(), 2);
+        assert_eq!(model.tools[0].name, "GEProton (Steam)");
+        assert_eq!(model.tools[1].name, "GEProton (Lutris)");
+        assert_ne!(model.tools[0].name, model.tools[1].name);
     }
 }
