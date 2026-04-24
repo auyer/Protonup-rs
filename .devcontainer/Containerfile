@@ -1,0 +1,9 @@
+FROM docker.io/rust:trixie
+
+RUN apt update && \
+	apt upgrade -y && \
+	apt install -y python3 libwayland-dev pkg-config
+
+
+WORKDIR /code
+

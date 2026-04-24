@@ -1,0 +1,9 @@
+{
+	"name": "Protonup-rs Development Container",
+	"build": {
+		"dockerfile": "./Containerfile",
+		"context": ".."
+	},
+	"customizations": {},
+	"remoteUser": "debian"
+}
