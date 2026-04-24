@@ -3,7 +3,7 @@ mod tests {
     use crate::download_task::{DownloadError, GlobalProgress};
     use crate::{
         AppInstallations, AppMode, DownloadPhase, DownloadUpdate, GuiMode, Message, ProtonupGui,
-        SelectionStep, ToolDownload, ToolProgress, ToolStatus,
+        QuickUpdateStatus, SelectionStep, ToolDownload, ToolProgress, ToolStatus,
     };
     use iced::widget::image;
     use iced_test::{simulator, Error};
@@ -41,6 +41,7 @@ mod tests {
             app_installations_views: vec![],
             manage_status: String::new(),
             manage_error: None,
+            quick_update_status: QuickUpdateStatus::Idle,
             logo_handle: image::Handle::from_bytes(crate::LOGO_BYTES),
         }
     }
@@ -104,6 +105,7 @@ mod tests {
             app_installations_views: vec![],
             manage_status: String::new(),
             manage_error: None,
+            quick_update_status: QuickUpdateStatus::Idle,
             logo_handle: image::Handle::from_bytes(crate::LOGO_BYTES),
         };
         let mut ui = simulator(model.view());
@@ -273,6 +275,7 @@ mod tests {
     #[test]
     fn clicking_quick_update_starts_download() -> Result<(), Error> {
         let mut model = ready_model();
+        model.detected_apps = vec![AppInstallations::Steam, AppInstallations::Lutris];
         let mut ui = simulator(model.view());
 
         // Click the Quick Update button
@@ -283,9 +286,13 @@ mod tests {
             let _ = model.update(message);
         }
 
-        // Verify state changed
+        // Verify NEW behavior: checking state, no tools populated
         assert!(model.download_started);
         assert_eq!(model.mode, GuiMode::QuickUpdate);
+        assert_eq!(model.selection_step, SelectionStep::Downloading);
+        assert_eq!(model.quick_update_status, QuickUpdateStatus::Checking);
+        assert_eq!(model.global_status, "Checking for updates...");
+        assert!(model.tools.is_empty(), "Tools should not be populated until after checking");
 
         Ok(())
     }
@@ -967,5 +974,149 @@ mod tests {
         assert_eq!(model.selection_step, SelectionStep::SelectingTools);
         assert!(model.selected_version_indices.is_empty());
         assert!(model.available_versions.is_empty());
+    }
+
+    //
+    // Quick Update Tests
+    //
+
+    #[test]
+    fn select_quick_update_sets_checking_state() {
+        let mut model = ready_model();
+        model.detected_apps = vec![AppInstallations::Steam, AppInstallations::Lutris];
+
+        let _ = model.update(Message::SelectQuickUpdate);
+
+        assert_eq!(model.app_mode, AppMode::QuickUpdate);
+        assert_eq!(model.mode, GuiMode::QuickUpdate);
+        assert_eq!(model.selection_step, SelectionStep::Downloading);
+        assert!(model.download_started);
+        assert_eq!(model.quick_update_status, QuickUpdateStatus::Checking);
+        assert_eq!(model.global_status, "Checking for updates...");
+        assert!(model.tools.is_empty()); // Tools not populated yet
+    }
+
+    #[test]
+    fn quick_update_checked_all_installed_shows_up_to_date() {
+        let mut model = ready_model();
+        model.app_mode = AppMode::QuickUpdate;
+        model.mode = GuiMode::QuickUpdate;
+        model.quick_update_status = QuickUpdateStatus::Checking;
+        
+        // Simulate all tools installed
+        let results = vec![
+            ("GEProton".to_string(), true),
+            ("Wine-GE".to_string(), true),
+        ];
+        
+        let _ = model.update(Message::QuickUpdateChecked(results));
+
+        assert_eq!(model.quick_update_status, QuickUpdateStatus::AllUpToDate(vec!["GEProton".to_string(), "Wine-GE".to_string()]));
+        assert_eq!(model.global_status, "Tools are up to date.");
+        assert!(model.tools.is_empty()); // Still no tools populated
+    }
+
+    #[test]
+    fn quick_update_checked_some_not_installed_starts_download() {
+        let mut model = ready_model();
+        model.app_mode = AppMode::QuickUpdate;
+        model.mode = GuiMode::QuickUpdate;
+        model.quick_update_status = QuickUpdateStatus::Checking;
+        model.detected_apps = vec![AppInstallations::Steam];
+        
+        // Simulate some tools not installed
+        let results = vec![
+            ("GEProton".to_string(), false),
+        ];
+        
+        let _ = model.update(Message::QuickUpdateChecked(results));
+
+        assert_eq!(model.quick_update_status, QuickUpdateStatus::InProgress);
+        assert_eq!(model.global_status, "Starting Quick Update...");
+        assert!(!model.tools.is_empty()); // Tools should be populated
+        assert_eq!(model.tools[0].name, "GEProton");
+        assert_eq!(model.tools[0].app_target, "Steam \"Native\"");
+    }
+
+    #[test]
+    fn force_reinstall_starts_download_with_force() {
+        let mut model = ready_model();
+        model.app_mode = AppMode::QuickUpdate;
+        model.mode = GuiMode::QuickUpdate;
+        model.quick_update_status = QuickUpdateStatus::AllUpToDate(vec!["GEProton".to_string()]);
+        model.detected_apps = vec![AppInstallations::Steam];
+        
+        let _ = model.update(Message::ForceReinstall);
+
+        assert_eq!(model.quick_update_status, QuickUpdateStatus::InProgress);
+        assert_eq!(model.global_status, "Force reinstalling tools...");
+        assert!(!model.tools.is_empty());
+        // Note: We can't easily test that force=true is passed to download_task::run_quick_update
+        // but the state transition is verified
+    }
+
+    #[test]
+    fn quick_update_flow_all_installed_shows_correct_ui() -> Result<(), Error> {
+        let mut model = ready_model();
+        model.detected_apps = vec![AppInstallations::Steam, AppInstallations::Lutris];
+        
+        // Step 1: Click Quick Update - should set checking state
+        let _ = model.update(Message::SelectQuickUpdate);
+        
+        assert_eq!(model.app_mode, AppMode::QuickUpdate);
+        assert_eq!(model.mode, GuiMode::QuickUpdate);
+        assert_eq!(model.selection_step, SelectionStep::Downloading);
+        assert!(model.download_started);
+        assert_eq!(model.quick_update_status, QuickUpdateStatus::Checking);
+        assert_eq!(model.global_status, "Checking for updates...");
+        assert!(model.tools.is_empty()); // Tools not populated yet
+        
+        // Verify view shows checking state (not download progress) without crashing
+        {
+            let _ui = simulator(model.view());
+        }
+        
+        // Step 2: Simulate check result - all tools installed
+        let results = vec![
+            ("GEProton".to_string(), true),
+            ("Wine-GE".to_string(), true),
+        ];
+        
+        let _ = model.update(Message::QuickUpdateChecked(results));
+        
+        assert_eq!(model.quick_update_status, QuickUpdateStatus::AllUpToDate(vec!["GEProton".to_string(), "Wine-GE".to_string()]));
+        assert_eq!(model.global_status, "Tools are up to date.");
+        assert!(model.tools.is_empty()); // Still no tools populated
+        
+        // Verify view shows up-to-date state without crashing
+        {
+            let _ui = simulator(model.view());
+        }
+        
+        // Step 3: Click Force Reinstall
+        let _ = model.update(Message::ForceReinstall);
+        
+        assert_eq!(model.quick_update_status, QuickUpdateStatus::InProgress);
+        assert_eq!(model.global_status, "Force reinstalling tools...");
+        assert!(!model.tools.is_empty()); // Tools should now be populated
+        
+        Ok(())
+    }
+
+    #[test]
+    fn quick_update_does_not_populate_tools_immediately() {
+        let mut model = ready_model();
+        model.detected_apps = vec![AppInstallations::Steam, AppInstallations::Lutris];
+        
+        // OLD BEHAVIOR: SelectQuickUpdate would immediately populate tools
+        // NEW BEHAVIOR: Should NOT populate tools until after check
+        
+        let _ = model.update(Message::SelectQuickUpdate);
+        
+        // Verify tools are NOT populated (new behavior)
+        assert!(model.tools.is_empty(), "Tools should not be populated until after checking");
+        
+        // Verify checking state
+        assert_eq!(model.quick_update_status, QuickUpdateStatus::Checking);
     }
 }

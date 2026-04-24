@@ -66,6 +66,10 @@ enum Message {
     // Download progress
     DownloadUpdate(DownloadUpdate),
 
+    // Quick update specific
+    QuickUpdateChecked(Vec<(String, bool)>), // (tool_name, is_installed)
+    ForceReinstall,
+
     // Navigation
     BackToInitial,
     BackToToolSelection,
@@ -152,6 +156,17 @@ enum ToolStatus {
     Unpacking,
     _Complete,
     Error(String),
+}
+
+/// Quick update lifecycle state
+#[derive(Debug, Clone, PartialEq, Default)]
+enum QuickUpdateStatus {
+    #[default]
+    Idle,
+    Checking,
+    AllUpToDate(Vec<String>), // tool names that are up to date
+    InProgress,
+    Complete,
 }
 
 impl ToolDownload {
@@ -277,6 +292,9 @@ struct ProtonupGui {
     manage_status: String,
     manage_error: Option<String>,
 
+    // Quick update specific state
+    quick_update_status: QuickUpdateStatus,
+
     // Persistent image handle (created once, reused across all view calls)
     logo_handle: image::Handle,
 }
@@ -311,6 +329,7 @@ impl Default for ProtonupGui {
             app_installations_views: Vec::new(),
             manage_status: String::new(),
             manage_error: None,
+            quick_update_status: QuickUpdateStatus::default(),
             logo_handle: image::Handle::from_bytes(LOGO_BYTES),
         }
     }
@@ -404,21 +423,17 @@ impl ProtonupGui {
                 self.download_started = true;
                 self.global_progress = 0.0;
                 self.download_complete = None;
-                self.global_status = "Starting Quick Update...".to_string();
+                self.global_status = "Checking for updates...".to_string();
+                self.quick_update_status = QuickUpdateStatus::Checking;
 
-                // Pre-populate tools based on detected apps
+                // Clear tools - we'll populate after checking
                 self.tools.clear();
-                for app in &self.detected_apps {
-                    let compat_tool = app.as_app().default_compatibility_tool();
-                    self.tools
-                        .push(ToolDownload::new(compat_tool.name, app.to_string()));
-                }
 
-                // Store the handle so we can abort the task later
-                let (task, handle) = download_task::run_quick_update(false);
-                self.download_handle = Some(handle);
-
-                task.map(Message::DownloadUpdate)
+                // Check if tools are already installed before starting download
+                Task::perform(
+                    Self::check_quick_update_installed(self.detected_apps.clone()),
+                    Message::QuickUpdateChecked,
+                )
             }
 
             Message::SelectDownloadForSteam => {
@@ -597,6 +612,59 @@ impl ProtonupGui {
                 }
             }
 
+            Message::QuickUpdateChecked(results) => {
+                // Ignore if we're no longer in QuickUpdate mode (e.g., user cancelled)
+                if self.app_mode != AppMode::QuickUpdate {
+                    return Task::none();
+                }
+                
+                let all_installed = results.iter().all(|(_, installed)| *installed);
+                if all_installed && !results.is_empty() {
+                    // All tools up to date - show force reinstall prompt
+                    let tool_names: Vec<String> = results.into_iter().map(|(name, _)| name).collect();
+                    self.quick_update_status = QuickUpdateStatus::AllUpToDate(tool_names);
+                    self.global_status = "Tools are up to date.".to_string();
+                    Task::none()
+                } else {
+                    // Some tools need updating - proceed with normal download
+                    self.quick_update_status = QuickUpdateStatus::InProgress;
+                    self.global_status = "Starting Quick Update...".to_string();
+                    
+                    // Pre-populate tools based on detected apps
+                    self.tools.clear();
+                    for app in &self.detected_apps {
+                        let compat_tool = app.as_app().default_compatibility_tool();
+                        self.tools
+                            .push(ToolDownload::new(compat_tool.name, app.to_string()));
+                    }
+
+                    // Store the handle so we can abort the task later
+                    let (task, handle) = download_task::run_quick_update(false);
+                    self.download_handle = Some(handle);
+
+                    task.map(Message::DownloadUpdate)
+                }
+            }
+
+            Message::ForceReinstall => {
+                self.quick_update_status = QuickUpdateStatus::InProgress;
+                self.global_status = "Force reinstalling tools...".to_string();
+                
+                // Pre-populate tools based on detected apps
+                self.tools.clear();
+                for app in &self.detected_apps {
+                    let compat_tool = app.as_app().default_compatibility_tool();
+                    self.tools
+                        .push(ToolDownload::new(compat_tool.name, app.to_string()));
+                }
+
+                // Store the handle so we can abort the task later
+                let (task, handle) = download_task::run_quick_update(true);
+                self.download_handle = Some(handle);
+
+                task.map(Message::DownloadUpdate)
+            }
+
             Message::ToggleReinstall(index) => {
                 if let Some(pos) = self
                     .force_reinstall_indices
@@ -646,12 +714,17 @@ impl ProtonupGui {
                             self.global_status =
                                 format!("✓ Success! Installed {} tools.", versions.len());
                             self.download_complete = Some(Ok(versions));
+                            // Mark quick update as complete if we're in that mode
+                            if self.app_mode == AppMode::QuickUpdate {
+                                self.quick_update_status = QuickUpdateStatus::Complete;
+                            }
                         }
                         Err(e) => {
                             let DownloadError::IoError(error_msg) = e;
                             self.global_phase = DownloadPhase::Error;
                             self.global_status = format!("✗ Error: {}", error_msg);
                             self.download_complete = Some(Err(error_msg));
+                            // On error, stay in current state (InProgress) so user can retry
                         }
                     }
                     Task::none()
@@ -935,6 +1008,57 @@ impl ProtonupGui {
         already_installed
     }
 
+    /// Check if quick update tools are already installed
+    async fn check_quick_update_installed(
+        detected_apps: Vec<AppInstallations>,
+    ) -> Vec<(String, bool)> {
+        use libprotonup::downloads;
+        use tokio::time::{timeout, Duration};
+
+        let mut results = Vec::new();
+        
+        for app_inst in &detected_apps {
+            let compat_tool = app_inst.as_app().default_compatibility_tool();
+            let tool_name = compat_tool.name.clone();
+            
+            // Fetch latest release
+            let release_result = timeout(
+                Duration::from_secs(10),
+                downloads::list_releases(&compat_tool)
+            ).await;
+            
+            match release_result {
+                Ok(Ok(mut release_list)) => {
+                    if release_list.is_empty() {
+                        results.push((tool_name, false)); // No releases available
+                        continue;
+                    }
+                    
+                    let latest_release = release_list.remove(0);
+                    let install_name = compat_tool.installation_name(&latest_release.tag_name);
+                    let mut install_path = PathBuf::from(app_inst.default_install_dir().as_str());
+                    install_path.push(&install_name);
+                    
+                    // Check if already installed
+                    let is_installed = files::check_if_exists(&install_path).await;
+                    results.push((tool_name, is_installed));
+                }
+                Ok(Err(e)) => {
+                    // Network error or API failure
+                    eprintln!("Failed to fetch releases for {}: {}", tool_name, e);
+                    results.push((tool_name, false));
+                }
+                Err(_) => {
+                    // Timeout
+                    eprintln!("Timeout fetching releases for {}", tool_name);
+                    results.push((tool_name, false));
+                }
+            }
+        }
+        
+        results
+    }
+
     /// Start the actual downloads
     fn start_downloads(&mut self, force_reinstall_names: HashSet<String>) -> Task<Message> {
         self.selection_step = SelectionStep::Downloading;
@@ -1004,6 +1128,9 @@ impl ProtonupGui {
         self.app_installations_views.clear();
         self.manage_status = String::new();
         self.manage_error = None;
+
+        // Reset quick update state
+        self.quick_update_status = QuickUpdateStatus::Idle;
     }
 
     fn view(&self) -> Element<'_, Message> {
@@ -1180,8 +1307,10 @@ impl ProtonupGui {
                     .height(Fill)
                     .into()
             }
-            // Show download progress when downloading
-            else if self.download_started && self.selection_step == SelectionStep::Downloading {
+            // Show download progress when downloading (but not for quick update checking/up-to-date states)
+            else if self.download_started 
+                && self.selection_step == SelectionStep::Downloading 
+                && !matches!(self.quick_update_status, QuickUpdateStatus::Checking | QuickUpdateStatus::AllUpToDate(_)) {
                 Column::new()
                     .spacing(10)
                     .push(self.view_download_progress())
@@ -1212,10 +1341,73 @@ impl ProtonupGui {
     }
 
     fn view_quick_update(&self) -> Element<'_, Message> {
-        Column::new()
-            .spacing(10)
-            .push(text("Quick Update in progress...").size(14))
-            .into()
+        match &self.quick_update_status {
+            QuickUpdateStatus::Checking => {
+                Column::new()
+                    .spacing(20)
+                    .push(text("Checking for updates...").size(16))
+                    .push(
+                        Container::new(Circular::new().size(40.0).bar_height(4.0))
+                            .center_x(Length::Fill)
+                            .padding(10),
+                    )
+                    .into()
+            }
+            QuickUpdateStatus::AllUpToDate(tool_names) => {
+                let mut column = Column::new().spacing(15);
+                
+                column = column.push(text("✓ Tools are up to date.").size(16).color([0.3, 1.0, 0.3]));
+                
+                column = column.push(text("The following tools are already installed:").size(14));
+                
+                for tool_name in tool_names {
+                    column = column.push(
+                        Row::new()
+                            .spacing(10)
+                            .push(text("•").size(14))
+                            .push(text(tool_name).size(14))
+                    );
+                }
+                
+                column = column.push(space::vertical().height(Length::Fixed(20.0)));
+                
+                column = column.push(
+                    button(text("Force Reinstallation").size(14))
+                        .on_press(Message::ForceReinstall)
+                        .padding(10)
+                        .style(warning_button_style())
+                );
+                
+                column = column.push(
+                    button(text("Back to Main Menu").size(14))
+                        .on_press(Message::BackToInitial)
+                        .padding(10)
+                );
+                
+                column.into()
+            }
+            QuickUpdateStatus::InProgress => {
+                // Should not reach here - InProgress should show download progress via view_download_progress
+                Column::new()
+                    .spacing(10)
+                    .push(text("Quick Update in progress...").size(14))
+                    .into()
+            }
+            QuickUpdateStatus::Complete => {
+                // Should not reach here - Complete should show completion via view_download_progress
+                Column::new()
+                    .spacing(10)
+                    .push(text("Quick Update complete.").size(14))
+                    .into()
+            }
+            QuickUpdateStatus::Idle => {
+                // Should not reach here - Idle means not in QuickUpdate mode
+                Column::new()
+                    .spacing(10)
+                    .push(text("Quick Update ready.").size(14))
+                    .into()
+            }
+        }
     }
 
     fn view_selection_flow(&self) -> Element<'_, Message> {
