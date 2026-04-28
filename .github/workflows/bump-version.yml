@@ -1,0 +1,55 @@
+name: Bump Version
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump_type:
+        description: 'Version bump type'
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - custom
+        default: patch
+      custom_version:
+        description: 'Custom version (only used if bump_type is "custom")'
+        required: false
+        type: string
+
+jobs:
+  bump-version:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd #v6.0.2
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Bump patch version
+        if: ${{ github.event.inputs.bump_type == 'patch' }}
+        run: ./scripts/bump-version.sh --patch
+
+      - name: Bump minor version
+        if: ${{ github.event.inputs.bump_type == 'minor' }}
+        run: ./scripts/bump-version.sh --minor
+
+      - name: Bump custom version
+        if: ${{ github.event.inputs.bump_type == 'custom' }}
+        run: ./scripts/bump-version.sh --version ${{ github.event.inputs.custom_version }}
+
+      - name: Commit and push changes
+        run: |
+          git add libprotonup/Cargo.toml protonup-rs/Cargo.toml Cargo.lock fuzz/Cargo.lock
+          NEW_VERSION=$(grep -m1 '^version' libprotonup/Cargo.toml | sed -E 's/version = "([^"]+)"/\1/')
+          git commit -m "chore: bump version to $NEW_VERSION"
+          git push

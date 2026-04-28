@@ -44,7 +44,8 @@ impl App {
         match s.to_lowercase().as_str() {
             "steam" => App::Steam,
             "lutris" => App::Lutris,
-            path => App::Custom(path.to_string()),
+            // default is a path. Should not do to_lowercase to the path
+            _ => App::Custom(s.to_string()),
         }
     }
 }
