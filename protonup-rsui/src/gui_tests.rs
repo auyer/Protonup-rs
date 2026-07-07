@@ -6,7 +6,7 @@ mod tests {
         QuickUpdateStatus, SelectionStep, ToolDownload, ToolProgress, ToolStatus,
     };
     use iced::widget::image;
-    use iced_test::{simulator, Error};
+    use iced_test::{Error, simulator};
     use libprotonup::sources::CompatTool;
     use std::path::PathBuf;
     use std::str::FromStr;
@@ -53,7 +53,7 @@ mod tests {
     #[test]
     fn view_renders_initial_state() -> Result<(), Error> {
         let model = ProtonupGui::default();
-        let mut ui = simulator(model.view());
+        let mut ui = simulator(crate::views::app_view(&model));
 
         // Should show title in header
         assert!(ui.find("Protonup-rs").is_ok());
@@ -67,7 +67,7 @@ mod tests {
     #[test]
     fn view_renders_detected_apps() -> Result<(), Error> {
         let model = ready_model();
-        let mut ui = simulator(model.view());
+        let mut ui = simulator(crate::views::app_view(&model));
 
         // Should have buttons when apps are detected
         assert!(ui.find("Quick Update").is_ok() || ui.find("Download for Steam").is_ok());
@@ -108,7 +108,7 @@ mod tests {
             quick_update_status: QuickUpdateStatus::Idle,
             logo_handle: image::Handle::from_bytes(crate::LOGO_BYTES),
         };
-        let mut ui = simulator(model.view());
+        let mut ui = simulator(crate::views::app_view(&model));
 
         // Should show error message
         assert!(ui.find("No compatible apps detected").is_ok());
@@ -134,7 +134,7 @@ mod tests {
         let mut model = ProtonupGui::default();
         let apps = vec![AppInstallations::Steam, AppInstallations::Lutris];
 
-        let _ = model.update(Message::AppsScanned(apps));
+        let _ = crate::update::handle(&mut model, Message::AppsScanned(apps));
 
         assert!(model.scan_complete);
         assert_eq!(model.detected_apps.len(), 2);
@@ -146,7 +146,7 @@ mod tests {
     fn apps_scanned_empty_list() {
         let mut model = ProtonupGui::default();
 
-        let _ = model.update(Message::AppsScanned(vec![]));
+        let _ = crate::update::handle(&mut model, Message::AppsScanned(vec![]));
 
         assert!(model.scan_complete);
         assert!(model.detected_apps.is_empty());
@@ -157,7 +157,7 @@ mod tests {
     fn tool_selected_does_not_crash() {
         let mut model = ProtonupGui::default();
 
-        let _ = model.update(Message::ToolSelected(0));
+        let _ = crate::update::handle(&mut model, Message::ToolSelected(0));
 
         // Should not crash, and tool should be selected
         assert_eq!(model.selected_tool_indices, vec![0]);
@@ -167,7 +167,10 @@ mod tests {
     fn selection_error_sets_status() {
         let mut model = ProtonupGui::default();
 
-        let _ = model.update(Message::SelectionError("test error".to_string()));
+        let _ = crate::update::handle(
+            &mut model,
+            Message::SelectionError("test error".to_string()),
+        );
 
         assert!(model.global_status.contains("test error"));
     }
@@ -179,7 +182,7 @@ mod tests {
         model.selection_step = SelectionStep::SelectingTools;
         model.download_started = true;
 
-        let _ = model.update(Message::BackToInitial);
+        let _ = crate::update::handle(&mut model, Message::BackToInitial);
 
         assert_eq!(model.mode, GuiMode::Initial);
         assert_eq!(model.selection_step, SelectionStep::Initial);
@@ -207,19 +210,17 @@ mod tests {
     #[test]
     fn tool_progress_update() {
         let mut model = ProtonupGui::default();
-        model.tools.push(ToolDownload::new(
-            "GEProton".to_string(),
-            "Steam".to_string(),
-        ));
+        model.tools.push(ToolDownload::new("GEProton".to_string()));
 
-        let _ = model.update(Message::DownloadUpdate(DownloadUpdate::ToolProgress(
-            ToolProgress {
+        let _ = crate::update::handle(
+            &mut model,
+            Message::DownloadUpdate(DownloadUpdate::ToolProgress(ToolProgress {
                 tool_name: "GEProton".to_string(),
                 phase: DownloadPhase::Downloading,
                 percent: 75.0,
                 status_message: "Downloading GEProton... 75.0%".to_string(),
-            },
-        )));
+            })),
+        );
 
         assert_eq!(model.tools[0].progress, 75.0);
         assert_eq!(model.tools[0].phase, DownloadPhase::Downloading);
@@ -229,13 +230,14 @@ mod tests {
     fn global_progress_update() {
         let mut model = ProtonupGui::default();
 
-        let _ = model.update(Message::DownloadUpdate(DownloadUpdate::GlobalProgress(
-            GlobalProgress {
+        let _ = crate::update::handle(
+            &mut model,
+            Message::DownloadUpdate(DownloadUpdate::GlobalProgress(GlobalProgress {
                 phase: DownloadPhase::Downloading,
                 status_message: "Downloading tools...".to_string(),
                 percent: 50.0,
-            },
-        )));
+            })),
+        );
 
         assert_eq!(model.global_progress, 50.0);
         assert_eq!(model.global_phase, DownloadPhase::Downloading);
@@ -245,9 +247,12 @@ mod tests {
     fn download_finished_success() {
         let mut model = ProtonupGui::default();
 
-        let _ = model.update(Message::DownloadUpdate(DownloadUpdate::Finished(Ok(vec![
-            "GE-Proton9-27".to_string(),
-        ]))));
+        let _ = crate::update::handle(
+            &mut model,
+            Message::DownloadUpdate(DownloadUpdate::Finished(Ok(vec![
+                "GE-Proton9-27".to_string(),
+            ]))),
+        );
 
         assert_eq!(model.global_progress, 100.0);
         assert_eq!(model.global_phase, DownloadPhase::Complete);
@@ -259,9 +264,12 @@ mod tests {
     fn download_finished_error() {
         let mut model = ProtonupGui::default();
 
-        let _ = model.update(Message::DownloadUpdate(DownloadUpdate::Finished(Err(
-            DownloadError::IoError("test error".to_string()),
-        ))));
+        let _ = crate::update::handle(
+            &mut model,
+            Message::DownloadUpdate(DownloadUpdate::Finished(Err(DownloadError::IoError(
+                "test error".to_string(),
+            )))),
+        );
 
         assert_eq!(model.global_phase, DownloadPhase::Error);
         assert!(model.download_complete.is_some());
@@ -276,14 +284,14 @@ mod tests {
     fn clicking_quick_update_starts_download() -> Result<(), Error> {
         let mut model = ready_model();
         model.detected_apps = vec![AppInstallations::Steam, AppInstallations::Lutris];
-        let mut ui = simulator(model.view());
+        let mut ui = simulator(crate::views::app_view(&model));
 
         // Click the Quick Update button
         let _ = ui.click("Quick Update")?;
 
         // Process the messages
         for message in ui.into_messages() {
-            let _ = model.update(message);
+            let _ = crate::update::handle(&mut model, message);
         }
 
         // Verify NEW behavior: checking state, no tools populated
@@ -292,7 +300,10 @@ mod tests {
         assert_eq!(model.selection_step, SelectionStep::Downloading);
         assert_eq!(model.quick_update_status, QuickUpdateStatus::Checking);
         assert_eq!(model.global_status, "Checking for updates...");
-        assert!(model.tools.is_empty(), "Tools should not be populated until after checking");
+        assert!(
+            model.tools.is_empty(),
+            "Tools should not be populated until after checking"
+        );
 
         Ok(())
     }
@@ -310,15 +321,15 @@ mod tests {
         ];
 
         // Select first tool (radio button behavior - only one at a time)
-        let _ = model.update(Message::ToolSelected(0));
+        let _ = crate::update::handle(&mut model, Message::ToolSelected(0));
         assert_eq!(model.selected_tool_indices, vec![0]);
 
         // Select second tool (replaces first)
-        let _ = model.update(Message::ToolSelected(1));
+        let _ = crate::update::handle(&mut model, Message::ToolSelected(1));
         assert_eq!(model.selected_tool_indices, vec![1]);
 
         // Select first tool again (replaces second)
-        let _ = model.update(Message::ToolSelected(0));
+        let _ = crate::update::handle(&mut model, Message::ToolSelected(0));
         assert_eq!(model.selected_tool_indices, vec![0]);
     }
 
@@ -328,16 +339,16 @@ mod tests {
         model.selection_step = SelectionStep::SelectingVersions;
 
         // Simulate versions being fetched
-        let _ = model.update(Message::VersionsFetched(vec![]));
+        let _ = crate::update::handle(&mut model, Message::VersionsFetched(vec![]));
 
         // Toggle versions
-        let _ = model.update(Message::ToggleVersion(0));
+        let _ = crate::update::handle(&mut model, Message::ToggleVersion(0));
         assert_eq!(model.selected_version_indices, vec![0]);
 
-        let _ = model.update(Message::ToggleVersion(1));
+        let _ = crate::update::handle(&mut model, Message::ToggleVersion(1));
         assert_eq!(model.selected_version_indices, vec![0, 1]);
 
-        let _ = model.update(Message::ToggleVersion(0));
+        let _ = crate::update::handle(&mut model, Message::ToggleVersion(0));
         assert_eq!(model.selected_version_indices, vec![1]);
     }
 
@@ -363,11 +374,11 @@ mod tests {
         )];
 
         // Select tool
-        let _ = model.update(Message::ToolSelected(0));
+        let _ = crate::update::handle(&mut model, Message::ToolSelected(0));
         assert_eq!(model.selected_tool_indices, vec![0]);
 
         // Confirm selection should move to version selection
-        let _ = model.update(Message::ToolSelectionConfirmed);
+        let _ = crate::update::handle(&mut model, Message::ToolSelectionConfirmed);
         assert_eq!(model.selection_step, SelectionStep::SelectingVersions);
         assert!(model.selected_tool.is_some());
     }
@@ -381,13 +392,13 @@ mod tests {
         model.available_versions = vec![]; // Would have releases in real usage
 
         // Toggle versions (indices would exist if versions were present)
-        let _ = model.update(Message::ToggleVersion(0));
+        let _ = crate::update::handle(&mut model, Message::ToggleVersion(0));
         assert_eq!(model.selected_version_indices, vec![0]);
 
-        let _ = model.update(Message::ToggleVersion(1));
+        let _ = crate::update::handle(&mut model, Message::ToggleVersion(1));
         assert_eq!(model.selected_version_indices, vec![0, 1]);
 
-        let _ = model.update(Message::ToggleVersion(0));
+        let _ = crate::update::handle(&mut model, Message::ToggleVersion(0));
         assert_eq!(model.selected_version_indices, vec![1]);
     }
 
@@ -398,20 +409,20 @@ mod tests {
     #[test]
     fn download_progress_updates_correct_tool() {
         let mut model = ProtonupGui::default();
-        model.tools.push(ToolDownload::new(
-            "GEProton GE-Proton9-27".to_string(),
-            "Steam \"Native\"".to_string(),
-        ));
+        model
+            .tools
+            .push(ToolDownload::new("GEProton GE-Proton9-27".to_string()));
 
         // Simulate download progress with matching name
-        let _ = model.update(Message::DownloadUpdate(DownloadUpdate::ToolProgress(
-            ToolProgress {
+        let _ = crate::update::handle(
+            &mut model,
+            Message::DownloadUpdate(DownloadUpdate::ToolProgress(ToolProgress {
                 tool_name: "GEProton GE-Proton9-27".to_string(),
                 phase: DownloadPhase::Downloading,
                 percent: 50.0,
                 status_message: "Downloading GE-Proton9-27... 50.0%".to_string(),
-            },
-        )));
+            })),
+        );
 
         assert_eq!(model.tools[0].progress, 50.0);
         assert_eq!(model.tools[0].status, ToolStatus::Downloading);
@@ -421,20 +432,20 @@ mod tests {
     #[test]
     fn mismatched_tool_name_does_not_update() {
         let mut model = ProtonupGui::default();
-        model.tools.push(ToolDownload::new(
-            "GEProton GE-Proton9-27".to_string(),
-            "Steam \"Native\"".to_string(),
-        ));
+        model
+            .tools
+            .push(ToolDownload::new("GEProton GE-Proton9-27".to_string()));
 
         // Simulate progress with WRONG name (just version, like the bug)
-        let _ = model.update(Message::DownloadUpdate(DownloadUpdate::ToolProgress(
-            ToolProgress {
+        let _ = crate::update::handle(
+            &mut model,
+            Message::DownloadUpdate(DownloadUpdate::ToolProgress(ToolProgress {
                 tool_name: "GE-Proton9-27".to_string(), // WRONG - missing tool name prefix
                 phase: DownloadPhase::Downloading,
                 percent: 50.0,
                 status_message: "Downloading... 50.0%".to_string(),
-            },
-        )));
+            })),
+        );
 
         // Progress should NOT have updated because names don't match
         assert_eq!(model.tools[0].progress, 0.0);
@@ -444,20 +455,20 @@ mod tests {
     #[test]
     fn validation_progress_updates_correct_tool() {
         let mut model = ProtonupGui::default();
-        model.tools.push(ToolDownload::new(
-            "GEProton GE-Proton9-27".to_string(),
-            "Steam \"Native\"".to_string(),
-        ));
+        model
+            .tools
+            .push(ToolDownload::new("GEProton GE-Proton9-27".to_string()));
 
         // Simulate validation progress
-        let _ = model.update(Message::DownloadUpdate(DownloadUpdate::ToolProgress(
-            ToolProgress {
+        let _ = crate::update::handle(
+            &mut model,
+            Message::DownloadUpdate(DownloadUpdate::ToolProgress(ToolProgress {
                 tool_name: "GEProton GE-Proton9-27".to_string(),
                 phase: DownloadPhase::Validating,
                 percent: 30.0,
                 status_message: "Validating GE-Proton9-27... 30.0%".to_string(),
-            },
-        )));
+            })),
+        );
 
         assert_eq!(model.tools[0].progress, 30.0);
         assert_eq!(model.tools[0].status, ToolStatus::Validating);
@@ -466,20 +477,20 @@ mod tests {
     #[test]
     fn unpacking_progress_updates_correct_tool() {
         let mut model = ProtonupGui::default();
-        model.tools.push(ToolDownload::new(
-            "GEProton GE-Proton9-27".to_string(),
-            "Steam \"Native\"".to_string(),
-        ));
+        model
+            .tools
+            .push(ToolDownload::new("GEProton GE-Proton9-27".to_string()));
 
         // Simulate unpacking progress
-        let _ = model.update(Message::DownloadUpdate(DownloadUpdate::ToolProgress(
-            ToolProgress {
+        let _ = crate::update::handle(
+            &mut model,
+            Message::DownloadUpdate(DownloadUpdate::ToolProgress(ToolProgress {
                 tool_name: "GEProton GE-Proton9-27".to_string(),
                 phase: DownloadPhase::Unpacking,
                 percent: 75.0,
                 status_message: "Installing GE-Proton9-27... 75.0%".to_string(),
-            },
-        )));
+            })),
+        );
 
         assert_eq!(model.tools[0].progress, 75.0);
         assert_eq!(model.tools[0].status, ToolStatus::Unpacking);
@@ -488,20 +499,20 @@ mod tests {
     #[test]
     fn complete_phase_marks_tool_done() {
         let mut model = ProtonupGui::default();
-        model.tools.push(ToolDownload::new(
-            "GEProton GE-Proton9-27".to_string(),
-            "Steam \"Native\"".to_string(),
-        ));
+        model
+            .tools
+            .push(ToolDownload::new("GEProton GE-Proton9-27".to_string()));
 
         // Simulate completion
-        let _ = model.update(Message::DownloadUpdate(DownloadUpdate::ToolProgress(
-            ToolProgress {
+        let _ = crate::update::handle(
+            &mut model,
+            Message::DownloadUpdate(DownloadUpdate::ToolProgress(ToolProgress {
                 tool_name: "GEProton GE-Proton9-27".to_string(),
                 phase: DownloadPhase::Complete,
                 percent: 100.0,
                 status_message: "✓ GEProton GE-Proton9-27 installed successfully".to_string(),
-            },
-        )));
+            })),
+        );
 
         assert_eq!(model.tools[0].progress, 100.0);
         assert_eq!(model.tools[0].status, ToolStatus::_Complete);
@@ -510,34 +521,34 @@ mod tests {
     #[test]
     fn multiple_tools_track_progress_independently() {
         let mut model = ProtonupGui::default();
-        model.tools.push(ToolDownload::new(
-            "GEProton GE-Proton9-27".to_string(),
-            "Steam \"Native\"".to_string(),
-        ));
-        model.tools.push(ToolDownload::new(
-            "GEProton GE-Proton9-26".to_string(),
-            "Steam \"Native\"".to_string(),
-        ));
+        model
+            .tools
+            .push(ToolDownload::new("GEProton GE-Proton9-27".to_string()));
+        model
+            .tools
+            .push(ToolDownload::new("GEProton GE-Proton9-26".to_string()));
 
         // Update first tool
-        let _ = model.update(Message::DownloadUpdate(DownloadUpdate::ToolProgress(
-            ToolProgress {
+        let _ = crate::update::handle(
+            &mut model,
+            Message::DownloadUpdate(DownloadUpdate::ToolProgress(ToolProgress {
                 tool_name: "GEProton GE-Proton9-27".to_string(),
                 phase: DownloadPhase::Downloading,
                 percent: 50.0,
                 status_message: "Downloading...".to_string(),
-            },
-        )));
+            })),
+        );
 
         // Update second tool
-        let _ = model.update(Message::DownloadUpdate(DownloadUpdate::ToolProgress(
-            ToolProgress {
+        let _ = crate::update::handle(
+            &mut model,
+            Message::DownloadUpdate(DownloadUpdate::ToolProgress(ToolProgress {
                 tool_name: "GEProton GE-Proton9-26".to_string(),
                 phase: DownloadPhase::Validating,
                 percent: 80.0,
                 status_message: "Validating...".to_string(),
-            },
-        )));
+            })),
+        );
 
         // Verify independent progress
         assert_eq!(model.tools[0].progress, 50.0);
@@ -554,22 +565,22 @@ mod tests {
     fn toggle_reinstall_adds_and_removes() {
         let mut model = ProtonupGui {
             already_installed_tools: vec![
-                ToolDownload::new("GEProton GE-Proton9-27".to_string(), "Steam".to_string()),
-                ToolDownload::new("GEProton GE-Proton9-26".to_string(), "Steam".to_string()),
+                ToolDownload::new("GEProton GE-Proton9-27".to_string()),
+                ToolDownload::new("GEProton GE-Proton9-26".to_string()),
             ],
             ..Default::default()
         };
 
         // Toggle first tool
-        let _ = model.update(Message::ToggleReinstall(0));
+        let _ = crate::update::handle(&mut model, Message::ToggleReinstall(0));
         assert_eq!(model.force_reinstall_indices, vec![0]);
 
         // Toggle second tool
-        let _ = model.update(Message::ToggleReinstall(1));
+        let _ = crate::update::handle(&mut model, Message::ToggleReinstall(1));
         assert_eq!(model.force_reinstall_indices, vec![0, 1]);
 
         // Toggle off first tool
-        let _ = model.update(Message::ToggleReinstall(0));
+        let _ = crate::update::handle(&mut model, Message::ToggleReinstall(0));
         assert_eq!(model.force_reinstall_indices, vec![1]);
     }
 
@@ -580,12 +591,12 @@ mod tests {
         model.app_installation = Some(AppInstallations::Steam);
 
         // Simulate already installed tools being checked
-        let already_installed = vec![ToolDownload::new(
-            "GEProton GE-Proton9-27".to_string(),
-            "Steam".to_string(),
-        )];
+        let already_installed = vec![ToolDownload::new("GEProton GE-Proton9-27".to_string())];
 
-        let _ = model.update(Message::AlreadyInstalledChecked(already_installed));
+        let _ = crate::update::handle(
+            &mut model,
+            Message::AlreadyInstalledChecked(already_installed),
+        );
 
         assert_eq!(model.already_installed_tools.len(), 1);
         assert_eq!(model.selection_step, SelectionStep::ConfirmReinstall);
@@ -599,12 +610,12 @@ mod tests {
         model.app_installation = Some(AppInstallations::Steam);
 
         // Simulate already installed tools being checked
-        let already_installed = vec![ToolDownload::new(
-            "GEProton GE-Proton9-27".to_string(),
-            "Steam".to_string(),
-        )];
+        let already_installed = vec![ToolDownload::new("GEProton GE-Proton9-27".to_string())];
 
-        let _ = model.update(Message::AlreadyInstalledChecked(already_installed));
+        let _ = crate::update::handle(
+            &mut model,
+            Message::AlreadyInstalledChecked(already_installed),
+        );
 
         assert_eq!(model.already_installed_tools.len(), 1);
         assert_eq!(model.selection_step, SelectionStep::ConfirmReinstall);
@@ -618,7 +629,7 @@ mod tests {
         model.app_installation = Some(AppInstallations::Steam);
 
         // Simulate no already installed tools
-        let _ = model.update(Message::AlreadyInstalledChecked(vec![]));
+        let _ = crate::update::handle(&mut model, Message::AlreadyInstalledChecked(vec![]));
 
         assert!(model.already_installed_tools.is_empty());
         // Should proceed to downloading
@@ -631,10 +642,8 @@ mod tests {
         model.mode = GuiMode::DownloadForSteam;
         model.selection_step = SelectionStep::ConfirmReinstall;
         model.app_installation = Some(AppInstallations::Steam);
-        model.already_installed_tools = vec![ToolDownload::new(
-            "GEProton GE-Proton9-27".to_string(),
-            "Steam".to_string(),
-        )];
+        model.already_installed_tools =
+            vec![ToolDownload::new("GEProton GE-Proton9-27".to_string())];
         model.force_reinstall_indices = vec![0]; // User selected to reinstall
 
         // Just verify the state is set up correctly for the test
@@ -653,9 +662,9 @@ mod tests {
 
         // Setup: 3 tools already installed
         model.already_installed_tools = vec![
-            ToolDownload::new("GEProton GE-Proton9-27".to_string(), "Steam".to_string()),
-            ToolDownload::new("GEProton GE-Proton9-26".to_string(), "Steam".to_string()),
-            ToolDownload::new("GEProton GE-Proton9-25".to_string(), "Steam".to_string()),
+            ToolDownload::new("GEProton GE-Proton9-27".to_string()),
+            ToolDownload::new("GEProton GE-Proton9-26".to_string()),
+            ToolDownload::new("GEProton GE-Proton9-25".to_string()),
         ];
 
         // User only selects the first one for reinstall
@@ -687,9 +696,9 @@ mod tests {
 
         // Setup: 3 tools already installed
         model.already_installed_tools = vec![
-            ToolDownload::new("GEProton GE-Proton9-27".to_string(), "Steam".to_string()),
-            ToolDownload::new("GEProton GE-Proton9-26".to_string(), "Steam".to_string()),
-            ToolDownload::new("GEProton GE-Proton9-25".to_string(), "Steam".to_string()),
+            ToolDownload::new("GEProton GE-Proton9-27".to_string()),
+            ToolDownload::new("GEProton GE-Proton9-26".to_string()),
+            ToolDownload::new("GEProton GE-Proton9-25".to_string()),
         ];
 
         // User selects first and third for reinstall
@@ -719,13 +728,13 @@ mod tests {
         let model = ready_model();
 
         // Call view() multiple times - simulating redraws from window events
-        let _ = model.view();
-        let _ = model.view();
-        let _ = model.view();
+        let _ = crate::views::app_view(&model);
+        let _ = crate::views::app_view(&model);
+        let _ = crate::views::app_view(&model);
 
         // The logo_handle should be the same instance (same pointer) across all views
         let handle1 = &model.logo_handle;
-        let _ = model.view();
+        let _ = crate::views::app_view(&model);
         let handle2 = &model.logo_handle;
 
         // Both references should point to the same underlying handle
@@ -755,7 +764,7 @@ mod tests {
         // Simulate having a handle (we can't easily create a real one)
         // The test just verifies the state reset logic
 
-        let _ = model.update(Message::Cancel);
+        let _ = crate::update::handle(&mut model, Message::Cancel);
 
         // Verify state is reset
         assert_eq!(model.selection_step, SelectionStep::Initial);
@@ -775,7 +784,7 @@ mod tests {
         model.selected_arch_variant = Some(2); // Default
 
         // Select v3
-        let _ = model.update(Message::SelectArchitecture(3));
+        let _ = crate::update::handle(&mut model, Message::SelectArchitecture(3));
 
         assert_eq!(model.selected_arch_variant, Some(3));
     }
@@ -866,7 +875,10 @@ mod tests {
         let mut model = ready_model();
         model.custom_path_input = "/old/path".to_string();
 
-        let _ = model.update(Message::CustomPathInput("/new/path".to_string()));
+        let _ = crate::update::handle(
+            &mut model,
+            Message::CustomPathInput("/new/path".to_string()),
+        );
 
         assert_eq!(model.custom_path_input, "/new/path");
         assert!(model.path_error.is_none());
@@ -878,7 +890,10 @@ mod tests {
         model.custom_path_input = "/old/path".to_string();
         model.path_error = Some("Some error".to_string());
 
-        let _ = model.update(Message::FolderPicked(Some(PathBuf::from("/picked/path"))));
+        let _ = crate::update::handle(
+            &mut model,
+            Message::FolderPicked(Some(PathBuf::from("/picked/path"))),
+        );
 
         assert_eq!(model.custom_path_input, "/picked/path");
         assert!(model.path_error.is_none());
@@ -889,7 +904,7 @@ mod tests {
         let mut model = ready_model();
         model.custom_path_input = "/existing/path".to_string();
 
-        let _ = model.update(Message::FolderPicked(None));
+        let _ = crate::update::handle(&mut model, Message::FolderPicked(None));
 
         // State should remain unchanged
         assert_eq!(model.custom_path_input, "/existing/path");
@@ -902,7 +917,7 @@ mod tests {
         model.mode = GuiMode::DownloadForSteam;
         model.custom_path_input = "/some/path".to_string();
 
-        let _ = model.update(Message::SelectDownloadForCustom);
+        let _ = crate::update::handle(&mut model, Message::SelectDownloadForCustom);
 
         assert_eq!(model.app_mode, AppMode::DownloadForCustom);
         assert_eq!(model.mode, GuiMode::DownloadForCustom);
@@ -921,7 +936,7 @@ mod tests {
         model.selection_step = SelectionStep::Initial;
 
         // First Continue: should set up app_installation and fetch tools
-        let _ = model.update(Message::ToolSelectionConfirmed);
+        let _ = crate::update::handle(&mut model, Message::ToolSelectionConfirmed);
 
         // Verify we're now at tool selection step
         assert!(model.app_installation.is_some());
@@ -945,7 +960,7 @@ mod tests {
         model.custom_path_input = String::new();
         model.selection_step = SelectionStep::Initial;
 
-        let _ = model.update(Message::ToolSelectionConfirmed);
+        let _ = crate::update::handle(&mut model, Message::ToolSelectionConfirmed);
 
         // Should show error and stay at initial step
         assert!(model.path_error.is_some());
@@ -968,7 +983,7 @@ mod tests {
         model.available_versions = Vec::new(); // Empty but that's OK for this test
 
         // Send back message
-        let _ = model.update(Message::BackToToolSelection);
+        let _ = crate::update::handle(&mut model, Message::BackToToolSelection);
 
         // Should return to tool selection
         assert_eq!(model.selection_step, SelectionStep::SelectingTools);
@@ -985,7 +1000,7 @@ mod tests {
         let mut model = ready_model();
         model.detected_apps = vec![AppInstallations::Steam, AppInstallations::Lutris];
 
-        let _ = model.update(Message::SelectQuickUpdate);
+        let _ = crate::update::handle(&mut model, Message::SelectQuickUpdate);
 
         assert_eq!(model.app_mode, AppMode::QuickUpdate);
         assert_eq!(model.mode, GuiMode::QuickUpdate);
@@ -1002,16 +1017,19 @@ mod tests {
         model.app_mode = AppMode::QuickUpdate;
         model.mode = GuiMode::QuickUpdate;
         model.quick_update_status = QuickUpdateStatus::Checking;
-        
+
         // Simulate all tools installed
         let results = vec![
             ("GEProton".to_string(), true),
             ("Wine-GE".to_string(), true),
         ];
-        
-        let _ = model.update(Message::QuickUpdateChecked(results));
 
-        assert_eq!(model.quick_update_status, QuickUpdateStatus::AllUpToDate(vec!["GEProton".to_string(), "Wine-GE".to_string()]));
+        let _ = crate::update::handle(&mut model, Message::QuickUpdateChecked(results));
+
+        assert_eq!(
+            model.quick_update_status,
+            QuickUpdateStatus::AllUpToDate(vec!["GEProton".to_string(), "Wine-GE".to_string()])
+        );
         assert_eq!(model.global_status, "Tools are up to date.");
         assert!(model.tools.is_empty()); // Still no tools populated
     }
@@ -1023,19 +1041,16 @@ mod tests {
         model.mode = GuiMode::QuickUpdate;
         model.quick_update_status = QuickUpdateStatus::Checking;
         model.detected_apps = vec![AppInstallations::Steam];
-        
+
         // Simulate some tools not installed
-        let results = vec![
-            ("GEProton".to_string(), false),
-        ];
-        
-        let _ = model.update(Message::QuickUpdateChecked(results));
+        let results = vec![("GEProton".to_string(), false)];
+
+        let _ = crate::update::handle(&mut model, Message::QuickUpdateChecked(results));
 
         assert_eq!(model.quick_update_status, QuickUpdateStatus::InProgress);
         assert_eq!(model.global_status, "Starting Quick Update...");
         assert!(!model.tools.is_empty()); // Tools should be populated
         assert_eq!(model.tools[0].name, "GEProton (Steam)");
-        assert_eq!(model.tools[0].app_target, "Steam");
     }
 
     #[test]
@@ -1045,8 +1060,8 @@ mod tests {
         model.mode = GuiMode::QuickUpdate;
         model.quick_update_status = QuickUpdateStatus::AllUpToDate(vec!["GEProton".to_string()]);
         model.detected_apps = vec![AppInstallations::Steam];
-        
-        let _ = model.update(Message::ForceReinstall);
+
+        let _ = crate::update::handle(&mut model, Message::ForceReinstall);
 
         assert_eq!(model.quick_update_status, QuickUpdateStatus::InProgress);
         assert_eq!(model.global_status, "Force reinstalling tools...");
@@ -1059,10 +1074,10 @@ mod tests {
     fn quick_update_flow_all_installed_shows_correct_ui() -> Result<(), Error> {
         let mut model = ready_model();
         model.detected_apps = vec![AppInstallations::Steam, AppInstallations::Lutris];
-        
+
         // Step 1: Click Quick Update - should set checking state
-        let _ = model.update(Message::SelectQuickUpdate);
-        
+        let _ = crate::update::handle(&mut model, Message::SelectQuickUpdate);
+
         assert_eq!(model.app_mode, AppMode::QuickUpdate);
         assert_eq!(model.mode, GuiMode::QuickUpdate);
         assert_eq!(model.selection_step, SelectionStep::Downloading);
@@ -1070,36 +1085,39 @@ mod tests {
         assert_eq!(model.quick_update_status, QuickUpdateStatus::Checking);
         assert_eq!(model.global_status, "Checking for updates...");
         assert!(model.tools.is_empty()); // Tools not populated yet
-        
+
         // Verify view shows checking state (not download progress) without crashing
         {
-            let _ui = simulator(model.view());
+            let _ui = simulator(crate::views::app_view(&model));
         }
-        
+
         // Step 2: Simulate check result - all tools installed
         let results = vec![
             ("GEProton".to_string(), true),
             ("Wine-GE".to_string(), true),
         ];
-        
-        let _ = model.update(Message::QuickUpdateChecked(results));
-        
-        assert_eq!(model.quick_update_status, QuickUpdateStatus::AllUpToDate(vec!["GEProton".to_string(), "Wine-GE".to_string()]));
+
+        let _ = crate::update::handle(&mut model, Message::QuickUpdateChecked(results));
+
+        assert_eq!(
+            model.quick_update_status,
+            QuickUpdateStatus::AllUpToDate(vec!["GEProton".to_string(), "Wine-GE".to_string()])
+        );
         assert_eq!(model.global_status, "Tools are up to date.");
         assert!(model.tools.is_empty()); // Still no tools populated
-        
+
         // Verify view shows up-to-date state without crashing
         {
-            let _ui = simulator(model.view());
+            let _ui = simulator(crate::views::app_view(&model));
         }
-        
+
         // Step 3: Click Force Reinstall
-        let _ = model.update(Message::ForceReinstall);
-        
+        let _ = crate::update::handle(&mut model, Message::ForceReinstall);
+
         assert_eq!(model.quick_update_status, QuickUpdateStatus::InProgress);
         assert_eq!(model.global_status, "Force reinstalling tools...");
         assert!(!model.tools.is_empty()); // Tools should now be populated
-        
+
         Ok(())
     }
 
@@ -1107,36 +1125,42 @@ mod tests {
     fn quick_update_does_not_populate_tools_immediately() {
         let mut model = ready_model();
         model.detected_apps = vec![AppInstallations::Steam, AppInstallations::Lutris];
-        
+
         // OLD BEHAVIOR: SelectQuickUpdate would immediately populate tools
         // NEW BEHAVIOR: Should NOT populate tools until after check
-        
-        let _ = model.update(Message::SelectQuickUpdate);
-        
+
+        let _ = crate::update::handle(&mut model, Message::SelectQuickUpdate);
+
         // Verify tools are NOT populated (new behavior)
-        assert!(model.tools.is_empty(), "Tools should not be populated until after checking");
-        
+        assert!(
+            model.tools.is_empty(),
+            "Tools should not be populated until after checking"
+        );
+
         // Verify checking state
         assert_eq!(model.quick_update_status, QuickUpdateStatus::Checking);
     }
-    
+
     #[tokio::test]
     async fn check_quick_update_installed_returns_true_when_tool_folder_exists() {
         let tmp = tempfile::tempdir().unwrap();
         let tool_dir = tmp.path().join("GE-Proton9-27");
         tokio::fs::create_dir(&tool_dir).await.unwrap();
-        
+
         let detected_apps = vec![AppInstallations::Custom(
-            tmp.path().to_str().unwrap().to_string()
+            tmp.path().to_str().unwrap().to_string(),
         )];
-        
+
         let results = ProtonupGui::check_quick_update_installed(detected_apps).await;
-        
+
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].0, "GEProton");
-        assert!(results[0].1, "check_quick_update_installed should return true when GEProton folder exists");
+        assert!(
+            results[0].1,
+            "check_quick_update_installed should return true when GEProton folder exists"
+        );
     }
-    
+
     #[test]
     fn quick_update_checked_with_two_apps_creates_distinctly_named_tools() {
         let mut model = ready_model();
@@ -1144,22 +1168,22 @@ mod tests {
         model.mode = GuiMode::QuickUpdate;
         model.quick_update_status = QuickUpdateStatus::Checking;
         model.detected_apps = vec![AppInstallations::Steam, AppInstallations::Lutris];
-        
+
         // Simulate some tools not installed for both apps
         let results = vec![
             ("GEProton".to_string(), false),
             ("GEProton".to_string(), false),
         ];
-        
-        let _ = model.update(Message::QuickUpdateChecked(results));
-        
+
+        let _ = crate::update::handle(&mut model, Message::QuickUpdateChecked(results));
+
         assert_eq!(model.tools.len(), 2);
         assert_eq!(model.tools[0].name, "GEProton (Steam)");
         assert_eq!(model.tools[1].name, "GEProton (Lutris)");
         // Tools must have distinct names for correct progress routing
         assert_ne!(model.tools[0].name, model.tools[1].name);
     }
-    
+
     #[test]
     fn quick_update_progress_routes_to_correct_tool_by_unique_name() {
         let mut model = ready_model();
@@ -1167,17 +1191,15 @@ mod tests {
         model.mode = GuiMode::QuickUpdate;
         model.quick_update_status = QuickUpdateStatus::InProgress;
         model.detected_apps = vec![AppInstallations::Steam, AppInstallations::Lutris];
-        
+
         // Populate tools as QuickUpdateChecked would
-        model.tools.push(ToolDownload::new(
-            "GEProton (Steam)".to_string(),
-            "Steam".to_string(),
-        ));
-        model.tools.push(ToolDownload::new(
-            "GEProton (Lutris)".to_string(),
-            "Lutris".to_string(),
-        ));
-        
+        model
+            .tools
+            .push(ToolDownload::new("GEProton (Steam)".to_string()));
+        model
+            .tools
+            .push(ToolDownload::new("GEProton (Lutris)".to_string()));
+
         // Simulate progress for Steam tool
         let steam_progress = ToolProgress {
             tool_name: "GEProton (Steam)".to_string(),
@@ -1185,13 +1207,14 @@ mod tests {
             percent: 50.0,
             status_message: "Downloading...".to_string(),
         };
-        let _ = model.update(Message::DownloadUpdate(
-            DownloadUpdate::ToolProgress(steam_progress),
-        ));
-        
+        let _ = crate::update::handle(
+            &mut model,
+            Message::DownloadUpdate(DownloadUpdate::ToolProgress(steam_progress)),
+        );
+
         assert_eq!(model.tools[0].progress, 50.0); // Steam updated
-        assert_eq!(model.tools[1].progress, 0.0);  // Lutris unchanged
-        
+        assert_eq!(model.tools[1].progress, 0.0); // Lutris unchanged
+
         // Simulate progress for Lutris tool
         let lutris_progress = ToolProgress {
             tool_name: "GEProton (Lutris)".to_string(),
@@ -1199,14 +1222,15 @@ mod tests {
             percent: 75.0,
             status_message: "Downloading...".to_string(),
         };
-        let _ = model.update(Message::DownloadUpdate(
-            DownloadUpdate::ToolProgress(lutris_progress),
-        ));
-        
+        let _ = crate::update::handle(
+            &mut model,
+            Message::DownloadUpdate(DownloadUpdate::ToolProgress(lutris_progress)),
+        );
+
         assert_eq!(model.tools[0].progress, 50.0); // Steam unchanged
         assert_eq!(model.tools[1].progress, 75.0); // Lutris updated
     }
-    
+
     #[test]
     fn force_reinstall_creates_distinctly_named_tools() {
         let mut model = ready_model();
@@ -1214,9 +1238,9 @@ mod tests {
         model.mode = GuiMode::QuickUpdate;
         model.quick_update_status = QuickUpdateStatus::AllUpToDate(vec!["GEProton".to_string()]);
         model.detected_apps = vec![AppInstallations::Steam, AppInstallations::Lutris];
-        
-        let _ = model.update(Message::ForceReinstall);
-        
+
+        let _ = crate::update::handle(&mut model, Message::ForceReinstall);
+
         assert_eq!(model.tools.len(), 2);
         assert_eq!(model.tools[0].name, "GEProton (Steam)");
         assert_eq!(model.tools[1].name, "GEProton (Lutris)");
