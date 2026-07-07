@@ -2607,7 +2607,7 @@ checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
 
 [[package]]
 name = "libprotonup"
-version = "1.0.0-rc0"
+version = "1.0.0-rc1"
 dependencies = [
  "anyhow",
  "arcstr",
@@ -3703,7 +3703,7 @@ dependencies = [
 
 [[package]]
 name = "protonup-rs"
-version = "1.0.0-rc0"
+version = "1.0.0-rc1"
 dependencies = [
  "anyhow",
  "arcstr",
@@ -3718,7 +3718,7 @@ dependencies = [
 
 [[package]]
 name = "protonup-rsui"
-version = "1.0.0-rc0"
+version = "1.0.0-rc1"
 dependencies = [
  "anyhow",
  "futures-util",
