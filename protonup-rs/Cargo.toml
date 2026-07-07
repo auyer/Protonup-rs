@@ -5,9 +5,11 @@ edition = "2024"
 authors = ["Rafael Passos <auyer@rcpassos.me>"]
 repository = "https://github.com/auyer/protonup-rs"
 license = "GPL-3.0"
-readme = "../README.md"
+readme = "man/protonup-rs.1.md"
 
 description = "A Rust app to automate the installation and update of Linux Gaming Compatibility tools, like ProtonGE, Luxtorpeda, Boxtron and others."
+
+include = ["/src", "../LICENSE", "man/"]
 
 [package.metadata.deb]
 maintainer = "Rafael Passos <auyer@rcpassos.me>"
@@ -18,7 +20,7 @@ section = "utility"
 priority = "optional"
 assets = [
     ["target/release/protonup-rs", "usr/bin/", "755"],
-    ["../README.md", "usr/share/doc/protonup-rs/README", "644"],
+    ["man/protonup-rs.1", "usr/share/doc/protonup-rs/protonup-rs.1", "644"],
 ]
 
 [dependencies]
