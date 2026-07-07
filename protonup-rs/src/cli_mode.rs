@@ -3,6 +3,8 @@ use libprotonup::apps::{App, AppInstallations};
 use libprotonup::downloads::{self, Release};
 use libprotonup::sources::CompatTool;
 use libprotonup::utils::match_version;
+use tokio::fs::File;
+use tokio::io::BufReader;
 
 use crate::architecture_variants;
 use crate::download;
@@ -256,23 +258,30 @@ pub async fn run_cli_mode(
             tokio::fs::remove_dir_all(&install_path).await?;
         }
 
+        // Open the compressed file
+        let compressed_file = File::open(&file).await.map_err(|e| {
+            anyhow::anyhow!("Error opening compressed file {}: {}", file.display(), e)
+        })?;
+
+        // Wrap the file with progress tracking to read compressed bytes
         let unpack_progress_bar =
             download::init_unpack_progress(&install_dir.clone(), &file, multi_progress.clone())
                 .await?;
 
-        let decompressor = libprotonup::files::Decompressor::from_path(&file)
-            .await
+        let progress_reader = unpack_progress_bar.wrap_async_read(compressed_file);
+
+        // Wrap with BufReader to provide AsyncBufRead for the decompressor
+        let buf_reader = BufReader::new(progress_reader);
+
+        // Create Decompressor from the BufReader
+        let path_str = file.to_string_lossy();
+        let decompressor = libprotonup::files::Decompressor::from_reader(buf_reader, &path_str)
             .map_err(|e| {
                 anyhow::anyhow!("Error checking file type of {}: {}", file.display(), e)
             })?;
 
-        libprotonup::files::unpack_file(
-            &compat_tool,
-            &download_item,
-            unpack_progress_bar.wrap_async_read(decompressor),
-            &install_dir,
-        )
-        .await?;
+        libprotonup::files::unpack_file(&compat_tool, &download_item, decompressor, &install_dir)
+            .await?;
 
         unpack_progress_bar.set_style(
             indicatif::ProgressStyle::default_bar()
