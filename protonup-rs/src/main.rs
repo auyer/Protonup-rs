@@ -7,12 +7,14 @@ use std::{fmt, process::exit};
 use libprotonup::apps::App;
 
 mod architecture_variants;
+mod cli;
 mod cli_mode;
 mod download;
 mod file_path;
 mod helper_menus;
 mod manage_apps;
 
+use cli::Opt;
 use manage_apps::manage_apps_routine;
 
 /// Guard struct that cleans up temp directory when dropped
@@ -22,37 +24,6 @@ impl Drop for TempDirCleanupGuard {
     fn drop(&mut self) {
         let _ = libprotonup::utils::cleanup_fallback_temp_dir();
     }
-}
-
-#[derive(Debug, Parser)]
-#[command(
-    about = "Protonup-rs Install and Manage Proton/Wine and other Game Runtimes.\n\nRun without arguments to start the interactive TUI mode, or use the options:"
-)]
-struct Opt {
-    /// Skip Menu, auto detect apps and download using default parameters
-    #[arg(short, long)]
-    quick_download: bool,
-
-    /// Force install for existing apps during quick downloads
-    #[arg(short, long)]
-    force: bool,
-
-    /// Compatibility tool to install (e.g., GEProton, Luxtorpeda)
-    #[arg(long)]
-    tool: Option<String>,
-
-    /// Version to install (use "latest" for the latest version)
-    #[arg(long)]
-    version: Option<String>,
-
-    /// Target for installation. Use "steam", "lutris", or a custom path.
-    /// If omitted, auto-detects Steam or Lutris.
-    #[arg(long)]
-    r#for: Option<String>,
-
-    /// Show release notes for latest versions of default tools
-    #[arg(short, long)]
-    whats_new: bool,
 }
 
 #[derive(Debug, Copy, Clone)]

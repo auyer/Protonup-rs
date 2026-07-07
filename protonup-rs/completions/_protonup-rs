@@ -1,0 +1,42 @@
+#compdef protonup-rs
+
+autoload -U is-at-least
+
+_protonup-rs() {
+    typeset -A opt_args
+    typeset -a _arguments_options
+    local ret=1
+
+    if is-at-least 5.2; then
+        _arguments_options=(-s -S -C)
+    else
+        _arguments_options=(-s -C)
+    fi
+
+    local context curcontext="$curcontext" state line
+    _arguments "${_arguments_options[@]}" : \
+'--tool=[Compatibility tool to install (e.g., GEProton, Luxtorpeda)]:TOOL:_default' \
+'--version=[Version to install (use "latest" for the latest version)]:VERSION:_default' \
+'--for=[Target for installation. Use "steam", "lutris", or a custom path. If omitted, auto-detects Steam or Lutris]:FOR:_default' \
+'-q[Skip Menu, auto detect apps and download using default parameters]' \
+'--quick-download[Skip Menu, auto detect apps and download using default parameters]' \
+'-f[Force install for existing apps during quick downloads]' \
+'--force[Force install for existing apps during quick downloads]' \
+'-w[Show release notes for latest versions of default tools]' \
+'--whats-new[Show release notes for latest versions of default tools]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+}
+
+(( $+functions[_protonup-rs_commands] )) ||
+_protonup-rs_commands() {
+    local commands; commands=()
+    _describe -t commands 'protonup-rs commands' commands "$@"
+}
+
+if [ "$funcstack[1]" = "_protonup-rs" ]; then
+    _protonup-rs "$@"
+else
+    compdef _protonup-rs protonup-rs
+fi

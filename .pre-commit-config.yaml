@@ -10,6 +10,12 @@ repos:
       - id: clippy
   - repo: local
     hooks:
+      - id: completions
+        name: Check completions up to date
+        entry: bash scripts/check-completions.sh
+        language: system
+        pass_filenames: false
+        files: ^protonup-rs/src/cli\.rs$
       - id: man-page
         name: Generate man page
         entry: bash scripts/go-md2man.sh
