@@ -99,7 +99,7 @@ pub(crate) async fn manage_apps_routine() {
                     |_| {
                         println!(
                             "{} {} deleted successfully",
-                            &app,
+                            app,
                             version_path.as_path().display()
                         );
                     },

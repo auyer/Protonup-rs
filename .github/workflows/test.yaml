@@ -32,6 +32,7 @@ jobs:
         run: |
           cargo check
           cargo test --all
+          cargo test --all -- --ignored
 
       - name: Build
         run: |

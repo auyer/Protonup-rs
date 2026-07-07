@@ -2,17 +2,17 @@
 name = "protonup-rs"
 version = "1.0.0-rc0"
 edition = "2024"
-authors = ["Auyer <auyer@rcpassos.me>"]
+authors = ["Rafael Passos <auyer@rcpassos.me>"]
 repository = "https://github.com/auyer/protonup-rs"
 license = "GPL-3.0"
 readme = "../README.md"
 
-description = "A Rust TUI app to automate the installation and update of Linux Gaming Compatibility tools, like ProtonGE, Luxtorpeda, Boxtron and others"
+description = "A Rust app to automate the installation and update of Linux Gaming Compatibility tools, like ProtonGE, Luxtorpeda, Boxtron and others."
 
 [package.metadata.deb]
-maintainer = "Auyer <auyer@rcpassos.me>"
-copyright = "2024, Auyer <auyer@rcpassos.me>"
-extended-description = "A Rust TUI app to automate the installation and update of Linux Gaming Compatibility tools, like ProtonGE, Luxtorpeda, Boxtron and others"
+maintainer = "Rafael Passos <auyer@rcpassos.me>"
+copyright = "Rafael Passos <auyer@rcpassos.me>"
+extended-description = "A Rust app to automate the installation and update of Linux Gaming Compatibility tools, like ProtonGE, Luxtorpeda, Boxtron and others."
 depends = "$auto"
 section = "utility"
 priority = "optional"

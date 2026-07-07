@@ -309,7 +309,7 @@ pub async fn download_to_selected_app(app: Option<apps::App>) -> Result<Vec<Rele
                 .with_autocomplete(file_path::FilePathCompleter::default())
                 .with_help_message(&format!(
                     "Current directory: {}",
-                    &std::env::current_dir()
+                    std::env::current_dir()
                         .unwrap_or_else(|_| std::process::exit(0))
                         .to_string_lossy()
                 ))
@@ -469,7 +469,7 @@ async fn download_validate_unpack_with_download(
                 .with_context(|| {
                     format!(
                         "Error getting expected download hash for {}",
-                        &download.version
+                        download.version
                     )
                 })?;
             let hash_sum = hashing::HashSums {
@@ -545,7 +545,7 @@ async fn should_download(release: &Release, install_dir: &mut PathBuf) -> bool {
         || helper_menus::confirm_menu(
             format!(
                 "Version {} exists in the installation path. Overwrite?",
-                &release.tag_name
+                release.tag_name
             ),
             String::from("If you choose yes, you will re-install it."),
             false,
