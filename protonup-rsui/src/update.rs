@@ -393,7 +393,6 @@ pub(crate) fn handle(state: &mut ProtonupGui, message: Message) -> Task<Message>
                 .iter()
                 .map(|app| AppInstallationView {
                     app: app.clone(),
-                    selected: true,
                     versions: vec![],
                     loading: true,
                 })
@@ -403,13 +402,6 @@ pub(crate) fn handle(state: &mut ProtonupGui, message: Message) -> Task<Message>
                 ProtonupGui::scan_all_installed_versions(),
                 Message::VersionsScanned,
             )
-        }
-
-        Message::AppSelectionToggled(index) => {
-            if let Some(view) = state.app_installations_views.get_mut(index) {
-                view.selected = !view.selected;
-            }
-            Task::none()
         }
 
         Message::VersionToggled(app_index, version_index) => {

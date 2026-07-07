@@ -50,7 +50,6 @@ pub(crate) enum Message {
     FolderPicked(Option<PathBuf>),
 
     SelectManageInstallations,
-    AppSelectionToggled(usize),
     VersionToggled(usize, usize),
     DeleteSelectedVersions,
     DeleteCompleted(Result<Vec<String>, String>),
@@ -181,7 +180,6 @@ pub(crate) struct InstalledVersion {
 #[derive(Debug)]
 pub(crate) struct AppInstallationView {
     pub app: AppInstallations,
-    pub selected: bool,
     pub versions: Vec<InstalledVersion>,
     pub loading: bool,
 }

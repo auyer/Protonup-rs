@@ -18,16 +18,7 @@ pub(crate) fn view(state: &ProtonupGui) -> Element<'_, Message> {
     for (app_idx, view) in state.app_installations_views.iter().enumerate() {
         let mut col = Column::new().spacing(10).width(Length::Fill);
 
-        col = col.push(
-            Row::new()
-                .spacing(10)
-                .align_y(Center)
-                .push(
-                    checkbox(view.selected)
-                        .on_toggle(move |_| Message::AppSelectionToggled(app_idx)),
-                )
-                .push(text(format!("{}", view.app)).size(14)),
-        );
+        col = col.push(text(format!("{}", view.app)).size(14));
 
         col = col.push(rule::horizontal(1));
 
