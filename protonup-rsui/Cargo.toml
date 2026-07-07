@@ -30,7 +30,7 @@ libprotonup = { path = "../libprotonup", version = "1.0.0-rc0" }
 lyon_algorithms = "1.0"
 rfd = "0.17"
 
-tokio = { version = "1.50", features = ["sync"] }
+tokio = { version = "1.52", features = ["sync"] }
 futures-util = "0.3"
 anyhow = "1.0"
 
