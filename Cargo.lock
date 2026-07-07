@@ -1115,6 +1115,7 @@ dependencies = [
  "futures-util",
  "hex",
  "hex-literal",
+ "http",
  "lazy_static",
  "pin-project",
  "regex",

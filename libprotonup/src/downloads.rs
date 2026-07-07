@@ -4,6 +4,7 @@ use super::constants;
 use crate::apps;
 use crate::files;
 use crate::hashing;
+use crate::http_client;
 use crate::sources::CompatTool;
 use anyhow::{self, Context, Result};
 use futures_util::TryStreamExt;
@@ -175,22 +176,31 @@ impl Asset {
 
 /// Downloads and returns the text response
 pub async fn download_file_into_memory(url: &String) -> Result<String> {
+    download_file_into_memory_with_sender(url, &http_client::RealSender).await
+}
+
+pub(crate) async fn download_file_into_memory_with_sender<S: http_client::HttpSend>(
+    url: &String,
+    sender: &S,
+) -> Result<String> {
     let client = reqwest::Client::new();
-    let res = client
-        .get(url)
-        .header(USER_AGENT, format!("protonup-rs {}", constants::VERSION))
-        .send()
+    let res = sender
+        .send(
+            client
+                .get(url)
+                .header(USER_AGENT, format!("protonup-rs {}", constants::VERSION)),
+        )
         .await
         .with_context(|| {
             format!(
                 "[Download SHA] Failed to call remote server on URL: {}",
-                &url
+                url
             )
         })?;
 
     res.text()
         .await
-        .with_context(|| format!("[Download SHA] Failed to read response from URL: {}", &url))
+        .with_context(|| format!("[Download SHA] Failed to read response from URL: {}", url))
 }
 
 /// Downloads to a AsyncWrite buffer, where hooks and Wrappers can be used to report progress
@@ -198,13 +208,26 @@ pub async fn download_to_async_write<W: AsyncWrite + Unpin>(
     url: &str,
     write: &mut W,
 ) -> Result<()> {
+    download_to_async_write_with_sender(url, write, &http_client::RealSender).await
+}
+
+pub(crate) async fn download_to_async_write_with_sender<
+    S: http_client::HttpSend,
+    W: AsyncWrite + Unpin,
+>(
+    url: &str,
+    write: &mut W,
+    sender: &S,
+) -> Result<()> {
     let client = reqwest::Client::new();
-    let res = client
-        .get(url)
-        .header(USER_AGENT, format!("protonup-rs {}", constants::VERSION))
-        .send()
+    let res = sender
+        .send(
+            client
+                .get(url)
+                .header(USER_AGENT, format!("protonup-rs {}", constants::VERSION)),
+        )
         .await
-        .with_context(|| format!("[Download] Failed to call remote server on URL: {}", &url))?;
+        .with_context(|| format!("[Download] Failed to call remote server on URL: {}", url))?;
 
     io::copy(
         &mut StreamReader::new(res.bytes_stream().map_err(io::Error::other)),
@@ -216,6 +239,13 @@ pub async fn download_to_async_write<W: AsyncWrite + Unpin>(
 
 /// Returns a Vec of Releases from a GitHub repository, the URL used for the request is built from the passed in VariantParameters
 pub async fn list_releases(compat_tool: &CompatTool) -> Result<ReleaseList, reqwest::Error> {
+    list_releases_with_sender(compat_tool, &http_client::RealSender).await
+}
+
+pub(crate) async fn list_releases_with_sender<S: http_client::HttpSend>(
+    compat_tool: &CompatTool,
+    sender: &S,
+) -> Result<ReleaseList, reqwest::Error> {
     let agent = format!("{}/v{}", constants::USER_AGENT, constants::VERSION,);
 
     let url = format!(
@@ -227,7 +257,7 @@ pub async fn list_releases(compat_tool: &CompatTool) -> Result<ReleaseList, reqw
 
     let client = reqwest::Client::builder().user_agent(agent).build()?;
 
-    let r_list: ReleaseList = client.get(url).send().await?.json().await?;
+    let r_list: ReleaseList = sender.send(client.get(url)).await?.json().await?;
 
     // filter releases without assets
     let r_list: ReleaseList = r_list
@@ -280,11 +310,12 @@ impl Download {
 mod tests {
     use std::str::FromStr;
 
-    use crate::{constants, sources};
+    use crate::{constants, http_client::HttpSend, sources};
 
     use super::*;
 
     #[tokio::test]
+    #[ignore]
     async fn test_list_releases() {
         let conditions = &[
             (
@@ -319,6 +350,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore]
     async fn test_get_release() {
         let agent = format!("{}/v{}", constants::USER_AGENT, constants::VERSION,);
 
@@ -517,6 +549,126 @@ mod tests {
             result.len(),
             0,
             "Should have filtered out the release without assets"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_get_release_mocked() {
+        let sender = http_client::MockSender {
+            status: 200,
+            content_type: "application/json".into(),
+            body: json!({
+                "tag_name": "GE-Proton9-10",
+                "name": "GE-Proton9-10",
+                "url": "https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases/123",
+                "assets": [{
+                    "url": "https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases/assets/456",
+                    "id": 456,
+                    "name": "GE-Proton9-10.tar.gz",
+                    "size": 500000000,
+                    "updated_at": "2024-01-01T00:00:00Z",
+                    "browser_download_url": "https://github.com/GloriousEggroll/proton-ge-custom/releases/download/GE-Proton9-10/GE-Proton9-10.tar.gz"
+                }],
+                "body": null
+            }).to_string(),
+        };
+
+        let client = reqwest::Client::new();
+        let rel = sender
+            .send(client.get("https://example.com/releases/latest"))
+            .await
+            .unwrap()
+            .json::<Release>()
+            .await;
+        assert!(
+            rel.is_ok(),
+            "Mocked get_release should deserialize correctly"
+        );
+        let rel = rel.unwrap();
+        assert_eq!(rel.tag_name, "GE-Proton9-10");
+    }
+
+    #[tokio::test]
+    async fn test_list_releases_with_mock_sender() {
+        let sender = http_client::MockSender {
+            status: 200,
+            content_type: "application/json".into(),
+            body: json!([{
+                "tag_name": "GE-Proton9-10-rtsp12",
+                "name": "GE-Proton9-10-rtsp12",
+                "url": null,
+                "assets": [{
+                    "url": "https://api.github.com/asset1",
+                    "id": 1,
+                    "name": "GE-Proton9-10-rtsp13.tar.gz",
+                    "size": 1024,
+                    "updated_at": "2024-01-01T00:00:00Z",
+                    "browser_download_url": "https://example.com/releases/download/GE-Proton9-10-rtsp13.tar.gz"
+                }],
+                "body": null
+            }]).to_string(),
+        };
+
+        let regex =
+            r"^(GE-Proton|Proton-)[0-9]+(-[0-9]+)?-(rtsp)-?(\d+(-\d+)?)?\.(tar\.gz|tar\.zst)$";
+        let tool = CompatTool::new_custom(
+            "TestTool".to_string(),
+            sources::Forge::Custom("https://example.com".to_string()),
+            "test-owner".to_string(),
+            "test-repo".to_string(),
+            sources::ToolType::WineBased,
+            Some(regex.to_owned()),
+            None,
+            None,
+        );
+
+        let result = list_releases_with_sender(&tool, &sender)
+            .await
+            .expect("list_releases_with_sender failed");
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].tag_name, "GE-Proton9-10-rtsp12");
+    }
+
+    #[tokio::test]
+    async fn test_list_releases_with_mock_sender_filters_empty() {
+        let sender = http_client::MockSender {
+            status: 200,
+            content_type: "application/json".into(),
+            body: json!([{
+                "tag_name": "v1.0",
+                "name": "v1.0",
+                "url": null,
+                "assets": [{
+                    "url": "https://api.github.com/asset1",
+                    "id": 1,
+                    "name": "source-code.zip",
+                    "size": 1024,
+                    "updated_at": "2024-01-01T00:00:00Z",
+                    "browser_download_url": "https://example.com/source-code.zip"
+                }],
+                "body": null
+            }])
+            .to_string(),
+        };
+
+        let tool = CompatTool::new_custom(
+            "TestTool".to_string(),
+            sources::Forge::Custom("https://example.com".to_string()),
+            "test-owner".to_string(),
+            "test-repo".to_string(),
+            sources::ToolType::WineBased,
+            None,
+            None,
+            None,
+        );
+
+        let result = list_releases_with_sender(&tool, &sender)
+            .await
+            .expect("list_releases_with_sender failed");
+        assert_eq!(
+            result.len(),
+            0,
+            "Should filter out release without supported assets"
         );
     }
 }
