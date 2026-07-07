@@ -38,6 +38,7 @@ regex = "1.12"
 fs4 = { version = "0.13", features = ["sync"] }
 
 [dev-dependencies]
+http = "1"
 tar = "0.4"
 tokio = { version = "1.52", features = ["macros", "rt"] }
 wiremock = "0.6"

@@ -3,10 +3,10 @@ use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use std::{fmt, str::FromStr};
 
-const SOURCCES_RON: &str = include_str!("sources.ron");
+const SOURCES_RON: &str = include_str!("sources.ron");
 
 lazy_static! {
-    pub static ref CompatTools: Vec<CompatTool> = ron::from_str(SOURCCES_RON).unwrap();
+    pub static ref CompatTools: Vec<CompatTool> = ron::from_str(SOURCES_RON).unwrap();
 }
 
 /// Struct used to build GitHub API request URLs.
