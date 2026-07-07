@@ -126,6 +126,7 @@ pub async fn run_cli_mode(
     version: Option<String>,
     for_target: Option<String>,
     force: bool,
+    whats_new: bool,
 ) -> Result<Vec<Release>, Error> {
     // Determine the compatibility tool first (needed for auto-detection)
     let compat_tool = match tool.as_deref() {
@@ -191,6 +192,18 @@ pub async fn run_cli_mode(
                 )?]
             }
         };
+
+    // Show release notes if --whats-new was requested
+    if whats_new {
+        let mut seen_tags = std::collections::HashSet::new();
+        let unique_releases: Vec<&Release> = releases
+            .iter()
+            .filter(|r| seen_tags.insert(r.tag_name.clone()))
+            .collect();
+        for release in unique_releases {
+            download::show_whatsnew(release, &compat_tool).await;
+        }
+    }
 
     // Handle tools with multiple asset variations
     let downloads_vec: Vec<downloads::Download> = if compat_tool.has_multiple_asset_variations {

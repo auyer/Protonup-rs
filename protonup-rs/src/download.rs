@@ -255,6 +255,12 @@ pub async fn run_quick_downloads(force: bool, whats_new: bool) -> Result<Vec<Rel
         }
     }
 
+    // Collect release+tool pairs for the post-download changelog prompt
+    let release_tool_pairs: Vec<(Release, CompatTool)> = groups
+        .values()
+        .map(|(_, release, compat_tool, _)| (release.clone(), compat_tool.clone()))
+        .collect();
+
     // Queue one download task per group
     let joins = FuturesUnordered::new();
 
@@ -277,21 +283,15 @@ pub async fn run_quick_downloads(force: bool, whats_new: bool) -> Result<Vec<Rel
         .await;
     multi_progress.clear().unwrap();
 
+    // Prompt to view changelogs after downloads complete
+    prompt_changelogs(&release_tool_pairs).await;
+
     Ok(unique_releases)
 }
 
-async fn show_whatsnew(release: &Release, compat_tool: &CompatTool) {
-    // Show release notes before downloading if --whats-new was passed
+pub(crate) fn format_whatsnew(release: &Release, compat_tool: &CompatTool) -> String {
     const WHATS_NEW_LINES: usize = 40;
-
-    println!();
-    println!("  ┌{}┐", "─".repeat(50));
-    println!("  │ {:^48} │", "Release Notes");
-    println!("  └{}┘", "─".repeat(50));
-
-    // if release.body.is_none() || release.body.as_ref().is_some_and(|s| s.is_empty()) {
-    //     release.body = Some("\n  (could not fetch release notes)".to_string());
-    // }
+    let mut output = String::new();
 
     let url = format!(
         "{}{}/{}/releases/tag/{}",
@@ -300,20 +300,158 @@ async fn show_whatsnew(release: &Release, compat_tool: &CompatTool) {
         compat_tool.repository_name,
         release.tag_name
     );
-    println!("\n  {}: {}", release.tag_name, url);
+
+    output.push('\n');
+    output.push_str(&format!("  ┌{}┐\n", "─".repeat(50)));
+    output.push_str(&format!("  │ {:^48} │\n", "Release Notes"));
+    output.push_str(&format!("  └{}┘\n", "─".repeat(50)));
+    output.push_str(&format!("\n  {}: {}\n", release.tag_name, url));
+
     match &release.body {
         Some(body) => {
             let all_lines: Vec<&str> = body.lines().collect();
             let notes = all_lines[..all_lines.len().min(WHATS_NEW_LINES)].join("\n");
             if all_lines.len() > WHATS_NEW_LINES {
-                println!("\n{}\n  ⋯ [truncated]", notes);
+                output.push_str(&format!("\n{}\n  ⋯ [truncated]\n", notes));
             } else {
-                println!("\n{}", notes);
+                output.push_str(&format!("\n{}\n", notes));
             }
         }
-        None => println!("\n  (no release notes)"),
+        None => output.push_str("\n  (no release notes)\n"),
     }
-    println!();
+
+    output.push('\n');
+    output
+}
+
+pub(crate) async fn show_whatsnew(release: &Release, compat_tool: &CompatTool) {
+    print!("{}", format_whatsnew(release, compat_tool));
+}
+
+async fn prompt_changelogs(releases: &[(Release, CompatTool)]) {
+    for (release, compat_tool) in releases {
+        if release.body.is_none() {
+            continue;
+        }
+        let confirmed = inquire::Confirm::new(&format!("View changelog for {}?", release.tag_name))
+            .with_default(false)
+            .prompt()
+            .unwrap_or(false);
+        if confirmed {
+            show_whatsnew(release, compat_tool).await;
+        }
+    }
+}
+
+/// Standalone mode: check installed apps, fetch latest releases, show changelogs
+/// and print "Update available to version $v" for each tool with a newer release.
+pub(crate) async fn check_whats_new() -> Result<()> {
+    let found_apps = apps::list_installed_apps().await;
+    if found_apps.is_empty() {
+        println!("No apps found. Please install at least one app before using this feature.");
+        return Ok(());
+    }
+    println!(
+        "Found the following apps: {}",
+        found_apps
+            .iter()
+            .map(|app| app.to_string())
+            .collect::<Vec<String>>()
+            .join(", ")
+    );
+
+    let mut releases_cache: HashMap<String, ReleaseList> = HashMap::new();
+    let mut tool_entries: Vec<(apps::AppInstallations, CompatTool)> = vec![];
+
+    for app_inst in found_apps {
+        let compat_tool = app_inst.as_app().default_compatibility_tool();
+        tool_entries.push((app_inst, compat_tool));
+    }
+
+    let mut seen_tools: HashSet<String> = HashSet::new();
+
+    for (app_inst, compat_tool) in tool_entries {
+        if !seen_tools.insert(compat_tool.name.clone()) {
+            continue;
+        }
+
+        let release_list = match releases_cache.get(&compat_tool.name) {
+            Some(list) => list.clone(),
+            None => match downloads::list_releases(&compat_tool).await {
+                Ok(list) => {
+                    releases_cache.insert(compat_tool.name.clone(), list.clone());
+                    list
+                }
+                Err(e) => {
+                    eprintln!("Failed to fetch releases for {}: {}", compat_tool.name, e);
+                    continue;
+                }
+            },
+        };
+
+        if release_list.is_empty() {
+            continue;
+        }
+
+        let latest = &release_list[0];
+        show_whatsnew(latest, &compat_tool).await;
+
+        let install_name = compat_tool.installation_name(&latest.tag_name);
+        let install_dir = app_inst.default_install_dir();
+        let install_path = PathBuf::from(install_dir.as_str()).join(&install_name);
+
+        if files::check_if_exists(&install_path).await {
+            println!("Already up to date ({})\n", latest.tag_name);
+        } else {
+            println!("Update available to version {}\n", latest.tag_name);
+        }
+    }
+
+    Ok(())
+}
+
+/// TUI menu handler: select a tool, pick versions, and show changelogs.
+pub(crate) async fn check_changelog_menu() -> Result<Vec<Release>> {
+    let available_sources = CompatTools.clone();
+
+    let selected_tool = Select::new(
+        "Choose the compatibility tool to check the changelog:",
+        available_sources,
+    )
+    .prompt()
+    .unwrap_or_else(|_| std::process::exit(0));
+
+    let release_list = match downloads::list_releases(&selected_tool).await {
+        Ok(data) => data,
+        Err(e) => {
+            eprintln!(
+                "Failed to fetch data, make sure you're connected to the internet.\nError: {e}"
+            );
+            std::process::exit(1)
+        }
+    };
+
+    let selected_releases = stream::iter(
+        helper_menus::multiple_select_menu("Select the versions to view changelog:", release_list)
+            .unwrap_or_else(|e| {
+                eprintln!("The tag list could not be processed.\nError: {e}");
+                vec![]
+            }),
+    )
+    .collect::<Vec<_>>()
+    .await;
+
+    for release in &selected_releases {
+        show_whatsnew(release, &selected_tool).await;
+    }
+
+    if !selected_releases.is_empty() {
+        println!("Press Enter to return to menu...");
+        let mut buf = String::new();
+        let _ = std::io::stdin().read_line(&mut buf);
+    }
+
+    Ok(selected_releases)
 }
 
 /// Start the Download for the selected app
@@ -475,6 +613,12 @@ pub async fn download_to_selected_app(app: Option<apps::App>) -> Result<Vec<Rele
             return Err(anyhow!("Installation failed with Error"));
         }
     }
+
+    let pairs: Vec<(Release, CompatTool)> = releases
+        .iter()
+        .map(|r| (r.clone(), selected_tool.clone()))
+        .collect();
+    prompt_changelogs(&pairs).await;
 
     Ok(releases)
 }
@@ -936,5 +1080,56 @@ mod tests {
 
         assert!(groups.is_empty());
         assert!(releases.is_empty());
+    }
+
+    fn make_release_with_body(tag: &str, body: Option<&str>) -> Release {
+        let body_value = body.map(|b| serde_json::Value::String(b.into()));
+        serde_json::from_value(json!({
+            "tag_name": tag,
+            "name": tag,
+            "url": null,
+            "assets": [],
+            "body": body_value
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn test_format_whatsnew_with_body() {
+        let release = make_release_with_body("GE-Proton9-10", Some("Fixed bug\nAdded feature"));
+        let ct = make_compat_tool();
+        let output = format_whatsnew(&release, &ct);
+        assert!(output.contains("Release Notes"));
+        assert!(output.contains("GE-Proton9-10"));
+        assert!(output.contains("github.com"));
+        assert!(output.contains("Fixed bug"));
+        assert!(output.contains("Added feature"));
+    }
+
+    #[test]
+    fn test_format_whatsnew_without_body() {
+        let release = make_release_with_body("GE-Proton9-10", None);
+        let ct = make_compat_tool();
+        let output = format_whatsnew(&release, &ct);
+        assert!(output.contains("no release notes"));
+    }
+
+    #[test]
+    fn test_format_whatsnew_truncated() {
+        let long_body = (0..50)
+            .map(|i| format!("line {}", i))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let release = make_release_with_body("GE-Proton9-10", Some(&long_body));
+        let ct = make_compat_tool();
+        let output = format_whatsnew(&release, &ct);
+        assert!(
+            output.contains("[truncated]"),
+            "body with >40 lines should show [truncated]"
+        );
+        assert!(
+            !output.contains("line 41"),
+            "line 41 (42nd line) should be beyond the 40-line cutoff"
+        );
     }
 }
