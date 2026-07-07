@@ -7,7 +7,7 @@ repository = "https://github.com/auyer/protonup-rs"
 license = "GPL-3.0"
 readme = "../docs/docs.md"
 
-description = "Library for Custom Proton Download and installation"
+description = "A Rust library to manage Linux Gaming Compatibility tools, like ProtonGE, Luxtorpeda, Boxtron and others."
 
 [dependencies]
 arcstr = "1.2"
@@ -18,7 +18,7 @@ hex = "0.4"
 hex-literal = "1.1"
 pin-project = "1.1"
 reqwest = { version = "0.13", default-features = false, features = [
-	"rustls",
+  "rustls",
   "stream",
   "json",
 ] }
