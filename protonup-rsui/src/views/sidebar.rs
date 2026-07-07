@@ -104,6 +104,18 @@ pub(crate) fn sidebar(state: &ProtonupGui) -> Element<'_, Message> {
             .width(Length::Fill)
     });
 
+    let whats_new_disabled = is_downloading || state.app_mode == AppMode::CheckWhatsNew;
+    column = column.push(if whats_new_disabled {
+        button(text("Check What's New").size(14))
+            .padding(10)
+            .width(Length::Fill)
+    } else {
+        button(text("Check What's New").size(14))
+            .on_press(Message::SelectCheckWhatsNew)
+            .padding(10)
+            .width(Length::Fill)
+    });
+
     let manage_disabled = is_downloading || state.app_mode == AppMode::ManageInstallations;
     column = column.push(if manage_disabled {
         button(text("Manage Existing Installations").size(14))

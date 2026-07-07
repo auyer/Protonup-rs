@@ -5,14 +5,20 @@ use crate::message::{GuiMode, Message};
 use crate::state::ProtonupGui;
 
 pub(crate) fn view(state: &ProtonupGui) -> Element<'_, Message> {
-    let app_name = match state.mode {
-        GuiMode::DownloadForSteam => "Steam",
-        GuiMode::DownloadForLutris => "Lutris",
-        _ => "App",
+    let title = match state.mode {
+        GuiMode::CheckWhatsNew => "Select a tool to check its changelog:".to_string(),
+        _ => {
+            let app_name = match state.mode {
+                GuiMode::DownloadForSteam => "Steam",
+                GuiMode::DownloadForLutris => "Lutris",
+                _ => "App",
+            };
+            format!("Select tool for {}:", app_name)
+        }
     };
 
     let mut column = Column::new().spacing(10);
-    column = column.push(text(format!("Select tool for {}:", app_name)).size(16));
+    column = column.push(text(title).size(16));
 
     if state.available_tools.is_empty() {
         column = column.push(text("Loading tools...").size(14));

@@ -80,6 +80,18 @@ pub(crate) fn handle(state: &mut ProtonupGui, message: Message) -> Task<Message>
             )
         }
 
+        Message::SelectCheckWhatsNew => {
+            state.app_mode = AppMode::CheckWhatsNew;
+            state.mode = GuiMode::CheckWhatsNew;
+            state.selection_step = SelectionStep::SelectingTools;
+            state.app_installation = None;
+            state.available_tools = libprotonup::sources::CompatTools.clone();
+            state.selected_tool_indices.clear();
+            state.show_changelog = None;
+            state.global_status = "Select a tool to check its changelog.".to_string();
+            Task::none()
+        }
+
         Message::AppInstallationDetected(app_inst) => {
             state.app_installation = Some(app_inst.clone());
             let tools = CompatTool::sources_for_app(&app_inst.as_app());
@@ -133,24 +145,38 @@ pub(crate) fn handle(state: &mut ProtonupGui, message: Message) -> Task<Message>
                 state.selected_version_indices.push(0);
             }
 
-            state.has_variant_tools = state.selected_tool_indices.iter().any(|&idx| {
-                state
-                    .available_tools
-                    .get(idx)
-                    .is_some_and(|t| t.has_multiple_asset_variations)
-            });
-
-            if state.has_variant_tools {
-                state.selection_step = SelectionStep::SelectingArchitecture;
-                state.selected_arch_variant = Some(2);
-            } else {
+            if state.mode == GuiMode::CheckWhatsNew {
                 state.selection_step = SelectionStep::SelectingVersions;
+            } else {
+                state.has_variant_tools = state.selected_tool_indices.iter().any(|&idx| {
+                    state
+                        .available_tools
+                        .get(idx)
+                        .is_some_and(|t| t.has_multiple_asset_variations)
+                });
+
+                if state.has_variant_tools {
+                    state.selection_step = SelectionStep::SelectingArchitecture;
+                    state.selected_arch_variant = Some(2);
+                } else {
+                    state.selection_step = SelectionStep::SelectingVersions;
+                }
             }
             Task::none()
         }
 
         Message::ToggleVersion(index) => {
-            if let Some(pos) = state
+            if state.mode == GuiMode::CheckWhatsNew {
+                state.selected_version_indices.clear();
+                state.selected_version_indices.push(index);
+                if state.show_changelog.is_some()
+                    && let Some(release) = state.available_versions.get(index)
+                    && let Some(ref tool) = state.selected_tool
+                {
+                    state.show_changelog =
+                        Some((release.clone(), tool.clone()));
+                }
+            } else if let Some(pos) = state
                 .selected_version_indices
                 .iter()
                 .position(|&i| i == index)

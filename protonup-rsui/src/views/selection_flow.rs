@@ -32,7 +32,8 @@ pub(crate) fn view_main_content(state: &ProtonupGui) -> Element<'_, Message> {
                 GuiMode::QuickUpdate => quick_update::view(state),
                 GuiMode::DownloadForSteam
                 | GuiMode::DownloadForLutris
-                | GuiMode::DownloadForCustom => view_selection_flow(state),
+                | GuiMode::DownloadForCustom
+                | GuiMode::CheckWhatsNew => view_selection_flow(state),
                 GuiMode::ManageInstallations => manage_installations::view(state),
                 _ => container(center(text("⬅️ Choose your option").size(18)))
                     .width(Fill)

@@ -15,6 +15,7 @@ pub(crate) enum Message {
     SelectQuickUpdate,
     SelectDownloadForSteam,
     SelectDownloadForLutris,
+    SelectCheckWhatsNew,
 
     AppInstallationDetected(AppInstallations),
     ToolSelected(usize),
@@ -68,6 +69,7 @@ pub(crate) enum GuiMode {
     DownloadForSteam,
     DownloadForLutris,
     DownloadForCustom,
+    CheckWhatsNew,
     ManageInstallations,
 }
 
@@ -79,6 +81,7 @@ pub(crate) enum AppMode {
     DownloadForSteam,
     DownloadForLutris,
     DownloadForCustom,
+    CheckWhatsNew,
     ManageInstallations,
 }
 

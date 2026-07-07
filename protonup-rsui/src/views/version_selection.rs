@@ -1,7 +1,7 @@
-use iced::widget::{button, checkbox, scrollable, text, Column, Row, Container};
+use iced::widget::{button, checkbox, radio, scrollable, text, Column, Row, Container};
 use iced::{Element, Length};
 
-use crate::message::Message;
+use crate::message::{GuiMode, Message};
 use crate::state::ProtonupGui;
 use crate::views::changelog;
 
@@ -17,6 +17,20 @@ pub(crate) fn view(state: &ProtonupGui) -> Element<'_, Message> {
 
     if state.available_versions.is_empty() {
         left = left.push(text("Loading versions...").size(14));
+    } else if state.mode == GuiMode::CheckWhatsNew {
+        for (index, release) in state.available_versions.iter().enumerate() {
+            left = left.push(
+                Row::new()
+                    .spacing(10)
+                    .push(radio(
+                        "",
+                        index,
+                        state.selected_version_indices.first().copied(),
+                        Message::ToggleVersion,
+                    ))
+                    .push(text(&release.tag_name).size(14)),
+            );
+        }
     } else {
         for (index, release) in state.available_versions.iter().enumerate() {
             let is_selected = state.selected_version_indices.contains(&index);
@@ -29,19 +43,60 @@ pub(crate) fn view(state: &ProtonupGui) -> Element<'_, Message> {
         }
     }
 
-    left = left.push(
-        button(text("Start Download").size(14))
-            .on_press(Message::StartSelectedDownloads)
-            .padding(10),
-    );
+    if state.mode == GuiMode::CheckWhatsNew {
+        left = left.push({
+            let release = state
+                .selected_version_indices
+                .last()
+                .and_then(|&i| state.available_versions.get(i))
+                .or_else(|| state.available_versions.first())
+                .cloned();
+            let tool = state.selected_tool.clone();
+            button(text("View Changelog").size(14))
+                .on_press_with(move || {
+                    Message::ToggleChangelog(
+                        release.clone().and_then(|r| tool.clone().map(|t| (r, t))),
+                    )
+                })
+                .padding(10)
+        });
 
         left = left.push(
             button(text("Back").size(14))
                 .on_press(Message::BackToToolSelection)
                 .padding(10),
         );
+    } else {
+
         left = left.push(
+            button(text("Start Download").size(14))
+                .on_press(Message::StartSelectedDownloads)
+                .padding(10),
+        );
+
+        left = left.push({
+            let release = state
+                .selected_version_indices
+                .last()
+                .and_then(|&i| state.available_versions.get(i))
+                .or_else(|| state.available_versions.first())
+                .cloned();
+            let tool = state.selected_tool.clone();
+            button(text("Show Changelog").size(14))
+                .on_press_with(move || {
+                    Message::ToggleChangelog(
+                        release.clone().and_then(|r| tool.clone().map(|t| (r, t))),
+                    )
+                })
+                .padding(10)
+        });
+
         left = left.push(
+            button(text("Back").size(14))
+                .on_press(Message::BackToToolSelection)
+                .padding(10),
+        );
+    }
 
     let left_element: Element<_> = scrollable(left).into();
 
