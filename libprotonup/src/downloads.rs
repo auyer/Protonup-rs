@@ -677,4 +677,72 @@ mod tests {
             "Should filter out release without supported assets"
         );
     }
+
+    #[test]
+    fn test_dedup_key_same_download() {
+        let d1 = Download {
+            download_url: "https://example.com/file.tar.gz".into(),
+            file_name: "file.tar.gz".into(),
+            size: 1000,
+            ..Default::default()
+        };
+        let d2 = Download {
+            download_url: "https://example.com/file.tar.gz".into(),
+            file_name: "file.tar.gz".into(),
+            size: 1000,
+            ..Default::default()
+        };
+        assert_eq!(d1.dedup_key(), d2.dedup_key());
+    }
+
+    #[test]
+    fn test_dedup_key_different_url() {
+        let d1 = Download {
+            download_url: "https://a.com/file.tar.gz".into(),
+            file_name: "file.tar.gz".into(),
+            size: 1000,
+            ..Default::default()
+        };
+        let d2 = Download {
+            download_url: "https://b.com/file.tar.gz".into(),
+            file_name: "file.tar.gz".into(),
+            size: 1000,
+            ..Default::default()
+        };
+        assert_ne!(d1.dedup_key(), d2.dedup_key());
+    }
+
+    #[test]
+    fn test_dedup_key_different_filename() {
+        let d1 = Download {
+            download_url: "https://example.com/file.tar.gz".into(),
+            file_name: "file.tar.gz".into(),
+            size: 1000,
+            ..Default::default()
+        };
+        let d2 = Download {
+            download_url: "https://example.com/file.tar.gz".into(),
+            file_name: "other.tar.gz".into(),
+            size: 1000,
+            ..Default::default()
+        };
+        assert_ne!(d1.dedup_key(), d2.dedup_key());
+    }
+
+    #[test]
+    fn test_dedup_key_different_size() {
+        let d1 = Download {
+            download_url: "https://example.com/file.tar.gz".into(),
+            file_name: "file.tar.gz".into(),
+            size: 1000,
+            ..Default::default()
+        };
+        let d2 = Download {
+            download_url: "https://example.com/file.tar.gz".into(),
+            file_name: "file.tar.gz".into(),
+            size: 2000,
+            ..Default::default()
+        };
+        assert_ne!(d1.dedup_key(), d2.dedup_key());
+    }
 }
