@@ -1049,8 +1049,6 @@ mod tests {
 
         assert_eq!(model.quick_update_status, QuickUpdateStatus::InProgress);
         assert_eq!(model.global_status, "Starting Quick Update...");
-        assert!(!model.tools.is_empty()); // Tools should be populated
-        assert_eq!(model.tools[0].name, "GEProton (Steam)");
     }
 
     #[test]
@@ -1065,9 +1063,6 @@ mod tests {
 
         assert_eq!(model.quick_update_status, QuickUpdateStatus::InProgress);
         assert_eq!(model.global_status, "Force reinstalling tools...");
-        assert!(!model.tools.is_empty());
-        // Note: We can't easily test that force=true is passed to download_task::run_quick_update
-        // but the state transition is verified
     }
 
     #[test]
@@ -1111,12 +1106,11 @@ mod tests {
             let _ui = simulator(crate::views::app_view(&model));
         }
 
-        // Step 3: Click Force Reinstall
+        // Step 3: Click Force Reinstall — tools now auto-created by progress callbacks
         let _ = crate::update::handle(&mut model, Message::ForceReinstall);
 
         assert_eq!(model.quick_update_status, QuickUpdateStatus::InProgress);
         assert_eq!(model.global_status, "Force reinstalling tools...");
-        assert!(!model.tools.is_empty()); // Tools should now be populated
 
         Ok(())
     }
@@ -1177,13 +1171,23 @@ mod tests {
 
         let _ = crate::update::handle(&mut model, Message::QuickUpdateChecked(results));
 
-        assert_eq!(model.tools.len(), 2);
-        assert_eq!(model.tools[0].name, "GEProton (Steam)");
-        assert_eq!(model.tools[1].name, "GEProton (Lutris)");
-        // Tools must have distinct names for correct progress routing
-        assert_ne!(model.tools[0].name, model.tools[1].name);
-    }
+        // Tools are no longer pre-populated — they are auto-created by progress callbacks.
+        // With dedup, the same tool for multiple apps gets a combined display name.
+        // Simulate the progress callback creating a deduped entry:
+        let progress = ToolProgress {
+            tool_name: "GEProton (Steam, Lutris)".to_string(),
+            phase: DownloadPhase::Downloading,
+            percent: 30.0,
+            status_message: "Downloading...".to_string(),
+        };
+        let _ = crate::update::handle(
+            &mut model,
+            Message::DownloadUpdate(DownloadUpdate::ToolProgress(progress)),
+        );
 
+        assert_eq!(model.tools.len(), 1, "deduped tools create one entry");
+        assert_eq!(model.tools[0].name, "GEProton (Steam, Lutris)");
+    }
     #[test]
     fn quick_update_progress_routes_to_correct_tool_by_unique_name() {
         let mut model = ready_model();
@@ -1192,43 +1196,45 @@ mod tests {
         model.quick_update_status = QuickUpdateStatus::InProgress;
         model.detected_apps = vec![AppInstallations::Steam, AppInstallations::Lutris];
 
-        // Populate tools as QuickUpdateChecked would
+        // With dedup, the same tool for both apps gets a combined name
         model
             .tools
-            .push(ToolDownload::new("GEProton (Steam)".to_string()));
+            .push(ToolDownload::new("GEProton (Steam, Lutris)".to_string()));
+        // A different tool keeps its own entry
         model
             .tools
-            .push(ToolDownload::new("GEProton (Lutris)".to_string()));
+            .push(ToolDownload::new("Luxtorpeda (Steam)".to_string()));
 
-        // Simulate progress for Steam tool
-        let steam_progress = ToolProgress {
-            tool_name: "GEProton (Steam)".to_string(),
+        // Simulate progress for the deduped GEProton tool
+        let ge_progress = ToolProgress {
+            tool_name: "GEProton (Steam, Lutris)".to_string(),
             phase: DownloadPhase::Downloading,
             percent: 50.0,
             status_message: "Downloading...".to_string(),
         };
+
         let _ = crate::update::handle(
             &mut model,
-            Message::DownloadUpdate(DownloadUpdate::ToolProgress(steam_progress)),
+            Message::DownloadUpdate(DownloadUpdate::ToolProgress(ge_progress)),
         );
 
-        assert_eq!(model.tools[0].progress, 50.0); // Steam updated
-        assert_eq!(model.tools[1].progress, 0.0); // Lutris unchanged
+        assert_eq!(model.tools[0].progress, 50.0); // GEProton updated
+        assert_eq!(model.tools[1].progress, 0.0); // Luxtorpeda unchanged
 
-        // Simulate progress for Lutris tool
-        let lutris_progress = ToolProgress {
-            tool_name: "GEProton (Lutris)".to_string(),
+        // Simulate progress for Luxtorpeda tool
+        let lux_progress = ToolProgress {
+            tool_name: "Luxtorpeda (Steam)".to_string(),
             phase: DownloadPhase::Downloading,
             percent: 75.0,
             status_message: "Downloading...".to_string(),
         };
         let _ = crate::update::handle(
             &mut model,
-            Message::DownloadUpdate(DownloadUpdate::ToolProgress(lutris_progress)),
+            Message::DownloadUpdate(DownloadUpdate::ToolProgress(lux_progress)),
         );
 
-        assert_eq!(model.tools[0].progress, 50.0); // Steam unchanged
-        assert_eq!(model.tools[1].progress, 75.0); // Lutris updated
+        assert_eq!(model.tools[0].progress, 50.0); // GEProton unchanged
+        assert_eq!(model.tools[1].progress, 75.0); // Luxtorpeda updated
     }
 
     #[test]
@@ -1241,9 +1247,90 @@ mod tests {
 
         let _ = crate::update::handle(&mut model, Message::ForceReinstall);
 
-        assert_eq!(model.tools.len(), 2);
-        assert_eq!(model.tools[0].name, "GEProton (Steam)");
-        assert_eq!(model.tools[1].name, "GEProton (Lutris)");
-        assert_ne!(model.tools[0].name, model.tools[1].name);
+        // Tools are no longer pre-populated — they are auto-created by progress callbacks.
+        // With dedup, the same tool for multiple apps gets a combined display name.
+        // Simulate the progress callback creating a deduped entry and a separate entry:
+        let progress_ge = ToolProgress {
+            tool_name: "GEProton (Steam, Lutris)".to_string(),
+            phase: DownloadPhase::Downloading,
+            percent: 30.0,
+            status_message: "Downloading...".to_string(),
+        };
+        let _ = crate::update::handle(
+            &mut model,
+            Message::DownloadUpdate(DownloadUpdate::ToolProgress(progress_ge)),
+        );
+
+        assert_eq!(
+            model.tools.len(),
+            1,
+            "deduped tools create one entry per unique download"
+        );
+        assert_eq!(model.tools[0].name, "GEProton (Steam, Lutris)");
+    }
+
+    #[test]
+    fn dedup_auto_creates_tool_entry_on_first_progress() {
+        let mut model = ready_model();
+        model.app_mode = AppMode::QuickUpdate;
+        model.mode = GuiMode::QuickUpdate;
+        model.quick_update_status = QuickUpdateStatus::InProgress;
+
+        // Tools start empty — progress callback will auto-create entries
+        assert!(model.tools.is_empty());
+
+        // Simulate progress arriving for a deduped download group
+        let progress = ToolProgress {
+            tool_name: "GEProton (Steam, Lutris, Flatpak)".to_string(),
+            phase: DownloadPhase::Downloading,
+            percent: 25.0,
+            status_message: "Downloading...".to_string(),
+        };
+        let _ = crate::update::handle(
+            &mut model,
+            Message::DownloadUpdate(DownloadUpdate::ToolProgress(progress)),
+        );
+
+        assert_eq!(
+            model.tools.len(),
+            1,
+            "auto-creates one entry per unique download"
+        );
+        assert_eq!(model.tools[0].name, "GEProton (Steam, Lutris, Flatpak)");
+        assert_eq!(model.tools[0].progress, 25.0);
+
+        // Second progress update for same tool updates existing entry
+        let progress2 = ToolProgress {
+            tool_name: "GEProton (Steam, Lutris, Flatpak)".to_string(),
+            phase: DownloadPhase::Validating,
+            percent: 100.0,
+            status_message: "Validating...".to_string(),
+        };
+        let _ = crate::update::handle(
+            &mut model,
+            Message::DownloadUpdate(DownloadUpdate::ToolProgress(progress2)),
+        );
+
+        assert_eq!(model.tools.len(), 1, "still one entry — no duplicate");
+        assert_eq!(model.tools[0].progress, 100.0);
+
+        // Third progress for a different tool creates a second entry
+        let progress3 = ToolProgress {
+            tool_name: "Luxtorpeda (Steam)".to_string(),
+            phase: DownloadPhase::Downloading,
+            percent: 50.0,
+            status_message: "Downloading...".to_string(),
+        };
+        let _ = crate::update::handle(
+            &mut model,
+            Message::DownloadUpdate(DownloadUpdate::ToolProgress(progress3)),
+        );
+
+        assert_eq!(
+            model.tools.len(),
+            2,
+            "second unique download creates another entry"
+        );
+        assert_eq!(model.tools[1].name, "Luxtorpeda (Steam)");
     }
 }

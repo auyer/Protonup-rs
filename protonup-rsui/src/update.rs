@@ -224,14 +224,6 @@ pub(crate) fn handle(state: &mut ProtonupGui, message: Message) -> Task<Message>
                 state.global_status = "Starting Quick Update...".to_string();
 
                 state.tools.clear();
-                for app in &state.detected_apps {
-                    let compat_tool = app.as_app().default_compatibility_tool();
-                    let app_name = app.as_app().to_string();
-                    state.tools.push(ToolDownload::new(format!(
-                        "{} ({})",
-                        compat_tool.name, app_name
-                    )));
-                }
 
                 let (task, handle) = download_task::run_quick_update(false);
                 state.download_handle = Some(handle);
@@ -245,14 +237,6 @@ pub(crate) fn handle(state: &mut ProtonupGui, message: Message) -> Task<Message>
             state.global_status = "Force reinstalling tools...".to_string();
 
             state.tools.clear();
-            for app in &state.detected_apps {
-                let compat_tool = app.as_app().default_compatibility_tool();
-                let app_name = app.as_app().to_string();
-                state.tools.push(ToolDownload::new(format!(
-                    "{} ({})",
-                    compat_tool.name, app_name
-                )));
-            }
 
             let (task, handle) = download_task::run_quick_update(true);
             state.download_handle = Some(handle);
@@ -291,6 +275,10 @@ pub(crate) fn handle(state: &mut ProtonupGui, message: Message) -> Task<Message>
                     .find(|t| t.name == progress.tool_name)
                 {
                     tool.update_from_progress(&progress);
+                } else {
+                    let mut tool = ToolDownload::new(progress.tool_name.clone());
+                    tool.update_from_progress(&progress);
+                    state.tools.push(tool);
                 }
                 Task::none()
             }

@@ -7,11 +7,11 @@ use anyhow::{Context, Result};
 use libprotonup::{
     apps::{self, AppInstallations},
     architecture_variants,
-    downloads::{self, Download, Release},
+    downloads::{self, Download, Release, ReleaseList, group_and_dedup_releases},
     files, hashing,
     sources::CompatTool,
 };
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::task::{Context as TaskContext, Poll};
@@ -160,7 +160,9 @@ impl<R: AsyncRead + Unpin, F: Fn(SipProgress) + Send + Unpin> AsyncRead for Prog
     }
 }
 
-/// Main entry point: runs quick downloads with progress reporting through callback
+/// Main entry point: runs quick downloads with progress reporting through callback.
+/// Downloads are deduplicated — the same asset is downloaded once and installed to all
+/// matching applications.
 pub async fn run_with_progress_callback<F>(send_progress: F, force: bool) -> Result<Vec<Release>>
 where
     F: Fn(SipProgress) + Send + Sync + Clone + Unpin + 'static,
@@ -200,49 +202,53 @@ where
     ));
 
     // Collect all downloads first, then run them in parallel
-    let mut downloads_to_run: Vec<(Download, apps::AppInstallations, CompatTool, Release)> = vec![];
-    let mut releases: Vec<Release> = vec![];
+    let mut releases_cache: HashMap<String, ReleaseList> = HashMap::new();
+    let mut entries: Vec<(Download, Release, AppInstallations, CompatTool)> = vec![];
 
-    // Phase 1: Fetch releases and prepare downloads
     for app_inst in &found_apps {
         let compat_tool = app_inst.as_app().default_compatibility_tool();
-        // Use tool name + app for unique matching with GUI tool entries
         let tool_name = compat_tool.name.clone();
-        let tool_id = format!("{} ({})", tool_name, app_inst.as_app());
 
-        send_progress(SipProgress::new(
+        send_progress(SipProgress::global(
             DownloadPhase::FetchingReleases,
-            &tool_id,
-            &format!("Fetching releases for {}...", tool_name),
+            &format!(
+                "Fetching releases for {} ({})...",
+                tool_name,
+                app_inst.as_app()
+            ),
             10.0,
         ));
 
-        // Get the latest release
-        let release = match downloads::list_releases(&compat_tool).await {
-            Ok(mut release_list) => {
-                if release_list.is_empty() {
-                    send_progress(SipProgress::new(
-                        DownloadPhase::Error,
-                        &tool_id,
-                        &format!("No releases found for {}", tool_name),
-                        0.0,
-                    ));
-                    continue;
-                }
-                release_list.remove(0)
-            }
-            Err(e) => {
-                send_progress(SipProgress::new(
-                    DownloadPhase::Error,
-                    &tool_id,
-                    &format!("Failed to fetch releases: {}", e),
-                    0.0,
-                ));
-                return Err(anyhow::anyhow!("Failed to fetch releases: {}", e));
+        let release_list = match releases_cache.get(&compat_tool.name) {
+            Some(list) => list.clone(),
+            None => {
+                let list = match downloads::list_releases(&compat_tool).await {
+                    Ok(list) => list,
+                    Err(e) => {
+                        send_progress(SipProgress::global(
+                            DownloadPhase::Error,
+                            &format!("Failed to fetch releases for {}: {}", tool_name, e),
+                            0.0,
+                        ));
+                        return Err(anyhow::anyhow!("Failed to fetch releases: {}", e));
+                    }
+                };
+                releases_cache.insert(compat_tool.name.clone(), list.clone());
+                list
             }
         };
 
-        // Handle tools with multiple architecture variants
+        if release_list.is_empty() {
+            send_progress(SipProgress::global(
+                DownloadPhase::Error,
+                &format!("No releases found for {}", tool_name),
+                0.0,
+            ));
+            continue;
+        }
+
+        let release = release_list[0].clone();
+
         let download = if compat_tool.has_multiple_asset_variations {
             let variants = release.get_all_download_variants(app_inst, &compat_tool);
             variants
@@ -257,9 +263,8 @@ where
         let mut download_path = PathBuf::from(&app_inst.default_install_dir().as_str());
         download_path.push(compat_tool.installation_name(&download.version));
         if files::check_if_exists(&download_path.clone()).await && !force {
-            send_progress(SipProgress::new(
+            send_progress(SipProgress::global(
                 DownloadPhase::Complete,
-                &tool_id,
                 &format!(
                     "{} {} already installed, skipping",
                     tool_name, download.version
@@ -269,33 +274,31 @@ where
             continue;
         }
 
-        releases.push(release.clone());
-        downloads_to_run.push((download, app_inst.clone(), compat_tool, release));
+        entries.push((download, release, app_inst.clone(), compat_tool));
     }
 
     // Phase 2: Run all downloads in parallel using tokio::spawn
+    let (groups, _unique_releases) = group_and_dedup_releases(entries);
+
     send_progress(SipProgress::new(
         DownloadPhase::Downloading,
         "",
-        &format!(
-            "Downloading {} tools in parallel...",
-            downloads_to_run.len()
-        ),
+        &format!("Downloading {} tools in parallel...", groups.len()),
         20.0,
     ));
 
     let mut handles = Vec::new();
 
-    for (download, app_inst, compat_tool, _release) in downloads_to_run {
+    for (_key, (download, _release, compat_tool, targets)) in groups {
         let progress_callback = send_progress.clone();
-        // Use tool name + app to match GUI ToolDownload entries
-        let display_name: String = format!("{} ({})", compat_tool.name, app_inst.as_app());
+        let app_names: Vec<String> = targets.iter().map(|a| a.to_string()).collect();
+        let display_name = format!("{} ({})", compat_tool.name, app_names.join(", "));
 
         handles.push(tokio::spawn(async move {
-            let result = download_validate_unpack_with_progress(
+            let result = download_validate_unpack_for_targets_with_progress(
                 download,
-                app_inst,
                 compat_tool,
+                targets,
                 progress_callback,
                 display_name.clone(),
             )
@@ -332,18 +335,14 @@ where
     }
 
     // Mark complete
-    send_progress(SipProgress::new(
+    let release_count = _unique_releases.len();
+    send_progress(SipProgress::global(
         DownloadPhase::Complete,
-        "",
-        &format!(
-            "Done! Installed {}/{} tools.",
-            success_count,
-            releases.len()
-        ),
+        &format!("Done! Installed {}/{} tools.", success_count, release_count),
         100.0,
     ));
 
-    Ok(releases)
+    Ok(_unique_releases)
 }
 
 /// Download, validate, and unpack a single tool with progress reporting
@@ -444,6 +443,132 @@ where
         .with_context(|| format!("Error unpacking {}", file.display()))?;
 
     // Mark this tool as complete
+    send_progress(SipProgress::new(
+        DownloadPhase::Complete,
+        &display_name,
+        &format!("✓ {} installed successfully", display_name),
+        100.0,
+    ));
+
+    Ok(())
+}
+
+/// Download and validate once, then unpack to multiple targets.
+/// Used by the quick-update flow to avoid downloading the same asset twice.
+async fn download_validate_unpack_for_targets_with_progress<F>(
+    download: Download,
+    compat_tool: CompatTool,
+    targets: Vec<AppInstallations>,
+    send_progress: F,
+    display_name: String,
+) -> Result<()>
+where
+    F: Fn(SipProgress) + Send + Sync + Clone + Unpin + 'static,
+{
+    if targets.is_empty() {
+        return Ok(());
+    }
+
+    send_progress(SipProgress::new(
+        DownloadPhase::Downloading,
+        &display_name,
+        &format!("Downloading {}...", download.version),
+        0.0,
+    ));
+
+    let file =
+        download_file_with_progress(&download, send_progress.clone(), display_name.clone()).await?;
+
+    send_progress(SipProgress::new(
+        DownloadPhase::Validating,
+        &display_name,
+        &format!("Validating {}...", download.version),
+        0.0,
+    ));
+
+    if let Some(ref hash_sum_info) = download.hash_sum {
+        let hash_content = downloads::download_file_into_memory(&hash_sum_info.sum_content)
+            .await
+            .with_context(|| format!("Error getting hash for {}", download.version))?;
+
+        let hash_sum = hashing::HashSums {
+            sum_content: hash_content,
+            sum_type: hash_sum_info.sum_type.clone(),
+        };
+
+        validate_file_with_progress(&download.file_name, &file, hash_sum, send_progress.clone())
+            .await?;
+    }
+
+    let install_name = compat_tool.installation_name(&download.version);
+    let file = std::sync::Arc::new(file);
+
+    let mut unpack_handles = Vec::new();
+
+    for app_inst in &targets {
+        let app_inst = app_inst.clone();
+        let compat_tool = compat_tool.clone();
+        let download = download.clone();
+        let send_progress = send_progress.clone();
+        let display_name = display_name.clone();
+        let install_name = install_name.clone();
+        let file = file.clone();
+
+        unpack_handles.push(tokio::spawn(async move {
+            let install_dir = app_inst.installation_dir(&compat_tool).unwrap();
+            let install_path = install_dir.join(&install_name);
+
+            if files::check_if_exists(&install_path).await {
+                fs::remove_dir_all(&install_path).await.with_context(|| {
+                    format!(
+                        "Error removing existing install at {}",
+                        install_path.display()
+                    )
+                })?;
+            }
+
+            let app_label = app_inst.to_string();
+
+            send_progress(SipProgress::new(
+                DownloadPhase::Unpacking,
+                &display_name,
+                &format!("Installing {} to {}...", download.version, app_label),
+                0.0,
+            ));
+
+            let file_metadata = fs::metadata(&*file).await?;
+            let compressed_file = File::open(&*file)
+                .await
+                .with_context(|| format!("Error opening compressed file {}", file.display()))?;
+
+            let progress_reader = ProgressReader::new(
+                compressed_file,
+                send_progress.clone(),
+                file_metadata.len(),
+                format!("{} → {}", display_name, app_label),
+                DownloadPhase::Unpacking,
+            );
+
+            let buf_reader = BufReader::new(progress_reader);
+
+            let path_str = file.to_string_lossy();
+            let decompressor = files::Decompressor::from_reader(buf_reader, &path_str)
+                .with_context(|| format!("Error checking file type of {}", file.display()))?;
+
+            files::unpack_file(&compat_tool, &download, decompressor, &install_dir)
+                .await
+                .with_context(|| format!("Error unpacking {}", file.display()))?;
+
+            Ok::<_, anyhow::Error>(())
+        }));
+    }
+
+    for handle in unpack_handles {
+        handle
+            .await
+            .map_err(|e| anyhow::anyhow!("Unpack task failed: {}", e))??;
+    }
+
     send_progress(SipProgress::new(
         DownloadPhase::Complete,
         &display_name,
