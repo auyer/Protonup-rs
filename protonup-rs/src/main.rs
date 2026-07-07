@@ -50,7 +50,7 @@ struct Opt {
     #[arg(long)]
     r#for: Option<String>,
 
-    /// Show GE Proton release notes (requires --quick-download/-q)
+    /// Show release notes for latest versions of default tools
     #[arg(short, long)]
     whats_new: bool,
 }
@@ -62,6 +62,7 @@ enum InitialMenu {
     DownloadForSteam,
     DownloadForLutris,
     DownloadIntoCustomLocation,
+    CheckChangelog,
     ManageExistingInstallations,
 }
 
@@ -72,6 +73,7 @@ impl InitialMenu {
         Self::DownloadForSteam,
         Self::DownloadForLutris,
         Self::DownloadIntoCustomLocation,
+        Self::CheckChangelog,
         Self::ManageExistingInstallations,
     ];
 }
@@ -88,6 +90,7 @@ impl fmt::Display for InitialMenu {
             Self::DownloadIntoCustomLocation => {
                 write!(f, "Download compatibility tools into custom location")
             }
+            Self::CheckChangelog => write!(f, "Check changelog (what is new)"),
             Self::ManageExistingInstallations => write!(f, "Manage Existing Installations"),
         }
     }
@@ -107,9 +110,19 @@ async fn main() {
         whats_new,
     } = Opt::parse();
 
+    // If --whats-new is passed alone (no --tool, no --quick-download),
+    // run standalone check-for-updates mode and exit
+    if whats_new && !quick_download && tool.is_none() && version.is_none() && for_target.is_none() {
+        if let Err(e) = download::check_whats_new().await {
+            eprintln!("{e}");
+            exit(1);
+        }
+        return;
+    }
+
     // If any CLI argument is provided, run in CLI mode (non-interactive)
     if tool.is_some() || version.is_some() || for_target.is_some() {
-        let releases = cli_mode::run_cli_mode(tool, version, for_target, force).await;
+        let releases = cli_mode::run_cli_mode(tool, version, for_target, force, whats_new).await;
         match releases {
             Ok(releases) => {
                 for release in releases {
@@ -128,29 +141,35 @@ async fn main() {
     let releases = if quick_download {
         download::run_quick_downloads(force, whats_new).await
     } else {
-        let answer: InitialMenu = Select::new(
-            "ProtonUp Menu: Choose your action:",
-            InitialMenu::VARIANTS.to_vec(),
-        )
-        .with_page_size(10)
-        .prompt()
-        .unwrap_or_else(|_| std::process::exit(0));
+        loop {
+            let answer: InitialMenu = Select::new(
+                "ProtonUp Menu: Choose your action:",
+                InitialMenu::VARIANTS.to_vec(),
+            )
+            .with_page_size(10)
+            .prompt()
+            .unwrap_or_else(|_| std::process::exit(0));
 
-        // Set parameters based on users choice
-        match answer {
-            InitialMenu::QuickUpdate => download::run_quick_downloads(force, whats_new).await,
-            InitialMenu::DownloadForSteam => {
-                download::download_to_selected_app(Some(App::Steam)).await
-            }
-            InitialMenu::DownloadForLutris => {
-                download::download_to_selected_app(Some(App::Lutris)).await
-            }
-            InitialMenu::DownloadIntoCustomLocation => {
-                download::download_to_selected_app(None).await
-            }
-            InitialMenu::ManageExistingInstallations => {
-                manage_apps_routine().await;
-                Ok(vec![])
+            // Download actions exit the loop; other actions return to menu
+            match answer {
+                InitialMenu::QuickUpdate => {
+                    break download::run_quick_downloads(force, whats_new).await;
+                }
+                InitialMenu::DownloadForSteam => {
+                    break download::download_to_selected_app(Some(App::Steam)).await;
+                }
+                InitialMenu::DownloadForLutris => {
+                    break download::download_to_selected_app(Some(App::Lutris)).await;
+                }
+                InitialMenu::DownloadIntoCustomLocation => {
+                    break download::download_to_selected_app(None).await;
+                }
+                InitialMenu::CheckChangelog => {
+                    let _ = download::check_changelog_menu().await;
+                }
+                InitialMenu::ManageExistingInstallations => {
+                    manage_apps_routine().await;
+                }
             }
         }
     };
