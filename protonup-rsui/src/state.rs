@@ -44,7 +44,7 @@ pub(crate) struct ProtonupGui {
     pub global_phase: DownloadPhase,
     pub global_status: String,
     pub global_progress: f32,
-    pub download_complete: Option<Result<Vec<String>, String>>,
+    pub download_complete: Option<Result<Vec<(libprotonup::downloads::Release, CompatTool)>, String>>,
 
     pub download_handle: Option<task::Handle>,
 
@@ -58,6 +58,8 @@ pub(crate) struct ProtonupGui {
     pub manage_error: Option<String>,
 
     pub quick_update_status: QuickUpdateStatus,
+
+    pub show_changelog: Option<(libprotonup::downloads::Release, CompatTool)>,
 
     pub logo_handle: iced::widget::image::Handle,
 }
@@ -84,7 +86,7 @@ impl Default for ProtonupGui {
             global_phase: DownloadPhase::DetectingApps,
             global_status: String::new(),
             global_progress: 0.0,
-            download_complete: None,
+            download_complete: None::<Result<Vec<_>, _>>,
             download_handle: None,
             app_mode: AppMode::default(),
             custom_path_input: String::new(),
@@ -93,6 +95,7 @@ impl Default for ProtonupGui {
             manage_status: String::new(),
             manage_error: None,
             quick_update_status: QuickUpdateStatus::default(),
+            show_changelog: None,
             logo_handle: iced::widget::image::Handle::from_bytes(LOGO_BYTES),
         }
     }

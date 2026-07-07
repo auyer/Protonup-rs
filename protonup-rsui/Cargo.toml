@@ -36,5 +36,6 @@ anyhow = "1.0"
 
 [dev-dependencies]
 iced_test = "0.14"
+serde_json = "1.0"
 tokio = { version = "1.50", features = ["macros", "rt"] }
 tempfile = "3"

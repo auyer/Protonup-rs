@@ -7,9 +7,34 @@ mod tests {
     };
     use iced::widget::image;
     use iced_test::{Error, simulator};
-    use libprotonup::sources::CompatTool;
+    use libprotonup::downloads::Release;
+    use libprotonup::sources::{CompatTool, Forge, ToolType};
     use std::path::PathBuf;
     use std::str::FromStr;
+
+    fn make_test_release(tag: &str) -> Release {
+        serde_json::from_value(serde_json::json!({
+            "tag_name": tag,
+            "name": tag,
+            "url": null,
+            "assets": [],
+            "body": null
+        }))
+        .unwrap()
+    }
+
+    fn make_test_tool() -> CompatTool {
+        CompatTool::new_custom(
+            "GEProton".into(),
+            Forge::GitHub,
+            "GloriousEggroll".into(),
+            "proton-ge-custom".into(),
+            ToolType::WineBased,
+            None,
+            None,
+            None,
+        )
+    }
 
     // Helper to create a model in "ready" state (apps detected, waiting for action)
     fn ready_model() -> ProtonupGui {
@@ -42,6 +67,7 @@ mod tests {
             manage_status: String::new(),
             manage_error: None,
             quick_update_status: QuickUpdateStatus::Idle,
+            show_changelog: None,
             logo_handle: image::Handle::from_bytes(crate::LOGO_BYTES),
         }
     }
@@ -106,6 +132,7 @@ mod tests {
             manage_status: String::new(),
             manage_error: None,
             quick_update_status: QuickUpdateStatus::Idle,
+            show_changelog: None,
             logo_handle: image::Handle::from_bytes(crate::LOGO_BYTES),
         };
         let mut ui = simulator(crate::views::app_view(&model));
@@ -247,11 +274,14 @@ mod tests {
     fn download_finished_success() {
         let mut model = ProtonupGui::default();
 
+        let release = make_test_release("GE-Proton9-27");
+        let tool = make_test_tool();
+
         let _ = crate::update::handle(
             &mut model,
-            Message::DownloadUpdate(DownloadUpdate::Finished(Ok(vec![
-                "GE-Proton9-27".to_string(),
-            ]))),
+            Message::DownloadUpdate(DownloadUpdate::Finished(Ok(vec![(
+                release, tool,
+            )]))),
         );
 
         assert_eq!(model.global_progress, 100.0);

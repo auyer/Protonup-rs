@@ -15,7 +15,7 @@ use crate::download::{self, DownloadPhase};
 pub enum DownloadUpdate {
     ToolProgress(ToolProgress),
     GlobalProgress(GlobalProgress),
-    Finished(Result<Vec<String>, DownloadError>),
+    Finished(Result<Vec<(Release, CompatTool)>, DownloadError>),
 }
 
 /// Per-tool progress information
@@ -77,7 +77,7 @@ pub enum DownloadError {
 fn sip_task<F, Fut>(download_fn: F) -> (Task<DownloadUpdate>, task::Handle)
 where
     F: FnOnce(UnboundedSender<SipProgress>) -> Fut + Send + 'static,
-    Fut: Future<Output = Result<Vec<String>, DownloadError>> + Send + 'static,
+    Fut: Future<Output = Result<Vec<(Release, CompatTool)>, DownloadError>> + Send + 'static,
 {
     let straw = sipper(async move |mut progress_sender| {
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<SipProgress>();
@@ -134,10 +134,7 @@ pub fn run_quick_update(force: bool) -> (Task<DownloadUpdate>, task::Handle) {
         .await;
 
         match result {
-            Ok(releases) => {
-                let versions: Vec<String> = releases.iter().map(|r| r.tag_name.clone()).collect();
-                Ok(versions)
-            }
+            Ok(releases) => Ok(releases),
             Err(e) => Err(DownloadError::IoError(e.to_string())),
         }
     })
@@ -162,10 +159,7 @@ pub fn download_selected_tools(
         .await;
 
         match result {
-            Ok(releases) => {
-                let versions: Vec<String> = releases.iter().map(|r| r.tag_name.clone()).collect();
-                Ok(versions)
-            }
+            Ok(releases) => Ok(releases),
             Err(e) => Err(DownloadError::IoError(e.to_string())),
         }
     })

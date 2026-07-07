@@ -163,7 +163,7 @@ impl<R: AsyncRead + Unpin, F: Fn(SipProgress) + Send + Unpin> AsyncRead for Prog
 /// Main entry point: runs quick downloads with progress reporting through callback.
 /// Downloads are deduplicated — the same asset is downloaded once and installed to all
 /// matching applications.
-pub async fn run_with_progress_callback<F>(send_progress: F, force: bool) -> Result<Vec<Release>>
+pub async fn run_with_progress_callback<F>(send_progress: F, force: bool) -> Result<Vec<(Release, CompatTool)>>
 where
     F: Fn(SipProgress) + Send + Sync + Clone + Unpin + 'static,
 {
@@ -278,7 +278,7 @@ where
     }
 
     // Phase 2: Run all downloads in parallel using tokio::spawn
-    let (groups, _unique_releases) = group_and_dedup_releases(entries);
+    let (groups, _) = group_and_dedup_releases(entries);
 
     send_progress(SipProgress::new(
         DownloadPhase::Downloading,
@@ -289,10 +289,13 @@ where
 
     let mut handles = Vec::new();
 
-    for (_key, (download, _release, compat_tool, targets)) in groups {
+    for (_key, (download, _release, compat_tool, targets)) in &groups {
         let progress_callback = send_progress.clone();
         let app_names: Vec<String> = targets.iter().map(|a| a.to_string()).collect();
         let display_name = format!("{} ({})", compat_tool.name, app_names.join(", "));
+        let download = download.clone();
+        let compat_tool = compat_tool.clone();
+        let targets = targets.clone();
 
         handles.push(tokio::spawn(async move {
             let result = download_validate_unpack_for_targets_with_progress(
@@ -335,14 +338,19 @@ where
     }
 
     // Mark complete
-    let release_count = _unique_releases.len();
+    let release_tool_pairs: Vec<(Release, CompatTool)> = groups
+        .values()
+        .map(|(_, release, compat_tool, _)| (release.clone(), compat_tool.clone()))
+        .collect();
+
+    let release_count = release_tool_pairs.len();
     send_progress(SipProgress::global(
         DownloadPhase::Complete,
         &format!("Done! Installed {}/{} tools.", success_count, release_count),
         100.0,
     ));
 
-    Ok(_unique_releases)
+    Ok(release_tool_pairs)
 }
 
 /// Download, validate, and unpack a single tool with progress reporting
@@ -681,11 +689,12 @@ pub async fn download_selected_tools<F>(
     send_progress: F,
     force_reinstall_names: HashSet<String>,
     arch_variant: Option<u8>,
-) -> Result<Vec<Release>>
+) -> Result<Vec<(Release, CompatTool)>>
 where
     F: Fn(SipProgress) + Send + Sync + Clone + Unpin + 'static,
 {
     let mut releases: Vec<Release> = vec![];
+    let mut release_tool_pairs: Vec<(Release, CompatTool)> = vec![];
     let mut downloads_to_run: Vec<(Download, AppInstallations, CompatTool, Release)> = vec![];
 
     // Phase 1: Prepare all downloads
@@ -738,6 +747,7 @@ where
             }
 
             releases.push(release.clone());
+            release_tool_pairs.push((release.clone(), compat_tool.clone()));
             downloads_to_run.push((
                 download,
                 app_installation.clone(),
@@ -753,7 +763,7 @@ where
             "All tools already installed or nothing to download.",
             100.0,
         ));
-        return Ok(releases);
+        return Ok(release_tool_pairs);
     }
 
     // Phase 2: Run all downloads in parallel using tokio::spawn
@@ -824,5 +834,5 @@ where
         100.0,
     ));
 
-    Ok(releases)
+    Ok(release_tool_pairs)
 }

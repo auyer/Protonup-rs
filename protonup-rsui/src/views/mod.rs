@@ -5,6 +5,7 @@ use crate::message::Message;
 use crate::state::ProtonupGui;
 
 pub mod architecture_selection;
+pub mod changelog;
 pub mod confirm_reinstall;
 pub mod custom_location;
 pub mod download_progress;

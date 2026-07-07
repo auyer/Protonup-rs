@@ -3728,6 +3728,7 @@ dependencies = [
  "libprotonup",
  "lyon_algorithms",
  "rfd",
+ "serde_json",
  "tempfile",
  "tokio",
 ]

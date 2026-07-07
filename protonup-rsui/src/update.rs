@@ -292,12 +292,13 @@ pub(crate) fn handle(state: &mut ProtonupGui, message: Message) -> Task<Message>
                 state.download_handle = None;
 
                 match result {
-                    Ok(versions) => {
+                    Ok(pairs) => {
+                        let count = pairs.len();
                         state.global_progress = 100.0;
                         state.global_phase = DownloadPhase::Complete;
                         state.global_status =
-                            format!("✓ Success! Installed {} tools.", versions.len());
-                        state.download_complete = Some(Ok(versions));
+                            format!("✓ Success! Installed {} tools.", count);
+                        state.download_complete = Some(Ok(pairs));
                         if state.app_mode == AppMode::QuickUpdate {
                             state.quick_update_status = QuickUpdateStatus::Complete;
                         }
@@ -333,6 +334,11 @@ pub(crate) fn handle(state: &mut ProtonupGui, message: Message) -> Task<Message>
             state.selected_version_indices.clear();
             state.available_versions.clear();
             state.selected_tool = None;
+            Task::none()
+        }
+
+        Message::ToggleChangelog(changelog) => {
+            state.show_changelog = changelog;
             Task::none()
         }
 

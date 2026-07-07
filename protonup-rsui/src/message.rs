@@ -3,6 +3,8 @@ use std::path::PathBuf;
 use crate::download::DownloadPhase;
 use crate::download_task::{DownloadUpdate, ToolProgress};
 use libprotonup::apps::AppInstallations;
+use libprotonup::downloads::Release;
+use libprotonup::sources::CompatTool;
 
 /// Messages that drive the GUI state machine
 #[derive(Debug, Clone)]
@@ -35,6 +37,8 @@ pub(crate) enum Message {
 
     BackToInitial,
     BackToToolSelection,
+
+    ToggleChangelog(Option<(Release, CompatTool)>),
 
     SelectionError(String),
 
