@@ -293,6 +293,12 @@ pub struct Download {
 }
 
 impl Download {
+    /// Returns a key that uniquely identifies the download asset.
+    /// Two downloads with the same key differ only in their target app.
+    pub fn dedup_key(&self) -> (String, String, u64) {
+        (self.download_url.clone(), self.file_name.clone(), self.size)
+    }
+
     // output_dir checks if the file is supported and returns the standardized file name
     pub fn download_dir(&self) -> Result<PathBuf> {
         crate::utils::create_download_temp_dir(&self.version, &self.download_url).with_context(

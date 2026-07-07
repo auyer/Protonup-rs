@@ -3,7 +3,7 @@ use futures_util::stream::FuturesUnordered;
 use futures_util::{StreamExt, future, stream};
 use indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle};
 use inquire::{Select, Text};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use tokio::fs;
 use tokio::fs::{File, OpenOptions};
@@ -12,7 +12,7 @@ use tokio::sync::OnceCell;
 
 use libprotonup::{
     apps,
-    downloads::{self, Download, Release},
+    downloads::{self, Download, Release, ReleaseList},
     files, hashing,
     sources::{CompatTool, CompatTools},
 };
@@ -137,6 +137,34 @@ pub(crate) async fn validate_file(
     Ok(())
 }
 
+type DedupKey = (String, String, u64);
+type DownloadGroup = (Download, Release, CompatTool, Vec<apps::AppInstallations>);
+
+/// Groups download entries by their dedup key and returns a map of
+/// (download, release, compat_tool, targets) plus uniquely tagged releases.
+fn group_and_dedup_releases(
+    entries: Vec<(Download, Release, apps::AppInstallations, CompatTool)>,
+) -> (HashMap<DedupKey, DownloadGroup>, Vec<Release>) {
+    let mut groups: HashMap<DedupKey, DownloadGroup> = HashMap::new();
+    let mut seen_releases: HashSet<String> = HashSet::new();
+    let mut unique_releases: Vec<Release> = vec![];
+
+    for (download, release, app_inst, compat_tool) in entries {
+        let key = download.dedup_key();
+
+        groups
+            .entry(key)
+            .and_modify(|(_, _, _, targets)| targets.push(app_inst.clone()))
+            .or_insert_with(|| (download, release.clone(), compat_tool, vec![app_inst]));
+
+        if seen_releases.insert(release.tag_name.clone()) {
+            unique_releases.push(release);
+        }
+    }
+
+    (groups, unique_releases)
+}
+
 /// Downloads the latest wine version for all the apps found
 pub async fn run_quick_downloads(force: bool, whats_new: bool) -> Result<Vec<Release>> {
     let found_apps = apps::list_installed_apps().await;
@@ -157,25 +185,36 @@ pub async fn run_quick_downloads(force: bool, whats_new: bool) -> Result<Vec<Rel
 
     let multi_progress = MultiProgress::with_draw_target(ProgressDrawTarget::stderr_with_hz(20));
 
-    let joins = FuturesUnordered::new();
-    let mut releases: Vec<Release> = vec![];
-
+    // Cache list_releases results to avoid redundant API calls
+    let mut releases_cache: HashMap<String, ReleaseList> = HashMap::new();
+    let mut entries: Vec<(Download, Release, apps::AppInstallations, CompatTool)> = vec![];
     let mut release_and_compat_refs: Vec<(Release, CompatTool)> = vec![];
 
     for app_inst in found_apps {
         let compat_tool = app_inst.as_app().default_compatibility_tool();
 
-        // Get the latest Download info for the compat_tool
-        let release = match downloads::list_releases(&compat_tool).await {
-            // Get the Download info from the first item on the list, the latest version
-            Ok(mut release_list) => release_list.remove(0),
-            Err(e) => {
-                eprintln!(
-                    "Failed to fetch data, make sure you're connected to the internet.\nError: {e}"
-                );
-                std::process::exit(1)
+        let release_list = match releases_cache.get(&compat_tool.name) {
+            Some(list) => list.clone(),
+            None => {
+                let list = match downloads::list_releases(&compat_tool).await {
+                    Ok(list) => list,
+                    Err(e) => {
+                        eprintln!(
+                            "Failed to fetch data, make sure you're connected to the internet.\nError: {e}"
+                        );
+                        std::process::exit(1)
+                    }
+                };
+                releases_cache.insert(compat_tool.name.clone(), list.clone());
+                list
             }
         };
+
+        if release_list.is_empty() {
+            continue;
+        }
+
+        let release = release_list[0].clone();
 
         // Handle tools with multiple architecture variants
         let download = if compat_tool.has_multiple_asset_variations {
@@ -185,6 +224,7 @@ pub async fn run_quick_downloads(force: bool, whats_new: bool) -> Result<Vec<Rel
             release.get_download_info(&app_inst, &compat_tool)
         };
 
+        // Check if already installed
         let mut download_path = PathBuf::from(&app_inst.default_install_dir().as_str());
         download_path.push(compat_tool.installation_name(&download.version));
         if files::check_if_exists(&download_path.clone()).await && !force {
@@ -196,33 +236,35 @@ pub async fn run_quick_downloads(force: bool, whats_new: bool) -> Result<Vec<Rel
             release_and_compat_refs.push((release.clone(), compat_tool.clone()));
         }
 
-        joins.push(download_validate_unpack(
-            release.clone(),
-            app_inst,
-            compat_tool,
-            multi_progress.clone(),
-        ));
-
-        releases.push(release);
+        entries.push((download, release, app_inst, compat_tool));
     }
 
-    // Show what is new for each app being downloaded
+    let (groups, unique_releases) = group_and_dedup_releases(entries);
+
+    // Show what is new for each unique release being downloaded
     if whats_new {
         let mut seen_tags = HashSet::new();
 
-        // filter list to avoid showing the same app tag twice
         let release_and_compat_refs: Vec<(Release, CompatTool)> = release_and_compat_refs
             .into_iter()
-            .filter(|(release, _compat)| {
-                // We insert a reference to the tag_name into the HashSet
-                // so we don't have to allocate/clone Strings!
-                seen_tags.insert(release.tag_name.clone())
-            })
+            .filter(|(release, _compat)| seen_tags.insert(release.tag_name.clone()))
             .collect();
 
         for (release, compat_tool) in release_and_compat_refs {
             show_whatsnew(&release, &compat_tool).await;
         }
+    }
+
+    // Queue one download task per group
+    let joins = FuturesUnordered::new();
+
+    for (_, (_download, _release, compat_tool, targets)) in groups {
+        joins.push(download_validate_unpack_to_targets(
+            _download,
+            compat_tool,
+            targets,
+            multi_progress.clone(),
+        ));
     }
 
     joins
@@ -235,7 +277,7 @@ pub async fn run_quick_downloads(force: bool, whats_new: bool) -> Result<Vec<Rel
         .await;
     multi_progress.clear().unwrap();
 
-    Ok(releases)
+    Ok(unique_releases)
 }
 
 async fn show_whatsnew(release: &Release, compat_tool: &CompatTool) {
@@ -437,16 +479,6 @@ pub async fn download_to_selected_app(app: Option<apps::App>) -> Result<Vec<Rele
     Ok(releases)
 }
 
-async fn download_validate_unpack(
-    release: Release,
-    for_app: apps::AppInstallations,
-    compat_tool: CompatTool,
-    multi_progress: MultiProgress,
-) -> Result<()> {
-    let download = release.get_download_info(&for_app, &compat_tool);
-    download_validate_unpack_with_download(download, for_app, compat_tool, multi_progress).await
-}
-
 async fn download_validate_unpack_with_download(
     download: Download,
     for_app: apps::AppInstallations,
@@ -525,6 +557,154 @@ async fn download_validate_unpack_with_download(
         install_name,
         compat_tool
     ));
+    Ok(())
+}
+
+pub(crate) async fn init_download_progress_for_targets(
+    download: &Download,
+    targets: &[apps::AppInstallations],
+    multi_progress: MultiProgress,
+) -> ProgressBar {
+    let progress_bar = multi_progress.add(ProgressBar::new(download.size));
+    progress_bar.set_style(get_progress_style().await);
+    let app_names: Vec<String> = targets.iter().map(|a| a.to_string()).collect();
+    progress_bar.set_message(format!(
+        "Downloading {} for {}",
+        download.download_url.split('/').next_back().unwrap(),
+        app_names.join(", ")
+    ));
+    progress_bar
+}
+
+async fn download_validate_unpack_to_targets(
+    download: Download,
+    compat_tool: CompatTool,
+    targets: Vec<apps::AppInstallations>,
+    multi_progress: MultiProgress,
+) -> Result<()> {
+    if targets.is_empty() {
+        return Ok(());
+    }
+
+    let output_dir = download.download_dir()?;
+
+    if files::check_if_exists(&output_dir).await {
+        fs::remove_dir_all(&output_dir).await?;
+    }
+
+    let file = OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .open(&output_dir)
+        .await
+        .with_context(|| {
+            format!(
+                "[Download] Failed creating destination file: {}",
+                output_dir.display()
+            )
+        })?;
+
+    let download_progress_bar =
+        init_download_progress_for_targets(&download, &targets, multi_progress.clone()).await;
+
+    downloads::download_to_async_write(
+        &download.download_url,
+        &mut download_progress_bar.wrap_async_write(file),
+    )
+    .await?;
+
+    download_progress_bar.set_style(get_message_bar_style().await);
+    download_progress_bar.finish_with_message(download_progress_bar.message().replacen(
+        "Downloading",
+        "Downloaded",
+        1,
+    ));
+
+    if let Some(ref git_hash_sum) = download.hash_sum {
+        let hash_content = &downloads::download_file_into_memory(&git_hash_sum.sum_content)
+            .await
+            .with_context(|| {
+                format!(
+                    "Error getting expected download hash for {}",
+                    download.version
+                )
+            })?;
+        let hash_sum = hashing::HashSums {
+            sum_content: hash_content.to_owned(),
+            sum_type: git_hash_sum.sum_type.clone(),
+        };
+
+        validate_file(
+            &download.file_name,
+            &output_dir,
+            hash_sum,
+            multi_progress.clone(),
+        )
+        .await?;
+    }
+
+    let install_name = compat_tool.installation_name(&download.version);
+
+    let unpack_joins = FuturesUnordered::new();
+
+    for app_inst in targets {
+        let install_dir = app_inst.installation_dir(&compat_tool).unwrap();
+        let install_path = install_dir.join(&install_name);
+        let output_dir = output_dir.clone();
+        let download = download.clone();
+        let compat_tool = compat_tool.clone();
+        let multi_progress = multi_progress.clone();
+        let install_name = install_name.clone();
+
+        unpack_joins.push(async move {
+            if files::check_if_exists(&install_path).await {
+                fs::remove_dir_all(&install_path).await.with_context(|| {
+                    format!(
+                        "Error removing existing install at {}",
+                        install_path.display()
+                    )
+                })?;
+            }
+
+            let unpack_progress_bar =
+                init_unpack_progress(&install_dir, &output_dir, multi_progress.clone())
+                    .await
+                    .with_context(|| format!("Error unpacking {}", output_dir.display()))?;
+
+            let decompressor = files::Decompressor::from_path(&output_dir)
+                .await
+                .with_context(|| format!("Error checking file type of {}", output_dir.display()))?;
+
+            files::unpack_file(
+                &compat_tool,
+                &download,
+                unpack_progress_bar.wrap_async_read(decompressor),
+                &install_dir,
+            )
+            .await
+            .with_context(|| format!("Error unpacking {}", output_dir.display()))?;
+
+            unpack_progress_bar.set_style(get_message_bar_style().await);
+            unpack_progress_bar.finish_with_message(format!(
+                "Done! {} installed in {}/{}",
+                compat_tool,
+                install_dir.display(),
+                install_name,
+            ));
+
+            Ok::<_, anyhow::Error>(())
+        });
+    }
+
+    unpack_joins
+        .for_each(|res| {
+            if let Err(e) = res {
+                multi_progress.println(format!("{e}")).unwrap();
+            }
+            future::ready(())
+        })
+        .await;
+
     Ok(())
 }
 
