@@ -1,7 +1,7 @@
 use iced::widget::{Column, Container, button, container, image, rule, text};
 use iced::{ContentFit, Element, Length};
 
-use crate::message::{AppMode, Message, SelectionStep};
+use crate::message::{AppMode, Message, QuickUpdateStatus, SelectionStep};
 use crate::state::{ProtonupGui, warning_button_style};
 
 mod circular_widget {
@@ -31,7 +31,13 @@ pub(crate) fn sidebar(state: &ProtonupGui) -> Element<'_, Message> {
 
     let is_complete = state.download_complete.is_some();
 
-    if is_downloading {
+    let show_spinner = is_downloading
+        && !matches!(
+            state.quick_update_status,
+            QuickUpdateStatus::Checking | QuickUpdateStatus::AllUpToDate(_)
+        );
+
+    if show_spinner {
         column = column.push(
             Container::new(circular_widget::Circular::new().size(40.0).bar_height(4.0))
                 .center_x(Length::Fill)

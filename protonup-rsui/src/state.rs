@@ -328,6 +328,11 @@ impl ProtonupGui {
 
         if self.download_started
             && self.selection_step == crate::message::SelectionStep::Downloading
+            && !matches!(
+                self.quick_update_status,
+                crate::message::QuickUpdateStatus::Checking
+                    | crate::message::QuickUpdateStatus::AllUpToDate(_)
+            )
         {
             subscriptions
                 .push(iced::window::frames().map(|_| crate::message::Message::TickSpinner));
