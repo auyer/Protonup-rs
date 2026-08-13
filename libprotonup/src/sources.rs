@@ -141,6 +141,21 @@ impl CompatTool {
             None => true,
         }
     }
+
+    /// filter_asset_with_arch is like [`filter_asset`], but also matches assets
+    /// that carry a known architecture suffix (e.g. `GE-Proton11-4-x86_64.tar.gz`).
+    /// The asset matches if either its original name or its name with the
+    /// architecture suffix stripped satisfies [`filter_asset`].
+    ///
+    /// Returns a tuple of the matching asset and file name (if any).
+    pub fn filter_asset_with_arch(
+        &self,
+        path: &str,
+    ) -> (bool, Option<super::architecture::CpuArch>) {
+        let (stripped, arch) = super::architecture::strip_arch_suffix(path);
+        let matched = self.filter_asset(path) || (stripped != path && self.filter_asset(&stripped));
+        (matched, arch)
+    }
 }
 
 impl fmt::Display for CompatTool {
@@ -259,6 +274,144 @@ mod tests {
             assert_eq!(
                 actual, *expected,
                 "Regex test failed for input: '{input}'. Expected {expected}, got {actual}"
+            );
+        }
+    }
+
+    /// Multi-architecture asset matching: each entry is (tool, file name, matches, detected arch).
+    const TEST_CASES_MULTI_ARCH: &[(&str, &str, bool, Option<crate::architecture::CpuArch>)] = &[
+        // GE-Proton 11-4: both architectures carry an explicit suffix
+        (
+            "GEProton",
+            "GE-Proton11-4-x86_64.tar.gz",
+            true,
+            Some(crate::architecture::CpuArch::X86),
+        ),
+        (
+            "GEProton",
+            "GE-Proton11-4-aarch64.tar.gz",
+            true,
+            Some(crate::architecture::CpuArch::Arm),
+        ),
+        (
+            "GEProton",
+            "GE-Proton11-5-aarch64.tar.gz",
+            true,
+            Some(crate::architecture::CpuArch::Arm),
+        ),
+        (
+            "GEProton",
+            "GE-Proton11-5-x86_64.tar.gz",
+            true,
+            Some(crate::architecture::CpuArch::X86),
+        ),
+        (
+            "GEProton",
+            "GE-Proton16-6-x86.tar.gz",
+            true,
+            Some(crate::architecture::CpuArch::X86),
+        ),
+        (
+            "GEProton",
+            "GE-Proton26-9-x86_64_v7.tar.gz", // can you imagine?
+            true,
+            Some(crate::architecture::CpuArch::X86),
+        ),
+        (
+            "GEProton",
+            "GE-Proton26-9-aarch64_v8.tar.gz", // can you imagine?
+            true,
+            Some(crate::architecture::CpuArch::Arm),
+        ),
+        // GE-Proton 11-3: default (no suffix) x86 + aarch64
+        ("GEProton", "GE-Proton11-3.tar.gz", true, None),
+        (
+            "GEProton",
+            "GE-Proton11-3-aarch64.tar.gz",
+            true,
+            Some(crate::architecture::CpuArch::Arm),
+        ),
+        // GE-Proton 11-2: x86 only, no suffix
+        ("GEProton", "GE-Proton11-2.tar.gz", true, None),
+        // Other projects
+        (
+            "Kron4ek Wine",
+            "wine-9.0-amd64.tar.xz",
+            true,
+            Some(crate::architecture::CpuArch::X86),
+        ),
+        (
+            "Proton CachyOS",
+            "proton-cachyos-9.0-20250101-abc123-x86_64_v3.tar.gz",
+            true,
+            Some(crate::architecture::CpuArch::X86),
+        ),
+        (
+            "Proton CachyOS",
+            "proton-cachyos-11.0-20260703-slr-x86_64_v3.tar.xz",
+            true,
+            Some(crate::architecture::CpuArch::X86),
+        ),
+        (
+            "Proton CachyOS",
+            "proton-cachyos-11.0-20260703-slr-x86_64.tar.xz",
+            true,
+            Some(crate::architecture::CpuArch::X86),
+        ),
+        (
+            "Proton CachyOS",
+            "proton-cachyos-11.0-20260703-slr-arm64.tar.xz",
+            true,
+            Some(crate::architecture::CpuArch::Arm),
+        ),
+        ("Luxtorpeda", "Luxtorpeda-v76.2.0.tar.xz", true, None),
+        ("GEProton RTSP", "GE-Proton9-10-rtsp12.tar.gz", true, None),
+        ("DXVK", "dxvk-2.6.1.tar.gz", true, None),
+    ];
+
+    #[test]
+    fn test_is_multi_arch_archive_name_regex_table() {
+        let empty = "".to_owned();
+
+        let regex_for = |tool: &str| -> Option<String> {
+            match tool {
+                "GEProton" => Some(
+                    r"^(GE-Proton|Proton-)[0-9]+(-[0-9]+)?(\.\d+(\.\d+)?)?(-GE-\d+)?\.(tar\.gz|tar\.zst)$".to_owned(),
+                ),
+                "Kron4ek Wine" => {
+                    Some(r"^wine-\d+\.\d+(?:\.\d+)?\.tar\.xz$".to_owned())
+                }
+                "Proton CachyOS" => Some(
+                    r"^proton-cachyos-[0-9]+\.[0-9]+-[0-9]+-[a-z0-9]+\.(tar\.gz|tar\.xz|tar\.zst)$".to_owned(),
+                ),
+                "Luxtorpeda" => None,
+                "GEProton RTSP" => Some(
+                    r"^(GE-Proton|Proton-)[0-9]+(-[0-9]+)?-(rtsp)-?(\d+(-\d+)?)?\.(tar\.gz|tar\.zst)$".to_owned(),
+                ),
+                "DXVK" => Some(r"^dxvk-\d+\.\d+(?:\.\d+)?\.tar\.gz$".to_owned()),
+                _ => None,
+            }
+        };
+
+        for (tool, input, expected, expected_arch) in TEST_CASES_MULTI_ARCH {
+            let s = CompatTool::new_custom(
+                empty.clone(),
+                Forge::GitHub,
+                empty.clone(),
+                empty.clone(),
+                ToolType::Runtime,
+                regex_for(tool),
+                None,
+                None,
+            );
+            let (actual, actual_arch) = s.filter_asset_with_arch(input);
+            assert_eq!(
+                actual, *expected,
+                "Regex test failed for input: '{input}'. Expected {expected}, got {actual}"
+            );
+            assert_eq!(
+                actual_arch, *expected_arch,
+                "Arch detection failed for input: '{input}'. Expected {expected_arch:?}, got {actual_arch:?}"
             );
         }
     }

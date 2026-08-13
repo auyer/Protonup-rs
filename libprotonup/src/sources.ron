@@ -63,7 +63,7 @@
         repository_name: "Wine-Builds",
         tool_type: WineBased,
         compatible_applications: [Lutris],
-        release_asset_filter: Some(r"^wine-\d+\.\d+(?:\.\d+)?-amd64\.tar\.xz$"),
+        release_asset_filter: Some(r"^wine-\d+\.\d+(?:\.\d+)?\.tar\.xz$"),
         file_name_template: Some("kron4ek-wine-{version}")
     ),
     (
@@ -81,7 +81,7 @@
         repository_account: "CachyOS",
         repository_name: "proton-cachyos",
         tool_type: WineBased,
-        release_asset_filter: Some(r"^proton-cachyos-[0-9]+\.[0-9]+-[0-9]+-[a-z0-9]+-x86_64(_v[234])?\.(tar\.gz|tar\.xz|tar\.zst)$"),
+        release_asset_filter: Some(r"^proton-cachyos-[0-9]+\.[0-9]+-[0-9]+-[a-z0-9]+\.(tar\.gz|tar\.xz|tar\.zst)$"),
         has_multiple_asset_variations: true,
         compatible_applications: [Steam, Lutris],
     ),
