@@ -23,12 +23,10 @@ pub fn select_micro_arch_variant(
     }
 
     if quick_mode && let Some(default) = architecture_variants::select_default_variant(&variants) {
-        println!(
-            "Selected {} by default",
-            architecture_variants::get_micro_arch_variant_name(
-                architecture_variants::get_micro_arch_variant(&default.file_name)
-            )
-        );
+        let name = architecture_variants::MicroArchVariants::from_file_name(&default.file_name)
+            .map(|variant| variant.name())
+            .unwrap_or("unknown");
+        println!("Selected {name} by default");
         return Ok(default);
     }
 
