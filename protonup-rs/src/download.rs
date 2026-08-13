@@ -219,7 +219,7 @@ pub async fn run_quick_downloads(force: bool, whats_new: bool) -> Result<Vec<Rel
         // Handle tools with multiple architecture variants
         let download = if compat_tool.has_multiple_asset_variations {
             let variants = release.get_all_download_variants(&app_inst, &compat_tool);
-            architecture_variants::select_architecture_variant(&release.tag_name, variants, true)?
+            architecture_variants::select_micro_arch_variant(&release.tag_name, variants, true)?
         } else {
             release.get_download_info(&app_inst, &compat_tool)
         };
@@ -568,7 +568,7 @@ pub async fn download_to_selected_app(app: Option<apps::App>) -> Result<Vec<Rele
             .map(|release| {
                 let variants = release.get_all_download_variants(&app_inst, &selected_tool);
 
-                architecture_variants::select_architecture_variant(
+                architecture_variants::select_micro_arch_variant(
                     &release.tag_name,
                     variants,
                     false,

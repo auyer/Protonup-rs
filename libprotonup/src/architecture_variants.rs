@@ -9,7 +9,7 @@ use crate::downloads::Download;
 ///
 /// Contains the variant name, description, and download information.
 #[derive(Debug, Clone)]
-pub struct ArchitectureVariant {
+pub struct MicroArchVariants {
     /// The architecture variant name (x86_64, x86_64_v2, x86_64_v3, x86_64_v4)
     pub name: String,
     /// Extended description of this variant
@@ -18,7 +18,7 @@ pub struct ArchitectureVariant {
     pub download: Download,
 }
 
-impl std::fmt::Display for ArchitectureVariant {
+impl std::fmt::Display for MicroArchVariants {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "{} - {}", self.name, self.description)
     }
@@ -32,7 +32,7 @@ impl std::fmt::Display for ArchitectureVariant {
 /// - `3`: x86_64_v3
 /// - `4`: x86_64_v4
 /// - `0`: unknown/not a recognized variant
-pub fn get_architecture_variant(file_name: &str) -> u8 {
+pub fn get_micro_arch_variant(file_name: &str) -> u8 {
     if file_name.contains("_v4") {
         4
     } else if file_name.contains("_v3") {
@@ -47,7 +47,7 @@ pub fn get_architecture_variant(file_name: &str) -> u8 {
 }
 
 /// Gets the variant name string from the variant code.
-pub fn get_variant_name(variant_code: u8) -> &'static str {
+pub fn get_micro_arch_variant_name(variant_code: u8) -> &'static str {
     match variant_code {
         1 => "x86_64",
         2 => "x86_64_v2",
@@ -58,7 +58,7 @@ pub fn get_variant_name(variant_code: u8) -> &'static str {
 }
 
 /// Gets an extended description for an architecture variant.
-pub fn get_architecture_description(variant_code: u8) -> &'static str {
+pub fn get_micro_arch_description(variant_code: u8) -> &'static str {
     match variant_code {
         4 => "Experimental - optimized for AVX-512",
         3 => "Modern CPUs - optimized for AVX2",
@@ -68,21 +68,21 @@ pub fn get_architecture_description(variant_code: u8) -> &'static str {
     }
 }
 
-/// Extracts architecture variants from a list of downloads.
+/// Extracts micro architecture variants from a list of downloads.
 ///
-/// Returns a sorted Vec<ArchitectureVariant> sorted by variant priority
+/// Returns a sorted Vec<MicroArchVariants> sorted by variant priority
 /// (x86_64 < x86_64_v2 < x86_64_v3 < x86_64_v4).
-pub fn extract_variants(downloads: &[Download]) -> Vec<ArchitectureVariant> {
-    let mut variants: Vec<ArchitectureVariant> = downloads
+pub fn extract_march_variants(downloads: &[Download]) -> Vec<MicroArchVariants> {
+    let mut variants: Vec<MicroArchVariants> = downloads
         .iter()
         .filter_map(|download| {
-            let variant_code = get_architecture_variant(&download.file_name);
+            let variant_code = get_micro_arch_variant(&download.file_name);
             if variant_code == 0 {
                 return None;
             }
-            Some(ArchitectureVariant {
-                name: get_variant_name(variant_code).to_string(),
-                description: get_architecture_description(variant_code).to_string(),
+            Some(MicroArchVariants {
+                name: get_micro_arch_variant_name(variant_code).to_string(),
+                description: get_micro_arch_description(variant_code).to_string(),
                 download: download.clone(),
             })
         })
@@ -117,42 +117,42 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_get_architecture_variant() {
-        assert_eq!(get_architecture_variant("proton-cachyos-x86_64.tar.gz"), 1);
+    fn test_get_micro_arch_variant() {
+        assert_eq!(get_micro_arch_variant("proton-cachyos-x86_64.tar.gz"), 1);
         assert_eq!(
-            get_architecture_variant("proton-cachyos-x86_64_v2.tar.gz"),
+            get_micro_arch_variant("proton-cachyos-x86_64_v2.tar.gz"),
             2
         );
         assert_eq!(
-            get_architecture_variant("proton-cachyos-x86_64_v3.tar.gz"),
+            get_micro_arch_variant("proton-cachyos-x86_64_v3.tar.gz"),
             3
         );
         assert_eq!(
-            get_architecture_variant("proton-cachyos-x86_64_v4.tar.gz"),
+            get_micro_arch_variant("proton-cachyos-x86_64_v4.tar.gz"),
             4
         );
-        assert_eq!(get_architecture_variant("some-other-file.tar.gz"), 0);
+        assert_eq!(get_micro_arch_variant("some-other-file.tar.gz"), 0);
     }
 
     #[test]
-    fn test_get_variant_name() {
-        assert_eq!(get_variant_name(1), "x86_64");
-        assert_eq!(get_variant_name(2), "x86_64_v2");
-        assert_eq!(get_variant_name(3), "x86_64_v3");
-        assert_eq!(get_variant_name(4), "x86_64_v4");
-        assert_eq!(get_variant_name(0), "unknown");
+    fn test_get_micro_arch_variant_name() {
+        assert_eq!(get_micro_arch_variant_name(1), "x86_64");
+        assert_eq!(get_micro_arch_variant_name(2), "x86_64_v2");
+        assert_eq!(get_micro_arch_variant_name(3), "x86_64_v3");
+        assert_eq!(get_micro_arch_variant_name(4), "x86_64_v4");
+        assert_eq!(get_micro_arch_variant_name(0), "unknown");
     }
 
     #[test]
-    fn test_get_architecture_description() {
-        assert!(get_architecture_description(1).contains("Universal"));
-        assert!(get_architecture_description(2).contains("SSE3"));
-        assert!(get_architecture_description(3).contains("AVX2"));
-        assert!(get_architecture_description(4).contains("AVX-512"));
+    fn test_get_micro_arch_description() {
+        assert!(get_micro_arch_description(1).contains("Universal"));
+        assert!(get_micro_arch_description(2).contains("SSE3"));
+        assert!(get_micro_arch_description(3).contains("AVX2"));
+        assert!(get_micro_arch_description(4).contains("AVX-512"));
     }
 
     #[test]
-    fn test_extract_variants_sorts_correctly() {
+    fn test_extract_march_variants_sorts_correctly() {
         let downloads = vec![
             create_mock_download("proton-x86_64_v3.tar.gz"),
             create_mock_download("proton-x86_64.tar.gz"),
@@ -160,7 +160,7 @@ mod tests {
             create_mock_download("proton-x86_64_v2.tar.gz"),
         ];
 
-        let variants = extract_variants(&downloads);
+        let variants = extract_march_variants(&downloads);
 
         assert_eq!(variants.len(), 4);
         assert_eq!(variants[0].name, "x86_64");
@@ -170,13 +170,13 @@ mod tests {
     }
 
     #[test]
-    fn test_extract_variants_filters_unknown() {
+    fn test_extract_march_variants_filters_unknown() {
         let downloads = vec![
             create_mock_download("proton-x86_64_v2.tar.gz"),
             create_mock_download("some-other-file.tar.gz"),
         ];
 
-        let variants = extract_variants(&downloads);
+        let variants = extract_march_variants(&downloads);
 
         assert_eq!(variants.len(), 1);
         assert_eq!(variants[0].name, "x86_64_v2");

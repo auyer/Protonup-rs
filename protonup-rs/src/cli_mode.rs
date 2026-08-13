@@ -211,7 +211,7 @@ pub async fn run_cli_mode(
             .iter()
             .map(|release| {
                 let variants = release.get_all_download_variants(&app_inst, &compat_tool);
-                architecture_variants::select_architecture_variant(
+                architecture_variants::select_micro_arch_variant(
                     &release.tag_name,
                     variants,
                     false,

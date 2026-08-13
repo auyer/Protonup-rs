@@ -13,7 +13,7 @@ use libprotonup::downloads::Download;
 ///
 /// In quick mode, returns the `_v2` variant by default (or first available).
 /// In interactive mode, shows a selection menu with descriptions.
-pub fn select_architecture_variant(
+pub fn select_micro_arch_variant(
     release_name: &str,
     variants: Vec<Download>,
     quick_mode: bool,
@@ -25,15 +25,15 @@ pub fn select_architecture_variant(
     if quick_mode && let Some(default) = architecture_variants::select_default_variant(&variants) {
         println!(
             "Selected {} by default",
-            architecture_variants::get_variant_name(
-                architecture_variants::get_architecture_variant(&default.file_name)
+            architecture_variants::get_micro_arch_variant_name(
+                architecture_variants::get_micro_arch_variant(&default.file_name)
             )
         );
         return Ok(default);
     }
 
     // Extract and sort variants using libprotonup
-    let sorted_variants = architecture_variants::extract_variants(&variants);
+    let sorted_variants = architecture_variants::extract_march_variants(&variants);
 
     if sorted_variants.is_empty() {
         return Ok(variants.into_iter().next().unwrap());
