@@ -127,6 +127,7 @@ pub async fn run_cli_mode(
     for_target: Option<String>,
     force: bool,
     whats_new: bool,
+    default_arch: libprotonup::architecture::CpuArch,
 ) -> Result<Vec<Release>, Error> {
     // Determine the compatibility tool first (needed for auto-detection)
     let compat_tool = match tool.as_deref() {
@@ -210,22 +211,19 @@ pub async fn run_cli_mode(
         releases
             .iter()
             .map(|release| {
-                let variants = release.get_all_download_variants(&app_inst, &compat_tool);
-                architecture_variants::select_micro_arch_variant(
-                    &release.tag_name,
-                    variants,
-                    false,
-                )
-                .unwrap_or_else(|e| {
-                    eprintln!("Error selecting architecture variant: {}", e);
-                    std::process::exit(1);
-                })
+                let variants =
+                    release.get_all_download_variants(&app_inst, &compat_tool, default_arch);
+                architecture_variants::select_micro_arch_variant(&release.tag_name, variants, false)
+                    .unwrap_or_else(|e| {
+                        eprintln!("Error selecting architecture variant: {}", e);
+                        std::process::exit(1);
+                    })
             })
             .collect()
     } else {
         releases
             .iter()
-            .map(|release| release.get_download_info(&app_inst, &compat_tool))
+            .map(|release| release.get_download_info(&app_inst, &compat_tool, default_arch))
             .collect()
     };
 

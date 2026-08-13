@@ -111,7 +111,24 @@ pub fn arch_from_file_name(name: &str) -> Option<CpuArch> {
     find_arch_token(name).map(|(_, _, arch)| arch)
 }
 
+/// Returns the length of a trailing microarchitecture level
+/// (e.g. `_v2`) at the given byte position, or `0` if none.
+fn microarch_level_len(s: &str, from: usize) -> usize {
+    let rest = &s[from..];
+    if !rest.starts_with("_v") {
+        return 0;
+    }
+    let digits = rest[2..].chars().take_while(|c| c.is_ascii_digit()).count();
+    if digits == 0 {
+        return 0;
+    }
+    2 + digits
+}
+
 /// Strips the architecture token from a file name.
+///
+/// The token may optionally be followed by a microarchitecture level (e.g.
+/// `x86_64_v3`), which is stripped as well.
 ///
 /// Returns the stripped name and the detected architecture (if any). If no
 /// architecture token is found, the name is returned unchanged with `None`.
@@ -119,6 +136,8 @@ pub fn strip_arch_suffix(name: &str) -> (String, Option<CpuArch>) {
     let Some((start, end, arch)) = find_arch_token(name) else {
         return (name.to_owned(), None);
     };
+
+    let end = end + microarch_level_len(name, end);
 
     let mut stripped = name.to_owned();
     // Remove the token and one preceding separator if present.
@@ -187,6 +206,22 @@ mod tests {
         let (stripped, arch) = strip_arch_suffix("GE-Proton11-3.tar.gz");
         assert_eq!(stripped, "GE-Proton11-3.tar.gz");
         assert_eq!(arch, None);
+    }
+
+    #[test]
+    fn test_strip_arch_suffix_with_microarch_level() {
+        let (stripped, arch) = strip_arch_suffix("GE-Proton26-9-x86_64_v7.tar.gz");
+        assert_eq!(stripped, "GE-Proton26-9.tar.gz");
+        assert_eq!(arch, Some(CpuArch::X86));
+
+        let (stripped, arch) = strip_arch_suffix("GE-Proton26-9-aarch64_v8.tar.gz");
+        assert_eq!(stripped, "GE-Proton26-9.tar.gz");
+        assert_eq!(arch, Some(CpuArch::Arm));
+
+        let (stripped, arch) =
+            strip_arch_suffix("proton-cachyos-9.0-20250101-abc123-x86_64_v3.tar.gz");
+        assert_eq!(stripped, "proton-cachyos-9.0-20250101-abc123.tar.gz");
+        assert_eq!(arch, Some(CpuArch::X86));
     }
 
     #[test]

@@ -26,6 +26,11 @@ pub struct Opt {
     #[arg(long)]
     pub r#for: Option<String>,
 
+    /// Architecture to assume for release assets without an architecture
+    /// suffix. Accepts amd64/x86_64/x86 or arm64/arm/aarch64. Defaults to amd64.
+    #[arg(long)]
+    pub default_arch: Option<String>,
+
     /// Show release notes for latest versions of default tools
     #[arg(short, long)]
     pub whats_new: bool,

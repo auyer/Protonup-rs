@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use super::constants;
 use crate::apps;
+use crate::architecture::CpuArch;
 use crate::files;
 use crate::hashing;
 use crate::http_client;
@@ -43,6 +44,7 @@ impl Release {
         &self,
         for_app: &apps::AppInstallations,
         compat_tool: &CompatTool,
+        default_arch: CpuArch,
     ) -> Download {
         let mut download: Download = Download {
             for_app: for_app.to_owned(),
@@ -50,30 +52,58 @@ impl Release {
             ..Download::default()
         };
 
+        let mut hash_sum: Option<hashing::HashSums> = None;
+        let mut candidates: Vec<(&Asset, Option<CpuArch>)> = Vec::new();
+
         for asset in &self.assets {
             if asset.name.contains("sha512") {
                 download.file_name = asset.name.clone();
-                download.hash_sum = Some(hashing::HashSums {
+                hash_sum = Some(hashing::HashSums {
                     sum_content: asset.browser_download_url.clone(),
                     sum_type: hashing::HashSumType::Sha512,
                 })
             } else if asset.name.contains("sha256") {
                 download.file_name = asset.name.clone();
-                download.hash_sum = Some(hashing::HashSums {
+                hash_sum = Some(hashing::HashSums {
                     sum_content: asset.browser_download_url.clone(),
                     sum_type: hashing::HashSumType::Sha256,
                 })
-            } else if compat_tool.filter_asset(asset.download_file_name().as_str())
-                && files::check_supported_extension(&asset.name).is_ok()
-            {
-                download.file_name = asset.name.clone();
-                download
-                    .download_url
-                    .clone_from(&asset.browser_download_url);
-                download.size = asset.size as u64;
-                break;
+            } else {
+                let (matched, arch) =
+                    compat_tool.filter_asset_with_arch(asset.download_file_name().as_str());
+                if matched && files::check_supported_extension(&asset.name).is_ok() {
+                    candidates.push((asset, arch));
+                }
             }
         }
+
+        let system_arch = crate::architecture::detect_system_arch();
+
+        if let Some(selected) = select_arch_index(
+            &candidates.iter().map(|(_, arch)| *arch).collect::<Vec<_>>(),
+            system_arch,
+            default_arch,
+        )
+        .and_then(|idx| candidates.get(idx))
+        {
+            let (asset, arch) = *selected;
+            download.file_name = asset.name.clone();
+            download
+                .download_url
+                .clone_from(&asset.browser_download_url);
+            download.size = asset.size as u64;
+
+            if arch.unwrap_or(default_arch) != system_arch {
+                eprintln!(
+                    "Warning: no {} build found for '{}'. Falling back to {}.",
+                    system_arch,
+                    self.tag_name,
+                    arch.unwrap_or(default_arch)
+                );
+            }
+        }
+
+        download.hash_sum = hash_sum;
         download
     }
 
@@ -83,6 +113,7 @@ impl Release {
         &self,
         for_app: &apps::AppInstallations,
         compat_tool: &CompatTool,
+        default_arch: CpuArch,
     ) -> Vec<Download> {
         // Create a map from base filename to hash file URL
         let mut asset_hashsum_map: std::collections::HashMap<
@@ -115,13 +146,15 @@ impl Release {
             }
         }
 
+        let system_arch = crate::architecture::detect_system_arch();
+
         let mut variants = Vec::new();
 
         // Collect all matching asset variants with their corresponding hash
         for asset in &self.assets {
-            if compat_tool.filter_asset(asset.download_file_name().as_str())
-                && files::check_supported_extension(&asset.name).is_ok()
-            {
+            let (matched, arch) =
+                compat_tool.filter_asset_with_arch(asset.download_file_name().as_str());
+            if matched && files::check_supported_extension(&asset.name).is_ok() {
                 let base_name = asset
                     .name
                     .strip_suffix(".tar.gz")
@@ -144,11 +177,47 @@ impl Release {
                     version: self.tag_name.clone(),
                     hash_sum,
                 });
+
+                if arch.unwrap_or(default_arch) != system_arch {
+                    eprintln!(
+                        "Warning: no {} build found for '{}'. Falling back to {}.",
+                        system_arch,
+                        self.tag_name,
+                        arch.unwrap_or(default_arch)
+                    );
+                }
             }
         }
 
         variants
     }
+}
+
+/// Selects the best asset index for the running architecture.
+///
+/// Priority:
+/// 1. an asset whose explicit architecture token matches `system`
+/// 2. an asset with no architecture token when `default` matches `system`
+/// 3. an asset whose explicit architecture token matches `default`
+/// 4. an asset with no architecture token (fallback)
+///
+/// Returns `None` when no candidate is available.
+pub(crate) fn select_arch_index(
+    candidates: &[Option<CpuArch>],
+    system: CpuArch,
+    default: CpuArch,
+) -> Option<usize> {
+    let find = |predicate: &dyn Fn(usize, Option<CpuArch>) -> bool| {
+        candidates
+            .iter()
+            .enumerate()
+            .find_map(|(idx, arch)| predicate(idx, *arch).then_some(idx))
+    };
+
+    find(&|_, arch| arch == Some(system))
+        .or_else(|| find(&|_, arch| arch.is_none() && default == system))
+        .or_else(|| find(&|_, arch| arch == Some(default)))
+        .or_else(|| find(&|_, arch| arch.is_none()))
 }
 
 /// Holds the information from the different Assets for each GitHub release
@@ -266,7 +335,9 @@ pub(crate) async fn list_releases_with_sender<S: http_client::HttpSend>(
             !rel.assets.is_empty()
                 // same logic used when creating the Release object
                 && (rel.assets.iter().any(|asset| {
-                    compat_tool.filter_asset(asset.download_file_name().as_str())
+                    compat_tool
+                        .filter_asset_with_arch(asset.download_file_name().as_str())
+                        .0
                         && files::check_supported_extension(&asset.name).is_ok()
                 }))
         })
@@ -744,5 +815,71 @@ mod tests {
             ..Default::default()
         };
         assert_ne!(d1.dedup_key(), d2.dedup_key());
+    }
+
+    #[test]
+    fn test_select_arch_index_geproton_11_4() {
+        // GE-Proton11-4: x86_64 + aarch64
+        let candidates = vec![Some(CpuArch::X86), Some(CpuArch::Arm)];
+
+        // x86 system picks the x86_64 asset
+        assert_eq!(
+            select_arch_index(&candidates, CpuArch::X86, CpuArch::X86),
+            Some(0)
+        );
+        // arm system picks the aarch64 asset
+        assert_eq!(
+            select_arch_index(&candidates, CpuArch::Arm, CpuArch::X86),
+            Some(1)
+        );
+    }
+
+    #[test]
+    fn test_select_arch_index_geproton_11_3() {
+        // GE-Proton11-3: default (no suffix) + aarch64
+        let candidates = vec![None, Some(CpuArch::Arm)];
+
+        // x86 system picks the no-suffix (default) asset
+        assert_eq!(
+            select_arch_index(&candidates, CpuArch::X86, CpuArch::X86),
+            Some(0)
+        );
+        // arm system picks the aarch64 asset
+        assert_eq!(
+            select_arch_index(&candidates, CpuArch::Arm, CpuArch::X86),
+            Some(1)
+        );
+    }
+
+    #[test]
+    fn test_select_arch_index_geproton_11_2() {
+        // GE-Proton11-2: x86 only, no suffix
+        let candidates = vec![None];
+
+        assert_eq!(
+            select_arch_index(&candidates, CpuArch::X86, CpuArch::X86),
+            Some(0)
+        );
+        // arm system falls back to the default (x86) asset
+        assert_eq!(
+            select_arch_index(&candidates, CpuArch::Arm, CpuArch::X86),
+            Some(0)
+        );
+    }
+
+    #[test]
+    fn test_select_arch_index_prefers_explicit_over_default() {
+        // A release with both a default (no suffix) and an explicit x86 asset.
+        let candidates = vec![None, Some(CpuArch::X86)];
+
+        assert_eq!(
+            select_arch_index(&candidates, CpuArch::X86, CpuArch::X86),
+            Some(1)
+        );
+    }
+
+    #[test]
+    fn test_select_arch_index_empty() {
+        assert_eq!(select_arch_index(&[], CpuArch::X86, CpuArch::X86), None);
     }
 }
