@@ -169,7 +169,7 @@ fn group_and_dedup_releases(
 pub async fn run_quick_downloads(
     force: bool,
     whats_new: bool,
-    default_arch: libprotonup::architecture::CpuArch,
+    target_arch: libprotonup::architecture::CpuArch,
 ) -> Result<Vec<Release>> {
     let found_apps = apps::list_installed_apps().await;
     if found_apps.is_empty() {
@@ -222,10 +222,10 @@ pub async fn run_quick_downloads(
 
         // Handle tools with multiple architecture variants
         let download = if compat_tool.has_multiple_asset_variations {
-            let variants = release.get_all_download_variants(&app_inst, &compat_tool, default_arch);
+            let variants = release.get_all_download_variants(&app_inst, &compat_tool, target_arch);
             architecture_variants::select_micro_arch_variant(&release.tag_name, variants, true)?
         } else {
-            release.get_download_info(&app_inst, &compat_tool, default_arch)
+            release.get_download_info(&app_inst, &compat_tool, target_arch)
         };
 
         // Check if already installed
@@ -463,7 +463,7 @@ pub(crate) async fn check_changelog_menu() -> Result<Vec<Release>> {
 /// If no app is provided, the user is prompted for which version of Wine/Proton to use and what directory to extract to
 pub async fn download_to_selected_app(
     app: Option<apps::App>,
-    default_arch: libprotonup::architecture::CpuArch,
+    target_arch: libprotonup::architecture::CpuArch,
 ) -> Result<Vec<Release>> {
     // Get the folder to install Wine/Proton into
     let app_inst = match app.clone() {
@@ -574,7 +574,7 @@ pub async fn download_to_selected_app(
             .iter()
             .map(|release| {
                 let variants =
-                    release.get_all_download_variants(&app_inst, &selected_tool, default_arch);
+                    release.get_all_download_variants(&app_inst, &selected_tool, target_arch);
 
                 architecture_variants::select_micro_arch_variant(&release.tag_name, variants, false)
                     .unwrap_or_else(|_| std::process::exit(1))
@@ -583,7 +583,7 @@ pub async fn download_to_selected_app(
     } else {
         releases
             .iter()
-            .map(|release| release.get_download_info(&app_inst, &selected_tool, default_arch))
+            .map(|release| release.get_download_info(&app_inst, &selected_tool, target_arch))
             .collect()
     };
 

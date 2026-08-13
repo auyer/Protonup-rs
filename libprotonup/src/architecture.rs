@@ -54,8 +54,7 @@ fn is_arm_token(token: &str) -> bool {
 /// Detects the architecture of the running system using the target the binary
 /// was compiled for.
 pub fn detect_system_arch() -> CpuArch {
-    // TODO: this should not fail
-    CpuArch::from_str(std::env::consts::ARCH).unwrap()
+    CpuArch::from_str(std::env::consts::ARCH).unwrap_or_default()
 }
 
 /// Checks whether a character is a valid token delimiter for an architecture

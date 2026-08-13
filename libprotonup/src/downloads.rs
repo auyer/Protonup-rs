@@ -44,7 +44,7 @@ impl Release {
         &self,
         for_app: &apps::AppInstallations,
         compat_tool: &CompatTool,
-        default_arch: CpuArch,
+        target_arch: CpuArch,
     ) -> Download {
         let mut download: Download = Download {
             for_app: for_app.to_owned(),
@@ -77,12 +77,10 @@ impl Release {
             }
         }
 
-        let system_arch = crate::architecture::detect_system_arch();
-
         if let Some(selected) = select_arch_index(
             &candidates.iter().map(|(_, arch)| *arch).collect::<Vec<_>>(),
-            system_arch,
-            default_arch,
+            target_arch,
+            constants::DEFAULT_ARCH,
         )
         .and_then(|idx| candidates.get(idx))
         {
@@ -93,12 +91,12 @@ impl Release {
                 .clone_from(&asset.browser_download_url);
             download.size = asset.size as u64;
 
-            if arch.unwrap_or(default_arch) != system_arch {
+            if arch.unwrap_or(constants::DEFAULT_ARCH) != target_arch {
                 eprintln!(
                     "Warning: no {} build found for '{}'. Falling back to {}.",
-                    system_arch,
+                    target_arch,
                     self.tag_name,
-                    arch.unwrap_or(default_arch)
+                    arch.unwrap_or(constants::DEFAULT_ARCH)
                 );
             }
         }
@@ -113,7 +111,7 @@ impl Release {
         &self,
         for_app: &apps::AppInstallations,
         compat_tool: &CompatTool,
-        default_arch: CpuArch,
+        target_arch: CpuArch,
     ) -> Vec<Download> {
         // Create a map from base filename to hash file URL
         let mut asset_hashsum_map: std::collections::HashMap<
@@ -146,47 +144,43 @@ impl Release {
             }
         }
 
-        let system_arch = crate::architecture::detect_system_arch();
-
         let mut variants = Vec::new();
 
-        // Collect all matching asset variants with their corresponding hash
+        // Collect all matching asset variants for the target architecture,
+        // along with their corresponding hash
         for asset in &self.assets {
             let (matched, arch) =
                 compat_tool.filter_asset_with_arch(asset.download_file_name().as_str());
-            if matched && files::check_supported_extension(&asset.name).is_ok() {
-                let base_name = asset
-                    .name
-                    .strip_suffix(".tar.gz")
-                    .or_else(|| asset.name.strip_suffix(".tar.xz"))
-                    .or_else(|| asset.name.strip_suffix(".tar.zst"))
-                    .unwrap_or(&asset.name);
+            if !(matched && files::check_supported_extension(&asset.name).is_ok()) {
+                continue;
+            }
+            // Skip assets for a different architecture.
+            if arch.unwrap_or(constants::DEFAULT_ARCH) != target_arch {
+                continue;
+            }
 
-                let hash_sum = asset_hashsum_map
-                    .get(base_name)
-                    .map(|(hash_url, hash_type)| hashing::HashSums {
-                        sum_content: hash_url.clone(),
-                        sum_type: hash_type.clone(),
-                    });
+            let base_name = asset
+                .name
+                .strip_suffix(".tar.gz")
+                .or_else(|| asset.name.strip_suffix(".tar.xz"))
+                .or_else(|| asset.name.strip_suffix(".tar.zst"))
+                .unwrap_or(&asset.name);
 
-                variants.push(Download {
-                    file_name: asset.name.clone(),
-                    download_url: asset.browser_download_url.clone(),
-                    size: asset.size as u64,
-                    for_app: for_app.to_owned(),
-                    version: self.tag_name.clone(),
-                    hash_sum,
+            let hash_sum = asset_hashsum_map
+                .get(base_name)
+                .map(|(hash_url, hash_type)| hashing::HashSums {
+                    sum_content: hash_url.clone(),
+                    sum_type: hash_type.clone(),
                 });
 
-                if arch.unwrap_or(default_arch) != system_arch {
-                    eprintln!(
-                        "Warning: no {} build found for '{}'. Falling back to {}.",
-                        system_arch,
-                        self.tag_name,
-                        arch.unwrap_or(default_arch)
-                    );
-                }
-            }
+            variants.push(Download {
+                file_name: asset.name.clone(),
+                download_url: asset.browser_download_url.clone(),
+                size: asset.size as u64,
+                for_app: for_app.to_owned(),
+                version: self.tag_name.clone(),
+                hash_sum,
+            });
         }
 
         variants
@@ -881,5 +875,118 @@ mod tests {
     #[test]
     fn test_select_arch_index_empty() {
         assert_eq!(select_arch_index(&[], CpuArch::X86, CpuArch::X86), None);
+    }
+
+    fn cachyos_release() -> Release {
+        serde_json::from_value(json!({
+            "url": null,
+            "tag_name": "cachyos-11.0-20260703-slr",
+            "name": "cachyos-11.0-20260703-slr",
+            "body": null,
+            "assets": [
+                {
+                    "url": "https://api.github.com/asset1",
+                    "id": 1,
+                    "name": "proton-cachyos-11.0-20260703-slr-arm64.tar.xz",
+                    "size": 1024,
+                    "updated_at": "2026-01-01T00:00:00Z",
+                    "browser_download_url": "https://example.com/proton-cachyos-11.0-20260703-slr-arm64.tar.xz"
+                },
+                {
+                    "url": "https://api.github.com/asset2",
+                    "id": 2,
+                    "name": "proton-cachyos-11.0-20260703-slr-x86_64.tar.xz",
+                    "size": 2048,
+                    "updated_at": "2026-01-01T00:00:00Z",
+                    "browser_download_url": "https://example.com/proton-cachyos-11.0-20260703-slr-x86_64.tar.xz"
+                },
+                {
+                    "url": "https://api.github.com/asset3",
+                    "id": 3,
+                    "name": "proton-cachyos-11.0-20260703-slr-x86_64_v3.tar.xz",
+                    "size": 2048,
+                    "updated_at": "2026-01-01T00:00:00Z",
+                    "browser_download_url": "https://example.com/proton-cachyos-11.0-20260703-slr-x86_64_v3.tar.xz"
+                }
+            ]
+        }))
+        .unwrap()
+    }
+
+    fn geproton_11_4_release() -> Release {
+        serde_json::from_value(json!({
+            "url": null,
+            "tag_name": "GE-Proton11-4",
+            "name": "GE-Proton11-4",
+            "body": null,
+            "assets": [
+                {
+                    "url": "https://api.github.com/asset1",
+                    "id": 1,
+                    "name": "GE-Proton11-4-x86_64.tar.gz",
+                    "size": 1024,
+                    "updated_at": "2026-01-01T00:00:00Z",
+                    "browser_download_url": "https://example.com/GE-Proton11-4-x86_64.tar.gz"
+                },
+                {
+                    "url": "https://api.github.com/asset2",
+                    "id": 2,
+                    "name": "GE-Proton11-4-aarch64.tar.gz",
+                    "size": 2048,
+                    "updated_at": "2026-01-01T00:00:00Z",
+                    "browser_download_url": "https://example.com/GE-Proton11-4-aarch64.tar.gz"
+                }
+            ]
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn test_get_all_download_variants_filters_arm() {
+        let tool = CompatTool::from_str("Proton CachyOS").unwrap();
+        let variants = cachyos_release().get_all_download_variants(
+            &apps::AppInstallations::Steam,
+            &tool,
+            CpuArch::Arm,
+        );
+        assert_eq!(variants.len(), 1);
+        assert!(variants[0].file_name.ends_with("arm64.tar.xz"));
+    }
+
+    #[test]
+    fn test_get_all_download_variants_filters_x86() {
+        let tool = CompatTool::from_str("Proton CachyOS").unwrap();
+        let variants = cachyos_release().get_all_download_variants(
+            &apps::AppInstallations::Steam,
+            &tool,
+            CpuArch::X86,
+        );
+        assert_eq!(variants.len(), 2);
+        println!("[0]: {:?}", variants[0]);
+        println!("[1]: {:?}", variants[1]);
+        assert!(variants[0].file_name.ends_with("x86_64.tar.xz"));
+        assert!(variants[1].file_name.ends_with("x86_64_v3.tar.xz"));
+    }
+
+    #[test]
+    fn test_get_download_info_selects_arm() {
+        let tool = CompatTool::from_str("GEProton").unwrap();
+        let download = geproton_11_4_release().get_download_info(
+            &apps::AppInstallations::Steam,
+            &tool,
+            CpuArch::Arm,
+        );
+        assert_eq!(download.file_name, "GE-Proton11-4-aarch64.tar.gz");
+    }
+
+    #[test]
+    fn test_get_download_info_selects_x86() {
+        let tool = CompatTool::from_str("GEProton").unwrap();
+        let download = geproton_11_4_release().get_download_info(
+            &apps::AppInstallations::Steam,
+            &tool,
+            CpuArch::X86,
+        );
+        assert_eq!(download.file_name, "GE-Proton11-4-x86_64.tar.gz");
     }
 }

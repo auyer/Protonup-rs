@@ -79,22 +79,34 @@ async fn main() {
         version,
         r#for: for_target,
         whats_new,
-        default_arch: default_arch_arg,
+        arch: arch_arg,
     } = Opt::parse();
 
-    let default_arch = match default_arch_arg.as_deref() {
+    let system_arch = libprotonup::architecture::detect_system_arch();
+
+    let target_arch = match arch_arg.as_deref() {
         Some(arch) => match arch.parse::<libprotonup::architecture::CpuArch>() {
             Ok(arch) => arch,
             Err(_) => {
                 eprintln!(
-                    "Invalid --default-arch value '{}'. Expected amd64/x86_64/x86 or arm64/arm/aarch64.",
+                    "Invalid --arch value '{}'. Expected amd64/x86_64/x86 or arm64/arm/aarch64.",
                     arch
                 );
                 exit(1);
             }
         },
-        None => libprotonup::architecture::CpuArch::default(),
+        // the default-arch should be the system arch.
+        // Downloading for a foreign arch is an edge case, maybe only for users running translation
+        // tools like fex?
+        None => system_arch,
     };
+
+    if target_arch != system_arch {
+        eprintln!(
+            "Warning: downloading for {} on a {} system.",
+            target_arch, system_arch
+        );
+    }
 
     // If --whats-new is passed alone (no --tool, no --quick-download),
     // run standalone check-for-updates mode and exit
@@ -107,9 +119,9 @@ async fn main() {
     }
 
     // If any CLI argument is provided, run in CLI mode (non-interactive)
-    if tool.is_some() || version.is_some() || for_target.is_some() || default_arch_arg.is_some() {
+    if tool.is_some() || version.is_some() || for_target.is_some() || arch_arg.is_some() {
         let releases =
-            cli_mode::run_cli_mode(tool, version, for_target, force, whats_new, default_arch).await;
+            cli_mode::run_cli_mode(tool, version, for_target, force, whats_new, target_arch).await;
         match releases {
             Ok(releases) => {
                 for release in releases {
@@ -126,7 +138,7 @@ async fn main() {
 
     // run quick downloads and skip InitialMenu
     let releases = if quick_download {
-        download::run_quick_downloads(force, whats_new, default_arch).await
+        download::run_quick_downloads(force, whats_new, target_arch).await
     } else {
         loop {
             let answer: InitialMenu = Select::new(
@@ -140,17 +152,16 @@ async fn main() {
             // Download actions exit the loop; other actions return to menu
             match answer {
                 InitialMenu::QuickUpdate => {
-                    break download::run_quick_downloads(force, whats_new, default_arch).await;
+                    break download::run_quick_downloads(force, whats_new, target_arch).await;
                 }
                 InitialMenu::DownloadForSteam => {
-                    break download::download_to_selected_app(Some(App::Steam), default_arch).await;
+                    break download::download_to_selected_app(Some(App::Steam), target_arch).await;
                 }
                 InitialMenu::DownloadForLutris => {
-                    break download::download_to_selected_app(Some(App::Lutris), default_arch)
-                        .await;
+                    break download::download_to_selected_app(Some(App::Lutris), target_arch).await;
                 }
                 InitialMenu::DownloadIntoCustomLocation => {
-                    break download::download_to_selected_app(None, default_arch).await;
+                    break download::download_to_selected_app(None, target_arch).await;
                 }
                 InitialMenu::CheckChangelog => {
                     let _ = download::check_changelog_menu().await;
