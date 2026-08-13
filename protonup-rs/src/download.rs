@@ -166,7 +166,11 @@ fn group_and_dedup_releases(
 }
 
 /// Downloads the latest wine version for all the apps found
-pub async fn run_quick_downloads(force: bool, whats_new: bool) -> Result<Vec<Release>> {
+pub async fn run_quick_downloads(
+    force: bool,
+    whats_new: bool,
+    target_arch: libprotonup::architecture::CpuArch,
+) -> Result<Vec<Release>> {
     let found_apps = apps::list_installed_apps().await;
     if found_apps.is_empty() {
         println!("No apps found. Please install at least one app before using this feature.");
@@ -218,10 +222,10 @@ pub async fn run_quick_downloads(force: bool, whats_new: bool) -> Result<Vec<Rel
 
         // Handle tools with multiple architecture variants
         let download = if compat_tool.has_multiple_asset_variations {
-            let variants = release.get_all_download_variants(&app_inst, &compat_tool);
-            architecture_variants::select_architecture_variant(&release.tag_name, variants, true)?
+            let variants = release.get_all_download_variants(&app_inst, &compat_tool, target_arch);
+            architecture_variants::select_micro_arch_variant(&release.tag_name, variants, true)?
         } else {
-            release.get_download_info(&app_inst, &compat_tool)
+            release.get_download_info(&app_inst, &compat_tool, target_arch)
         };
 
         // Check if already installed
@@ -457,7 +461,10 @@ pub(crate) async fn check_changelog_menu() -> Result<Vec<Release>> {
 /// Start the Download for the selected app
 ///
 /// If no app is provided, the user is prompted for which version of Wine/Proton to use and what directory to extract to
-pub async fn download_to_selected_app(app: Option<apps::App>) -> Result<Vec<Release>> {
+pub async fn download_to_selected_app(
+    app: Option<apps::App>,
+    target_arch: libprotonup::architecture::CpuArch,
+) -> Result<Vec<Release>> {
     // Get the folder to install Wine/Proton into
     let app_inst = match app.clone() {
         // If the user selected an app (Steam/Lutris)...
@@ -566,20 +573,17 @@ pub async fn download_to_selected_app(app: Option<apps::App>) -> Result<Vec<Rele
         releases
             .iter()
             .map(|release| {
-                let variants = release.get_all_download_variants(&app_inst, &selected_tool);
+                let variants =
+                    release.get_all_download_variants(&app_inst, &selected_tool, target_arch);
 
-                architecture_variants::select_architecture_variant(
-                    &release.tag_name,
-                    variants,
-                    false,
-                )
-                .unwrap_or_else(|_| std::process::exit(1))
+                architecture_variants::select_micro_arch_variant(&release.tag_name, variants, false)
+                    .unwrap_or_else(|_| std::process::exit(1))
             })
             .collect::<Vec<Download>>()
     } else {
         releases
             .iter()
-            .map(|release| release.get_download_info(&app_inst, &selected_tool))
+            .map(|release| release.get_download_info(&app_inst, &selected_tool, target_arch))
             .collect()
     };
 

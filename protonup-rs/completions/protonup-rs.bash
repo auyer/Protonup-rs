@@ -23,7 +23,7 @@ _protonup-rs() {
 
     case "${cmd}" in
         protonup__rs)
-            opts="-q -f -w -h --quick-download --force --tool --version --for --whats-new --help"
+            opts="-q -f -w -h --quick-download --force --tool --version --for --arch --whats-new --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 1 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -38,6 +38,10 @@ _protonup-rs() {
                     return 0
                     ;;
                 --for)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --arch)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
