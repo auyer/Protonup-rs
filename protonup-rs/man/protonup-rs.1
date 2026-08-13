@@ -1,0 +1,170 @@
+.nh
+.TH PROTONUP-RS(1) | User Commands
+
+.SH NAME
+protonup-rs \- install and manage Proton/Wine and other game runtimes
+
+
+.SH SYNOPSIS
+\fBprotonup-rs\fR [OPTIONS]
+
+
+.SH DESCRIPTION
+\fBprotonup-rs\fP is a program to automate the installation and update of
+Linux Gaming Compatibility tools, such as GEProton, Luxtorpeda, Boxtron,
+and others.
+
+.PP
+Run without arguments to start the interactive TUI mode.
+Use the options below for non-interactive (CLI) operation.
+
+
+.SH OPTIONS
+.IP \(bu 2
+\fB-q\fR, \fB--quick-download\fR:
+Skip the menu, auto-detect installed applications (Steam, Lutris),
+and download the latest versions of their default compatibility tools.
+.IP \(bu 2
+\fB-f\fR, \fB--force\fR:
+Force re-installation for already existing tools during quick downloads.
+.IP \(bu 2
+\fB--tool\fR \fITOOL\fP:
+Compatibility tool to install. Case-insensitive name.
+Supported tools:
+
+\fBGEProton\fP (Steam, Lutris), \fBLuxtorpeda\fP (Steam),
+\fBBoxtron\fP (Steam), \fBVKD3D-Proton\fP (Lutris),
+\fBLutris-VKD3D\fP (Lutris), \fBDXVK\fP (Lutris),
+\fBKron4ek Wine\fP (Lutris), \fBGEProton RTSP\fP (Steam),
+\fBProton CachyOS\fP (Steam, Lutris)
+.IP \(bu 2
+\fB--version\fR \fIVERSION\fP:
+Version to install. Use \fBlatest\fP for the latest release.
+Only used together with \fB--tool\fR\&.
+.IP \(bu 2
+\fB--for\fR \fITARGET\fP:
+Target for installation. Accepted values:
+
+\fBsteam\fP, \fBSteam\fP  - Install to Steam (Native or Flatpak)
+\fBlutris\fP, \fBLutris\fP  - Install to Lutris (Native or Flatpak)
+\fIpath\fP                - Any other value is treated as a custom
+                        installation path (supports \fB~\fR expansion)
+
+If omitted, the target is auto-detected based on the tool's
+compatible applications and what is installed.
+.IP \(bu 2
+\fB-w\fR, \fB--whats-new\fR:
+Show release notes for the latest versions of default tools.
+When combined with \fB-q\fR, shows release notes before and after downloading.
+When combined with \fB--tool\fR, shows release notes for the selected tool
+and then proceeds with the installation.
+.IP \(bu 2
+\fB-h\fR, \fB--help\fR:
+Print help and exit.
+
+
+.SH INSTALL DIRECTORIES
+\fBSteam (Native):\fP
+    \fB~/.steam/steam/compatibilitytools.d/\fR
+
+.PP
+\fBSteam (Flatpak):\fP
+    \fB~/.var/app/com.valvesoftware.Steam/data/Steam/compatibilitytools.d/\fR
+
+.PP
+\fBLutris (Native):\fP
+    Wine-based tools: \fB~/.local/share/lutris/runners/wine/\fR
+    Runtime tools:   \fB~/.local/share/lutris/runtime/\fR
+
+.PP
+\fBLutris (Flatpak):\fP
+    Wine-based tools: \fB~/.var/app/net.lutris.Lutris/data/lutris/runners/wine/\fR
+    Runtime tools:   \fB~/.var/app/net.lutris.Lutris/data/lutris/runtime/\fR
+
+.PP
+\fBCustom:\fP
+    The provided path is used directly (extracted in-place).
+
+
+.SH EXAMPLES
+\fBTUI mode (interactive):\fP
+    \fBprotonup-rs\fR
+
+.PP
+\fBQuick update (auto-detect and download):\fP
+    \fBprotonup-rs -q\fR
+
+.PP
+\fBQuick update, force re-install, and show release notes:\fP
+    \fBprotonup-rs -q -f -w\fR
+
+.PP
+\fBInstall latest GEProton for Steam (auto-detected):\fP
+    \fBprotonup-rs --tool GEProton\fR
+
+.PP
+\fBInstall specific version for Lutris:\fP
+    \fBprotonup-rs --tool GEProton --version 8.26 --for lutris\fR
+
+.PP
+\fBInstall to a custom path:\fP
+    \fBprotonup-rs --tool GEProton --version latest --for ~/.local/steam\fR
+
+.PP
+\fBForce overwrite existing installation:\fP
+    \fBprotonup-rs --tool GEProton --for steam --force\fR
+
+.PP
+\fBCheck release notes without downloading:\fP
+    \fBprotonup-rs --whats-new\fR
+
+
+.SH ENVIRONMENT
+\fBHOME:\fP
+    Used implicitly for resolving \fB~\fR in custom paths.
+
+.EX
+**protonup-rs** does not read any other environment variables for
+configuration.
+.EE
+
+
+.SH TEMPORARY FILES
+Downloads are extracted to standard temporary directories.
+  If \fB/tmp\fR has insufficient space, the fallback is:
+  \fB~/.local/state/protonup-rs/tmp/\fR
+
+.PP
+These are cleaned up automatically on exit.
+
+
+.SH SEE ALSO
+\fBProject homepage:\fP https://github.com/auyer/protonup-rs
+  \fBAPI documentation:\fP https://docs.rs/libprotonup
+
+.PP
+Related tools and projects:
+.IP \(bu 2
+GEProton: https://github.com/GloriousEggroll/proton-ge-custom
+.IP \(bu 2
+Luxtorpeda: https://github.com/luxtorpeda-dev/luxtorpeda
+.IP \(bu 2
+Boxtron: https://github.com/dreamer/boxtron
+.IP \(bu 2
+VKD3D-Proton: https://github.com/HansKristian-Work/vkd3d-proton
+.IP \(bu 2
+DXVK: https://github.com/doitsujin/dxvk
+.IP \(bu 2
+Kron4ek Wine: https://github.com/kron4ek/Wine-Builds
+.IP \(bu 2
+GEProton RTSP: https://github.com/SpookySkeletons/proton-ge-rtsp
+.IP \(bu 2
+Proton CachyOS: https://github.com/CachyOS/proton-cachyos
+
+
+.SH AUTHOR
+Maintained by \fBRafael Passos\fP (@auyer) https://rcpassos.me
+
+
+.SH BUGS
+Report issues at: https://github.com/auyer/protonup-rs/issues

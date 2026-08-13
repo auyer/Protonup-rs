@@ -138,7 +138,11 @@ pub(crate) async fn validate_file(
 }
 
 /// Downloads the latest wine version for all the apps found
-pub async fn run_quick_downloads(force: bool, whats_new: bool) -> Result<Vec<Release>> {
+pub async fn run_quick_downloads(
+    force: bool,
+    whats_new: bool,
+    target_arch: libprotonup::architecture::CpuArch,
+) -> Result<Vec<Release>> {
     let found_apps = apps::list_installed_apps().await;
     if found_apps.is_empty() {
         println!("No apps found. Please install at least one app before using this feature.");
@@ -190,10 +194,10 @@ pub async fn run_quick_downloads(force: bool, whats_new: bool) -> Result<Vec<Rel
 
         // Handle tools with multiple architecture variants
         let download = if compat_tool.has_multiple_asset_variations {
-            let variants = release.get_all_download_variants(&app_inst, &compat_tool);
-            architecture_variants::select_architecture_variant(&release.tag_name, variants, true)?
+            let variants = release.get_all_download_variants(&app_inst, &compat_tool, target_arch);
+            architecture_variants::select_micro_arch_variant(&release.tag_name, variants, true)?
         } else {
-            release.get_download_info(&app_inst, &compat_tool)
+            release.get_download_info(&app_inst, &compat_tool, target_arch)
         };
 
         // Check if already installed
@@ -227,6 +231,12 @@ pub async fn run_quick_downloads(force: bool, whats_new: bool) -> Result<Vec<Rel
         }
     }
 
+    // Collect release+tool pairs for the post-download changelog prompt
+    let release_tool_pairs: Vec<(Release, CompatTool)> = groups
+        .values()
+        .map(|(_, release, compat_tool, _)| (release.clone(), compat_tool.clone()))
+        .collect();
+
     // Queue one download task per group
     let joins = FuturesUnordered::new();
 
@@ -249,21 +259,15 @@ pub async fn run_quick_downloads(force: bool, whats_new: bool) -> Result<Vec<Rel
         .await;
     multi_progress.clear().unwrap();
 
+    // Prompt to view changelogs after downloads complete
+    prompt_changelogs(&release_tool_pairs).await;
+
     Ok(unique_releases)
 }
 
-async fn show_whatsnew(release: &Release, compat_tool: &CompatTool) {
-    // Show release notes before downloading if --whats-new was passed
+pub(crate) fn format_whatsnew(release: &Release, compat_tool: &CompatTool) -> String {
     const WHATS_NEW_LINES: usize = 40;
-
-    println!();
-    println!("  ┌{}┐", "─".repeat(50));
-    println!("  │ {:^48} │", "Release Notes");
-    println!("  └{}┘", "─".repeat(50));
-
-    // if release.body.is_none() || release.body.as_ref().is_some_and(|s| s.is_empty()) {
-    //     release.body = Some("\n  (could not fetch release notes)".to_string());
-    // }
+    let mut output = String::new();
 
     let url = format!(
         "{}{}/{}/releases/tag/{}",
@@ -272,26 +276,167 @@ async fn show_whatsnew(release: &Release, compat_tool: &CompatTool) {
         compat_tool.repository_name,
         release.tag_name
     );
-    println!("\n  {}: {}", release.tag_name, url);
+
+    output.push('\n');
+    output.push_str(&format!("  ┌{}┐\n", "─".repeat(50)));
+    output.push_str(&format!("  │ {:^48} │\n", "Release Notes"));
+    output.push_str(&format!("  └{}┘\n", "─".repeat(50)));
+    output.push_str(&format!("\n  {}: {}\n", release.tag_name, url));
+
     match &release.body {
         Some(body) => {
             let all_lines: Vec<&str> = body.lines().collect();
             let notes = all_lines[..all_lines.len().min(WHATS_NEW_LINES)].join("\n");
             if all_lines.len() > WHATS_NEW_LINES {
-                println!("\n{}\n  ⋯ [truncated]", notes);
+                output.push_str(&format!("\n{}\n  ⋯ [truncated]\n", notes));
             } else {
-                println!("\n{}", notes);
+                output.push_str(&format!("\n{}\n", notes));
             }
         }
-        None => println!("\n  (no release notes)"),
+        None => output.push_str("\n  (no release notes)\n"),
     }
-    println!();
+
+    output.push('\n');
+    output
+}
+
+pub(crate) async fn show_whatsnew(release: &Release, compat_tool: &CompatTool) {
+    print!("{}", format_whatsnew(release, compat_tool));
+}
+
+async fn prompt_changelogs(releases: &[(Release, CompatTool)]) {
+    for (release, compat_tool) in releases {
+        if release.body.is_none() {
+            continue;
+        }
+        let confirmed = inquire::Confirm::new(&format!("View changelog for {}?", release.tag_name))
+            .with_default(false)
+            .prompt()
+            .unwrap_or(false);
+        if confirmed {
+            show_whatsnew(release, compat_tool).await;
+        }
+    }
+}
+
+/// Standalone mode: check installed apps, fetch latest releases, show changelogs
+/// and print "Update available to version $v" for each tool with a newer release.
+pub(crate) async fn check_whats_new() -> Result<()> {
+    let found_apps = apps::list_installed_apps().await;
+    if found_apps.is_empty() {
+        println!("No apps found. Please install at least one app before using this feature.");
+        return Ok(());
+    }
+    println!(
+        "Found the following apps: {}",
+        found_apps
+            .iter()
+            .map(|app| app.to_string())
+            .collect::<Vec<String>>()
+            .join(", ")
+    );
+
+    let mut releases_cache: HashMap<String, ReleaseList> = HashMap::new();
+    let mut tool_entries: Vec<(apps::AppInstallations, CompatTool)> = vec![];
+
+    for app_inst in found_apps {
+        let compat_tool = app_inst.as_app().default_compatibility_tool();
+        tool_entries.push((app_inst, compat_tool));
+    }
+
+    let mut seen_tools: HashSet<String> = HashSet::new();
+
+    for (app_inst, compat_tool) in tool_entries {
+        if !seen_tools.insert(compat_tool.name.clone()) {
+            continue;
+        }
+
+        let release_list = match releases_cache.get(&compat_tool.name) {
+            Some(list) => list.clone(),
+            None => match downloads::list_releases(&compat_tool).await {
+                Ok(list) => {
+                    releases_cache.insert(compat_tool.name.clone(), list.clone());
+                    list
+                }
+                Err(e) => {
+                    eprintln!("Failed to fetch releases for {}: {}", compat_tool.name, e);
+                    continue;
+                }
+            },
+        };
+
+        if release_list.is_empty() {
+            continue;
+        }
+
+        let latest = &release_list[0];
+        show_whatsnew(latest, &compat_tool).await;
+
+        let install_name = compat_tool.installation_name(&latest.tag_name);
+        let install_dir = app_inst.default_install_dir();
+        let install_path = PathBuf::from(install_dir.as_str()).join(&install_name);
+
+        if files::check_if_exists(&install_path).await {
+            println!("Already up to date ({})\n", latest.tag_name);
+        } else {
+            println!("Update available to version {}\n", latest.tag_name);
+        }
+    }
+
+    Ok(())
+}
+
+/// TUI menu handler: select a tool, pick versions, and show changelogs.
+pub(crate) async fn check_changelog_menu() -> Result<Vec<Release>> {
+    let available_sources = CompatTools.clone();
+
+    let selected_tool = Select::new(
+        "Choose the compatibility tool to check the changelog:",
+        available_sources,
+    )
+    .prompt()
+    .unwrap_or_else(|_| std::process::exit(0));
+
+    let release_list = match downloads::list_releases(&selected_tool).await {
+        Ok(data) => data,
+        Err(e) => {
+            eprintln!(
+                "Failed to fetch data, make sure you're connected to the internet.\nError: {e}"
+            );
+            std::process::exit(1)
+        }
+    };
+
+    let selected_releases = stream::iter(
+        helper_menus::multiple_select_menu("Select the versions to view changelog:", release_list)
+            .unwrap_or_else(|e| {
+                eprintln!("The tag list could not be processed.\nError: {e}");
+                vec![]
+            }),
+    )
+    .collect::<Vec<_>>()
+    .await;
+
+    for release in &selected_releases {
+        show_whatsnew(release, &selected_tool).await;
+    }
+
+    if !selected_releases.is_empty() {
+        println!("Press Enter to return to menu...");
+        let mut buf = String::new();
+        let _ = std::io::stdin().read_line(&mut buf);
+    }
+
+    Ok(selected_releases)
 }
 
 /// Start the Download for the selected app
 ///
 /// If no app is provided, the user is prompted for which version of Wine/Proton to use and what directory to extract to
-pub async fn download_to_selected_app(app: Option<apps::App>) -> Result<Vec<Release>> {
+pub async fn download_to_selected_app(
+    app: Option<apps::App>,
+    target_arch: libprotonup::architecture::CpuArch,
+) -> Result<Vec<Release>> {
     // Get the folder to install Wine/Proton into
     let app_inst = match app.clone() {
         // If the user selected an app (Steam/Lutris)...
@@ -400,20 +545,17 @@ pub async fn download_to_selected_app(app: Option<apps::App>) -> Result<Vec<Rele
         releases
             .iter()
             .map(|release| {
-                let variants = release.get_all_download_variants(&app_inst, &selected_tool);
+                let variants =
+                    release.get_all_download_variants(&app_inst, &selected_tool, target_arch);
 
-                architecture_variants::select_architecture_variant(
-                    &release.tag_name,
-                    variants,
-                    false,
-                )
-                .unwrap_or_else(|_| std::process::exit(1))
+                architecture_variants::select_micro_arch_variant(&release.tag_name, variants, false)
+                    .unwrap_or_else(|_| std::process::exit(1))
             })
             .collect::<Vec<Download>>()
     } else {
         releases
             .iter()
-            .map(|release| release.get_download_info(&app_inst, &selected_tool))
+            .map(|release| release.get_download_info(&app_inst, &selected_tool, target_arch))
             .collect()
     };
 
@@ -447,6 +589,12 @@ pub async fn download_to_selected_app(app: Option<apps::App>) -> Result<Vec<Rele
             return Err(anyhow!("Installation failed with Error"));
         }
     }
+
+    let pairs: Vec<(Release, CompatTool)> = releases
+        .iter()
+        .map(|r| (r.clone(), selected_tool.clone()))
+        .collect();
+    prompt_changelogs(&pairs).await;
 
     Ok(releases)
 }
@@ -724,4 +872,240 @@ pub(crate) async fn get_message_bar_style() -> ProgressStyle {
         .get_or_init(|| future::ready(ProgressStyle::default_bar().template("{msg}").unwrap()))
         .await
         .clone()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use libprotonup::apps::AppInstallations;
+    use libprotonup::sources::{Forge, ToolType};
+    use serde_json::json;
+
+    fn make_download(url: &str, name: &str, size: u64) -> Download {
+        Download {
+            download_url: url.into(),
+            file_name: name.into(),
+            size,
+            ..Default::default()
+        }
+    }
+
+    fn make_release(tag: &str) -> Release {
+        serde_json::from_value(json!({
+            "tag_name": tag,
+            "name": tag,
+            "url": null,
+            "assets": [],
+            "body": null
+        }))
+        .unwrap()
+    }
+
+    fn make_compat_tool() -> CompatTool {
+        CompatTool::new_custom(
+            "TestTool".into(),
+            Forge::GitHub,
+            "owner".into(),
+            "repo".into(),
+            ToolType::WineBased,
+            None,
+            None,
+            None,
+        )
+    }
+
+    #[test]
+    fn test_group_and_dedup_same_download_grouped() {
+        let d1 = make_download("https://example.com/a.tar.gz", "a.tar.gz", 100);
+        let d2 = make_download("https://example.com/a.tar.gz", "a.tar.gz", 100);
+        let r1 = make_release("v1.0");
+        let r2 = make_release("v1.0");
+        let ct = make_compat_tool();
+        let entries = vec![
+            (d1, r1, AppInstallations::Steam, ct.clone()),
+            (d2, r2, AppInstallations::Lutris, ct),
+        ];
+
+        let (groups, releases) = group_and_dedup_releases(entries);
+
+        assert_eq!(groups.len(), 1, "identical downloads merge into one group");
+        let key = (
+            "https://example.com/a.tar.gz".to_string(),
+            "a.tar.gz".to_string(),
+            100u64,
+        );
+        assert!(groups.contains_key(&key));
+        assert_eq!(groups[&key].3.len(), 2, "group should have two targets");
+        assert_eq!(releases.len(), 1, "same tag_name yields one release");
+    }
+
+    #[test]
+    fn test_group_and_dedup_different_downloads_separate_groups() {
+        let d1 = make_download("https://example.com/a.tar.gz", "a.tar.gz", 100);
+        let d2 = make_download("https://example.com/b.tar.gz", "b.tar.gz", 200);
+        let r1 = make_release("v1.0");
+        let r2 = make_release("v2.0");
+        let ct = make_compat_tool();
+        let entries = vec![
+            (d1, r1, AppInstallations::Steam, ct.clone()),
+            (d2, r2, AppInstallations::Lutris, ct),
+        ];
+
+        let (groups, releases) = group_and_dedup_releases(entries);
+
+        assert_eq!(
+            groups.len(),
+            2,
+            "different downloads create separate groups"
+        );
+        assert_eq!(
+            releases.len(),
+            2,
+            "different tag_names produce separate releases"
+        );
+    }
+
+    #[test]
+    fn test_group_and_dedup_three_entries_two_match() {
+        let d1 = make_download("https://example.com/same.tar.gz", "same.tar.gz", 100);
+        let d2 = make_download("https://example.com/same.tar.gz", "same.tar.gz", 100);
+        let d3 = make_download("https://example.com/diff.tar.gz", "diff.tar.gz", 200);
+        let r1 = make_release("v1.0");
+        let r2 = make_release("v1.0");
+        let r3 = make_release("v2.0");
+        let ct = make_compat_tool();
+        let entries = vec![
+            (d1, r1, AppInstallations::Steam, ct.clone()),
+            (d2, r2, AppInstallations::SteamFlatpak, ct.clone()),
+            (d3, r3, AppInstallations::Lutris, ct),
+        ];
+
+        let (groups, releases) = group_and_dedup_releases(entries);
+
+        assert_eq!(groups.len(), 2);
+        let key_same = (
+            "https://example.com/same.tar.gz".to_string(),
+            "same.tar.gz".to_string(),
+            100u64,
+        );
+        assert_eq!(
+            groups[&key_same].3.len(),
+            2,
+            "group for same download has two targets"
+        );
+        let key_diff = (
+            "https://example.com/diff.tar.gz".to_string(),
+            "diff.tar.gz".to_string(),
+            200u64,
+        );
+        assert_eq!(
+            groups[&key_diff].3.len(),
+            1,
+            "group for different download has one target"
+        );
+        assert_eq!(releases.len(), 2);
+    }
+
+    #[test]
+    fn test_group_and_dedup_different_releases_same_tag_deduplicated() {
+        let d1 = make_download("https://example.com/a.tar.gz", "a.tar.gz", 100);
+        let d2 = make_download("https://example.com/b.tar.gz", "b.tar.gz", 200);
+        let r1 = make_release("GE-Proton9-10");
+        let r2 = make_release("GE-Proton9-10");
+        let ct = make_compat_tool();
+        let entries = vec![
+            (d1, r1, AppInstallations::Steam, ct.clone()),
+            (d2, r2, AppInstallations::Lutris, ct),
+        ];
+
+        let (groups, releases) = group_and_dedup_releases(entries);
+
+        assert_eq!(groups.len(), 2);
+        assert_eq!(
+            releases.len(),
+            1,
+            "releases with identical tag_name are deduplicated"
+        );
+        assert_eq!(releases[0].tag_name, "GE-Proton9-10");
+    }
+
+    #[test]
+    fn test_group_and_dedup_single_entry_passes_through() {
+        let d = make_download("https://example.com/a.tar.gz", "a.tar.gz", 100);
+        let r = make_release("v1.0");
+        let ct = make_compat_tool();
+        let entries = vec![(d, r, AppInstallations::Steam, ct)];
+
+        let (groups, releases) = group_and_dedup_releases(entries);
+
+        assert_eq!(groups.len(), 1);
+        assert_eq!(releases.len(), 1);
+        let key = (
+            "https://example.com/a.tar.gz".to_string(),
+            "a.tar.gz".to_string(),
+            100u64,
+        );
+        assert_eq!(groups[&key].3.len(), 1);
+    }
+
+    #[test]
+    fn test_group_and_dedup_empty_entries() {
+        let entries: Vec<(Download, Release, AppInstallations, CompatTool)> = vec![];
+
+        let (groups, releases) = group_and_dedup_releases(entries);
+
+        assert!(groups.is_empty());
+        assert!(releases.is_empty());
+    }
+
+    fn make_release_with_body(tag: &str, body: Option<&str>) -> Release {
+        let body_value = body.map(|b| serde_json::Value::String(b.into()));
+        serde_json::from_value(json!({
+            "tag_name": tag,
+            "name": tag,
+            "url": null,
+            "assets": [],
+            "body": body_value
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn test_format_whatsnew_with_body() {
+        let release = make_release_with_body("GE-Proton9-10", Some("Fixed bug\nAdded feature"));
+        let ct = make_compat_tool();
+        let output = format_whatsnew(&release, &ct);
+        assert!(output.contains("Release Notes"));
+        assert!(output.contains("GE-Proton9-10"));
+        assert!(output.contains("github.com"));
+        assert!(output.contains("Fixed bug"));
+        assert!(output.contains("Added feature"));
+    }
+
+    #[test]
+    fn test_format_whatsnew_without_body() {
+        let release = make_release_with_body("GE-Proton9-10", None);
+        let ct = make_compat_tool();
+        let output = format_whatsnew(&release, &ct);
+        assert!(output.contains("no release notes"));
+    }
+
+    #[test]
+    fn test_format_whatsnew_truncated() {
+        let long_body = (0..50)
+            .map(|i| format!("line {}", i))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let release = make_release_with_body("GE-Proton9-10", Some(&long_body));
+        let ct = make_compat_tool();
+        let output = format_whatsnew(&release, &ct);
+        assert!(
+            output.contains("[truncated]"),
+            "body with >40 lines should show [truncated]"
+        );
+        assert!(
+            !output.contains("line 41"),
+            "line 41 (42nd line) should be beyond the 40-line cutoff"
+        );
+    }
 }

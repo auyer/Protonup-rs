@@ -7,12 +7,14 @@ use std::{fmt, process::exit};
 use libprotonup::apps::App;
 
 mod architecture_variants;
+mod cli;
 mod cli_mode;
 mod download;
 mod file_path;
 mod helper_menus;
 mod manage_apps;
 
+use cli::Opt;
 use manage_apps::manage_apps_routine;
 
 /// Guard struct that cleans up temp directory when dropped
@@ -24,37 +26,6 @@ impl Drop for TempDirCleanupGuard {
     }
 }
 
-#[derive(Debug, Parser)]
-#[command(
-    about = "Protonup-rs Install and Manage Proton/Wine and other Game Runtimes.\n\nRun without arguments to start the interactive TUI mode, or use the options:"
-)]
-struct Opt {
-    /// Skip Menu, auto detect apps and download using default parameters
-    #[arg(short, long)]
-    quick_download: bool,
-
-    /// Force install for existing apps during quick downloads
-    #[arg(short, long)]
-    force: bool,
-
-    /// Compatibility tool to install (e.g., GEProton, Luxtorpeda)
-    #[arg(long)]
-    tool: Option<String>,
-
-    /// Version to install (use "latest" for the latest version)
-    #[arg(long)]
-    version: Option<String>,
-
-    /// Target for installation. Use "steam", "lutris", or a custom path.
-    /// If omitted, auto-detects Steam or Lutris.
-    #[arg(long)]
-    r#for: Option<String>,
-
-    /// Show GE Proton release notes (requires --quick-download/-q)
-    #[arg(short, long)]
-    whats_new: bool,
-}
-
 #[derive(Debug, Copy, Clone)]
 #[allow(clippy::upper_case_acronyms)]
 enum InitialMenu {
@@ -62,6 +33,7 @@ enum InitialMenu {
     DownloadForSteam,
     DownloadForLutris,
     DownloadIntoCustomLocation,
+    CheckChangelog,
     ManageExistingInstallations,
 }
 
@@ -72,6 +44,7 @@ impl InitialMenu {
         Self::DownloadForSteam,
         Self::DownloadForLutris,
         Self::DownloadIntoCustomLocation,
+        Self::CheckChangelog,
         Self::ManageExistingInstallations,
     ];
 }
@@ -88,6 +61,7 @@ impl fmt::Display for InitialMenu {
             Self::DownloadIntoCustomLocation => {
                 write!(f, "Download compatibility tools into custom location")
             }
+            Self::CheckChangelog => write!(f, "Check changelog (what is new)"),
             Self::ManageExistingInstallations => write!(f, "Manage Existing Installations"),
         }
     }
@@ -105,11 +79,49 @@ async fn main() {
         version,
         r#for: for_target,
         whats_new,
+        arch: arch_arg,
     } = Opt::parse();
 
+    let system_arch = libprotonup::architecture::detect_system_arch();
+
+    let target_arch = match arch_arg.as_deref() {
+        Some(arch) => match arch.parse::<libprotonup::architecture::CpuArch>() {
+            Ok(arch) => arch,
+            Err(_) => {
+                eprintln!(
+                    "Invalid --arch value '{}'. Expected amd64/x86_64/x86 or arm64/arm/aarch64.",
+                    arch
+                );
+                exit(1);
+            }
+        },
+        // the default-arch should be the system arch.
+        // Downloading for a foreign arch is an edge case, maybe only for users running translation
+        // tools like fex?
+        None => system_arch,
+    };
+
+    if target_arch != system_arch {
+        eprintln!(
+            "Warning: downloading for {} on a {} system.",
+            target_arch, system_arch
+        );
+    }
+
+    // If --whats-new is passed alone (no --tool, no --quick-download),
+    // run standalone check-for-updates mode and exit
+    if whats_new && !quick_download && tool.is_none() && version.is_none() && for_target.is_none() {
+        if let Err(e) = download::check_whats_new().await {
+            eprintln!("{e}");
+            exit(1);
+        }
+        return;
+    }
+
     // If any CLI argument is provided, run in CLI mode (non-interactive)
-    if tool.is_some() || version.is_some() || for_target.is_some() {
-        let releases = cli_mode::run_cli_mode(tool, version, for_target, force).await;
+    if tool.is_some() || version.is_some() || for_target.is_some() || arch_arg.is_some() {
+        let releases =
+            cli_mode::run_cli_mode(tool, version, for_target, force, whats_new, target_arch).await;
         match releases {
             Ok(releases) => {
                 for release in releases {
@@ -126,31 +138,37 @@ async fn main() {
 
     // run quick downloads and skip InitialMenu
     let releases = if quick_download {
-        download::run_quick_downloads(force, whats_new).await
+        download::run_quick_downloads(force, whats_new, target_arch).await
     } else {
-        let answer: InitialMenu = Select::new(
-            "ProtonUp Menu: Choose your action:",
-            InitialMenu::VARIANTS.to_vec(),
-        )
-        .with_page_size(10)
-        .prompt()
-        .unwrap_or_else(|_| std::process::exit(0));
+        loop {
+            let answer: InitialMenu = Select::new(
+                "ProtonUp Menu: Choose your action:",
+                InitialMenu::VARIANTS.to_vec(),
+            )
+            .with_page_size(10)
+            .prompt()
+            .unwrap_or_else(|_| std::process::exit(0));
 
-        // Set parameters based on users choice
-        match answer {
-            InitialMenu::QuickUpdate => download::run_quick_downloads(force, whats_new).await,
-            InitialMenu::DownloadForSteam => {
-                download::download_to_selected_app(Some(App::Steam)).await
-            }
-            InitialMenu::DownloadForLutris => {
-                download::download_to_selected_app(Some(App::Lutris)).await
-            }
-            InitialMenu::DownloadIntoCustomLocation => {
-                download::download_to_selected_app(None).await
-            }
-            InitialMenu::ManageExistingInstallations => {
-                manage_apps_routine().await;
-                Ok(vec![])
+            // Download actions exit the loop; other actions return to menu
+            match answer {
+                InitialMenu::QuickUpdate => {
+                    break download::run_quick_downloads(force, whats_new, target_arch).await;
+                }
+                InitialMenu::DownloadForSteam => {
+                    break download::download_to_selected_app(Some(App::Steam), target_arch).await;
+                }
+                InitialMenu::DownloadForLutris => {
+                    break download::download_to_selected_app(Some(App::Lutris), target_arch).await;
+                }
+                InitialMenu::DownloadIntoCustomLocation => {
+                    break download::download_to_selected_app(None, target_arch).await;
+                }
+                InitialMenu::CheckChangelog => {
+                    let _ = download::check_changelog_menu().await;
+                }
+                InitialMenu::ManageExistingInstallations => {
+                    manage_apps_routine().await;
+                }
             }
         }
     };

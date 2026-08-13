@@ -1,4 +1,11 @@
+use super::architecture::CpuArch;
+
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// Default architecture assumed for release assets that do not embed an
+/// architecture suffix (e.g. `GE-Proton11-2.tar.gz`).
+/// TODO: when creating a config file, this should be a parameter
+pub const DEFAULT_ARCH: CpuArch = CpuArch::X86;
 
 pub const DEFAULT_STEAM_TOOL: &str = "GEProton";
 pub const DEFAULT_LUTRIS_TOOL: &str = "GEProton";

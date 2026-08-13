@@ -1,8 +1,8 @@
-use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 use super::constants;
 use crate::apps;
+use crate::architecture::CpuArch;
 use crate::files;
 use crate::hashing;
 use crate::http_client;
@@ -44,6 +44,7 @@ impl Release {
         &self,
         for_app: &apps::AppInstallations,
         compat_tool: &CompatTool,
+        target_arch: CpuArch,
     ) -> Download {
         let mut download: Download = Download {
             for_app: for_app.to_owned(),
@@ -51,30 +52,56 @@ impl Release {
             ..Download::default()
         };
 
+        let mut hash_sum: Option<hashing::HashSums> = None;
+        let mut candidates: Vec<(&Asset, Option<CpuArch>)> = Vec::new();
+
         for asset in &self.assets {
             if asset.name.contains("sha512") {
                 download.file_name = asset.name.clone();
-                download.hash_sum = Some(hashing::HashSums {
+                hash_sum = Some(hashing::HashSums {
                     sum_content: asset.browser_download_url.clone(),
                     sum_type: hashing::HashSumType::Sha512,
                 })
             } else if asset.name.contains("sha256") {
                 download.file_name = asset.name.clone();
-                download.hash_sum = Some(hashing::HashSums {
+                hash_sum = Some(hashing::HashSums {
                     sum_content: asset.browser_download_url.clone(),
                     sum_type: hashing::HashSumType::Sha256,
                 })
-            } else if compat_tool.filter_asset(asset.download_file_name().as_str())
-                && files::check_supported_extension(&asset.name).is_ok()
-            {
-                download.file_name = asset.name.clone();
-                download
-                    .download_url
-                    .clone_from(&asset.browser_download_url);
-                download.size = asset.size as u64;
-                break;
+            } else {
+                let (matched, arch) =
+                    compat_tool.filter_asset_with_arch(asset.download_file_name().as_str());
+                if matched && files::check_supported_extension(&asset.name).is_ok() {
+                    candidates.push((asset, arch));
+                }
             }
         }
+
+        if let Some(selected) = select_arch_index(
+            &candidates.iter().map(|(_, arch)| *arch).collect::<Vec<_>>(),
+            target_arch,
+            constants::DEFAULT_ARCH,
+        )
+        .and_then(|idx| candidates.get(idx))
+        {
+            let (asset, arch) = *selected;
+            download.file_name = asset.name.clone();
+            download
+                .download_url
+                .clone_from(&asset.browser_download_url);
+            download.size = asset.size as u64;
+
+            if arch.unwrap_or(constants::DEFAULT_ARCH) != target_arch {
+                eprintln!(
+                    "Warning: no {} build found for '{}'. Falling back to {}.",
+                    target_arch,
+                    self.tag_name,
+                    arch.unwrap_or(constants::DEFAULT_ARCH)
+                );
+            }
+        }
+
+        download.hash_sum = hash_sum;
         download
     }
 
@@ -84,6 +111,7 @@ impl Release {
         &self,
         for_app: &apps::AppInstallations,
         compat_tool: &CompatTool,
+        target_arch: CpuArch,
     ) -> Vec<Download> {
         // Create a map from base filename to hash file URL
         let mut asset_hashsum_map: std::collections::HashMap<
@@ -118,38 +146,72 @@ impl Release {
 
         let mut variants = Vec::new();
 
-        // Collect all matching asset variants with their corresponding hash
+        // Collect all matching asset variants for the target architecture,
+        // along with their corresponding hash
         for asset in &self.assets {
-            if compat_tool.filter_asset(asset.download_file_name().as_str())
-                && files::check_supported_extension(&asset.name).is_ok()
-            {
-                let base_name = asset
-                    .name
-                    .strip_suffix(".tar.gz")
-                    .or_else(|| asset.name.strip_suffix(".tar.xz"))
-                    .or_else(|| asset.name.strip_suffix(".tar.zst"))
-                    .unwrap_or(&asset.name);
-
-                let hash_sum = asset_hashsum_map
-                    .get(base_name)
-                    .map(|(hash_url, hash_type)| hashing::HashSums {
-                        sum_content: hash_url.clone(),
-                        sum_type: hash_type.clone(),
-                    });
-
-                variants.push(Download {
-                    file_name: asset.name.clone(),
-                    download_url: asset.browser_download_url.clone(),
-                    size: asset.size as u64,
-                    for_app: for_app.to_owned(),
-                    version: self.tag_name.clone(),
-                    hash_sum,
-                });
+            let (matched, arch) =
+                compat_tool.filter_asset_with_arch(asset.download_file_name().as_str());
+            if !(matched && files::check_supported_extension(&asset.name).is_ok()) {
+                continue;
             }
+            // Skip assets for a different architecture.
+            if arch.unwrap_or(constants::DEFAULT_ARCH) != target_arch {
+                continue;
+            }
+
+            let base_name = asset
+                .name
+                .strip_suffix(".tar.gz")
+                .or_else(|| asset.name.strip_suffix(".tar.xz"))
+                .or_else(|| asset.name.strip_suffix(".tar.zst"))
+                .unwrap_or(&asset.name);
+
+            let hash_sum = asset_hashsum_map
+                .get(base_name)
+                .map(|(hash_url, hash_type)| hashing::HashSums {
+                    sum_content: hash_url.clone(),
+                    sum_type: hash_type.clone(),
+                });
+
+            variants.push(Download {
+                file_name: asset.name.clone(),
+                download_url: asset.browser_download_url.clone(),
+                size: asset.size as u64,
+                for_app: for_app.to_owned(),
+                version: self.tag_name.clone(),
+                hash_sum,
+            });
         }
 
         variants
     }
+}
+
+/// Selects the best asset index for the running architecture.
+///
+/// Priority:
+/// 1. an asset whose explicit architecture token matches `system`
+/// 2. an asset with no architecture token when `default` matches `system`
+/// 3. an asset whose explicit architecture token matches `default`
+/// 4. an asset with no architecture token (fallback)
+///
+/// Returns `None` when no candidate is available.
+pub(crate) fn select_arch_index(
+    candidates: &[Option<CpuArch>],
+    system: CpuArch,
+    default: CpuArch,
+) -> Option<usize> {
+    let find = |predicate: &dyn Fn(usize, Option<CpuArch>) -> bool| {
+        candidates
+            .iter()
+            .enumerate()
+            .find_map(|(idx, arch)| predicate(idx, *arch).then_some(idx))
+    };
+
+    find(&|_, arch| arch == Some(system))
+        .or_else(|| find(&|_, arch| arch.is_none() && default == system))
+        .or_else(|| find(&|_, arch| arch == Some(default)))
+        .or_else(|| find(&|_, arch| arch.is_none()))
 }
 
 /// Holds the information from the different Assets for each GitHub release
@@ -267,7 +329,9 @@ pub(crate) async fn list_releases_with_sender<S: http_client::HttpSend>(
             !rel.assets.is_empty()
                 // same logic used when creating the Release object
                 && (rel.assets.iter().any(|asset| {
-                    compat_tool.filter_asset(asset.download_file_name().as_str())
+                    compat_tool
+                        .filter_asset_with_arch(asset.download_file_name().as_str())
+                        .0
                         && files::check_supported_extension(&asset.name).is_ok()
                 }))
         })
@@ -311,42 +375,6 @@ impl Download {
             },
         )
     }
-}
-
-/// Deduplication key for a download asset.
-/// Two downloads with the same key differ only in their target app.
-pub type DedupKey = (String, String, u64);
-/// Grouped download entry: (download, release, compat_tool, targets).
-pub type DownloadGroup = (
-    Download,
-    Release,
-    CompatTool,
-    Vec<crate::apps::AppInstallations>,
-);
-
-/// Groups download entries by their dedup key and returns a map of
-/// (download, release, compat_tool, targets) plus uniquely tagged releases.
-pub fn group_and_dedup_releases(
-    entries: Vec<(Download, Release, crate::apps::AppInstallations, CompatTool)>,
-) -> (HashMap<DedupKey, DownloadGroup>, Vec<Release>) {
-    let mut groups: HashMap<DedupKey, DownloadGroup> = HashMap::new();
-    let mut seen_releases: HashSet<String> = HashSet::new();
-    let mut unique_releases: Vec<Release> = vec![];
-
-    for (download, release, app_inst, compat_tool) in entries {
-        let key = download.dedup_key();
-
-        groups
-            .entry(key)
-            .and_modify(|(_, _, _, targets)| targets.push(app_inst.clone()))
-            .or_insert_with(|| (download, release.clone(), compat_tool, vec![app_inst]));
-
-        if seen_releases.insert(release.tag_name.clone()) {
-            unique_releases.push(release);
-        }
-    }
-
-    (groups, unique_releases)
 }
 
 #[cfg(test)]
@@ -783,183 +811,183 @@ mod tests {
         assert_ne!(d1.dedup_key(), d2.dedup_key());
     }
 
-    use crate::apps::AppInstallations;
-    use crate::sources::{Forge, ToolType};
+    #[test]
+    fn test_select_arch_index_geproton_11_4() {
+        // GE-Proton11-4: x86_64 + aarch64
+        let candidates = vec![Some(CpuArch::X86), Some(CpuArch::Arm)];
 
-    fn make_download(url: &str, name: &str, size: u64) -> Download {
-        Download {
-            download_url: url.into(),
-            file_name: name.into(),
-            size,
-            ..Default::default()
-        }
+        // x86 system picks the x86_64 asset
+        assert_eq!(
+            select_arch_index(&candidates, CpuArch::X86, CpuArch::X86),
+            Some(0)
+        );
+        // arm system picks the aarch64 asset
+        assert_eq!(
+            select_arch_index(&candidates, CpuArch::Arm, CpuArch::X86),
+            Some(1)
+        );
     }
 
-    fn make_release(tag: &str) -> Release {
-        serde_json::from_value(serde_json::json!({
-            "tag_name": tag,
-            "name": tag,
+    #[test]
+    fn test_select_arch_index_geproton_11_3() {
+        // GE-Proton11-3: default (no suffix) + aarch64
+        let candidates = vec![None, Some(CpuArch::Arm)];
+
+        // x86 system picks the no-suffix (default) asset
+        assert_eq!(
+            select_arch_index(&candidates, CpuArch::X86, CpuArch::X86),
+            Some(0)
+        );
+        // arm system picks the aarch64 asset
+        assert_eq!(
+            select_arch_index(&candidates, CpuArch::Arm, CpuArch::X86),
+            Some(1)
+        );
+    }
+
+    #[test]
+    fn test_select_arch_index_geproton_11_2() {
+        // GE-Proton11-2: x86 only, no suffix
+        let candidates = vec![None];
+
+        assert_eq!(
+            select_arch_index(&candidates, CpuArch::X86, CpuArch::X86),
+            Some(0)
+        );
+        // arm system falls back to the default (x86) asset
+        assert_eq!(
+            select_arch_index(&candidates, CpuArch::Arm, CpuArch::X86),
+            Some(0)
+        );
+    }
+
+    #[test]
+    fn test_select_arch_index_prefers_explicit_over_default() {
+        // A release with both a default (no suffix) and an explicit x86 asset.
+        let candidates = vec![None, Some(CpuArch::X86)];
+
+        assert_eq!(
+            select_arch_index(&candidates, CpuArch::X86, CpuArch::X86),
+            Some(1)
+        );
+    }
+
+    #[test]
+    fn test_select_arch_index_empty() {
+        assert_eq!(select_arch_index(&[], CpuArch::X86, CpuArch::X86), None);
+    }
+
+    fn cachyos_release() -> Release {
+        serde_json::from_value(json!({
             "url": null,
-            "assets": [],
-            "body": null
+            "tag_name": "cachyos-11.0-20260703-slr",
+            "name": "cachyos-11.0-20260703-slr",
+            "body": null,
+            "assets": [
+                {
+                    "url": "https://api.github.com/asset1",
+                    "id": 1,
+                    "name": "proton-cachyos-11.0-20260703-slr-arm64.tar.xz",
+                    "size": 1024,
+                    "updated_at": "2026-01-01T00:00:00Z",
+                    "browser_download_url": "https://example.com/proton-cachyos-11.0-20260703-slr-arm64.tar.xz"
+                },
+                {
+                    "url": "https://api.github.com/asset2",
+                    "id": 2,
+                    "name": "proton-cachyos-11.0-20260703-slr-x86_64.tar.xz",
+                    "size": 2048,
+                    "updated_at": "2026-01-01T00:00:00Z",
+                    "browser_download_url": "https://example.com/proton-cachyos-11.0-20260703-slr-x86_64.tar.xz"
+                },
+                {
+                    "url": "https://api.github.com/asset3",
+                    "id": 3,
+                    "name": "proton-cachyos-11.0-20260703-slr-x86_64_v3.tar.xz",
+                    "size": 2048,
+                    "updated_at": "2026-01-01T00:00:00Z",
+                    "browser_download_url": "https://example.com/proton-cachyos-11.0-20260703-slr-x86_64_v3.tar.xz"
+                }
+            ]
         }))
         .unwrap()
     }
 
-    fn make_compat_tool() -> CompatTool {
-        CompatTool::new_custom(
-            "TestTool".into(),
-            Forge::GitHub,
-            "owner".into(),
-            "repo".into(),
-            ToolType::WineBased,
-            None,
-            None,
-            None,
-        )
+    fn geproton_11_4_release() -> Release {
+        serde_json::from_value(json!({
+            "url": null,
+            "tag_name": "GE-Proton11-4",
+            "name": "GE-Proton11-4",
+            "body": null,
+            "assets": [
+                {
+                    "url": "https://api.github.com/asset1",
+                    "id": 1,
+                    "name": "GE-Proton11-4-x86_64.tar.gz",
+                    "size": 1024,
+                    "updated_at": "2026-01-01T00:00:00Z",
+                    "browser_download_url": "https://example.com/GE-Proton11-4-x86_64.tar.gz"
+                },
+                {
+                    "url": "https://api.github.com/asset2",
+                    "id": 2,
+                    "name": "GE-Proton11-4-aarch64.tar.gz",
+                    "size": 2048,
+                    "updated_at": "2026-01-01T00:00:00Z",
+                    "browser_download_url": "https://example.com/GE-Proton11-4-aarch64.tar.gz"
+                }
+            ]
+        }))
+        .unwrap()
     }
 
     #[test]
-    fn test_group_and_dedup_same_download_grouped() {
-        let d1 = make_download("https://example.com/a.tar.gz", "a.tar.gz", 100);
-        let d2 = make_download("https://example.com/a.tar.gz", "a.tar.gz", 100);
-        let r1 = make_release("v1.0");
-        let r2 = make_release("v1.0");
-        let ct = make_compat_tool();
-        let entries = vec![
-            (d1, r1, AppInstallations::Steam, ct.clone()),
-            (d2, r2, AppInstallations::Lutris, ct),
-        ];
-
-        let (groups, releases) = group_and_dedup_releases(entries);
-
-        assert_eq!(groups.len(), 1, "identical downloads merge into one group");
-        let key: DedupKey = (
-            "https://example.com/a.tar.gz".to_string(),
-            "a.tar.gz".to_string(),
-            100u64,
+    fn test_get_all_download_variants_filters_arm() {
+        let tool = CompatTool::from_str("Proton CachyOS").unwrap();
+        let variants = cachyos_release().get_all_download_variants(
+            &apps::AppInstallations::Steam,
+            &tool,
+            CpuArch::Arm,
         );
-        assert!(groups.contains_key(&key));
-        assert_eq!(groups[&key].3.len(), 2, "group should have two targets");
-        assert_eq!(releases.len(), 1, "same tag_name yields one release");
+        assert_eq!(variants.len(), 1);
+        assert!(variants[0].file_name.ends_with("arm64.tar.xz"));
     }
 
     #[test]
-    fn test_group_and_dedup_different_downloads_separate_groups() {
-        let d1 = make_download("https://example.com/a.tar.gz", "a.tar.gz", 100);
-        let d2 = make_download("https://example.com/b.tar.gz", "b.tar.gz", 200);
-        let r1 = make_release("v1.0");
-        let r2 = make_release("v2.0");
-        let ct = make_compat_tool();
-        let entries = vec![
-            (d1, r1, AppInstallations::Steam, ct.clone()),
-            (d2, r2, AppInstallations::Lutris, ct),
-        ];
-
-        let (groups, releases) = group_and_dedup_releases(entries);
-
-        assert_eq!(
-            groups.len(),
-            2,
-            "different downloads create separate groups"
+    fn test_get_all_download_variants_filters_x86() {
+        let tool = CompatTool::from_str("Proton CachyOS").unwrap();
+        let variants = cachyos_release().get_all_download_variants(
+            &apps::AppInstallations::Steam,
+            &tool,
+            CpuArch::X86,
         );
-        assert_eq!(
-            releases.len(),
-            2,
-            "different tag_names produce separate releases"
-        );
+        assert_eq!(variants.len(), 2);
+        println!("[0]: {:?}", variants[0]);
+        println!("[1]: {:?}", variants[1]);
+        assert!(variants[0].file_name.ends_with("x86_64.tar.xz"));
+        assert!(variants[1].file_name.ends_with("x86_64_v3.tar.xz"));
     }
 
     #[test]
-    fn test_group_and_dedup_three_entries_two_match() {
-        let d1 = make_download("https://example.com/same.tar.gz", "same.tar.gz", 100);
-        let d2 = make_download("https://example.com/same.tar.gz", "same.tar.gz", 100);
-        let d3 = make_download("https://example.com/diff.tar.gz", "diff.tar.gz", 200);
-        let r1 = make_release("v1.0");
-        let r2 = make_release("v1.0");
-        let r3 = make_release("v2.0");
-        let ct = make_compat_tool();
-        let entries = vec![
-            (d1, r1, AppInstallations::Steam, ct.clone()),
-            (d2, r2, AppInstallations::SteamFlatpak, ct.clone()),
-            (d3, r3, AppInstallations::Lutris, ct),
-        ];
-
-        let (groups, releases) = group_and_dedup_releases(entries);
-
-        assert_eq!(groups.len(), 2);
-        let key_same: DedupKey = (
-            "https://example.com/same.tar.gz".to_string(),
-            "same.tar.gz".to_string(),
-            100u64,
+    fn test_get_download_info_selects_arm() {
+        let tool = CompatTool::from_str("GEProton").unwrap();
+        let download = geproton_11_4_release().get_download_info(
+            &apps::AppInstallations::Steam,
+            &tool,
+            CpuArch::Arm,
         );
-        assert_eq!(
-            groups[&key_same].3.len(),
-            2,
-            "group for same download has two targets"
-        );
-        let key_diff: DedupKey = (
-            "https://example.com/diff.tar.gz".to_string(),
-            "diff.tar.gz".to_string(),
-            200u64,
-        );
-        assert_eq!(
-            groups[&key_diff].3.len(),
-            1,
-            "group for different download has one target"
-        );
-        assert_eq!(releases.len(), 2);
+        assert_eq!(download.file_name, "GE-Proton11-4-aarch64.tar.gz");
     }
 
     #[test]
-    fn test_group_and_dedup_different_releases_same_tag_deduplicated() {
-        let d1 = make_download("https://example.com/a.tar.gz", "a.tar.gz", 100);
-        let d2 = make_download("https://example.com/b.tar.gz", "b.tar.gz", 200);
-        let r1 = make_release("GE-Proton9-10");
-        let r2 = make_release("GE-Proton9-10");
-        let ct = make_compat_tool();
-        let entries = vec![
-            (d1, r1, AppInstallations::Steam, ct.clone()),
-            (d2, r2, AppInstallations::Lutris, ct),
-        ];
-
-        let (groups, releases) = group_and_dedup_releases(entries);
-
-        assert_eq!(groups.len(), 2);
-        assert_eq!(
-            releases.len(),
-            1,
-            "releases with identical tag_name are deduplicated"
+    fn test_get_download_info_selects_x86() {
+        let tool = CompatTool::from_str("GEProton").unwrap();
+        let download = geproton_11_4_release().get_download_info(
+            &apps::AppInstallations::Steam,
+            &tool,
+            CpuArch::X86,
         );
-        assert_eq!(releases[0].tag_name, "GE-Proton9-10");
-    }
-
-    #[test]
-    fn test_group_and_dedup_single_entry_passes_through() {
-        let d = make_download("https://example.com/a.tar.gz", "a.tar.gz", 100);
-        let r = make_release("v1.0");
-        let ct = make_compat_tool();
-        let entries = vec![(d, r, AppInstallations::Steam, ct)];
-
-        let (groups, releases) = group_and_dedup_releases(entries);
-
-        assert_eq!(groups.len(), 1);
-        assert_eq!(releases.len(), 1);
-        let key: DedupKey = (
-            "https://example.com/a.tar.gz".to_string(),
-            "a.tar.gz".to_string(),
-            100u64,
-        );
-        assert_eq!(groups[&key].3.len(), 1);
-    }
-
-    #[test]
-    fn test_group_and_dedup_empty_entries() {
-        let entries: Vec<(Download, Release, AppInstallations, CompatTool)> = vec![];
-
-        let (groups, releases) = group_and_dedup_releases(entries);
-
-        assert!(groups.is_empty());
-        assert!(releases.is_empty());
+        assert_eq!(download.file_name, "GE-Proton11-4-x86_64.tar.gz");
     }
 }
+

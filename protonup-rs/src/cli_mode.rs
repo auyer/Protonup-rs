@@ -126,6 +126,8 @@ pub async fn run_cli_mode(
     version: Option<String>,
     for_target: Option<String>,
     force: bool,
+    whats_new: bool,
+    target_arch: libprotonup::architecture::CpuArch,
 ) -> Result<Vec<Release>, Error> {
     // Determine the compatibility tool first (needed for auto-detection)
     let compat_tool = match tool.as_deref() {
@@ -192,27 +194,36 @@ pub async fn run_cli_mode(
             }
         };
 
+    // Show release notes if --whats-new was requested
+    if whats_new {
+        let mut seen_tags = std::collections::HashSet::new();
+        let unique_releases: Vec<&Release> = releases
+            .iter()
+            .filter(|r| seen_tags.insert(r.tag_name.clone()))
+            .collect();
+        for release in unique_releases {
+            download::show_whatsnew(release, &compat_tool).await;
+        }
+    }
+
     // Handle tools with multiple asset variations
     let downloads_vec: Vec<downloads::Download> = if compat_tool.has_multiple_asset_variations {
         releases
             .iter()
             .map(|release| {
-                let variants = release.get_all_download_variants(&app_inst, &compat_tool);
-                architecture_variants::select_architecture_variant(
-                    &release.tag_name,
-                    variants,
-                    false,
-                )
-                .unwrap_or_else(|e| {
-                    eprintln!("Error selecting architecture variant: {}", e);
-                    std::process::exit(1);
-                })
+                let variants =
+                    release.get_all_download_variants(&app_inst, &compat_tool, target_arch);
+                architecture_variants::select_micro_arch_variant(&release.tag_name, variants, false)
+                    .unwrap_or_else(|e| {
+                        eprintln!("Error selecting architecture variant: {}", e);
+                        std::process::exit(1);
+                    })
             })
             .collect()
     } else {
         releases
             .iter()
-            .map(|release| release.get_download_info(&app_inst, &compat_tool))
+            .map(|release| release.get_download_info(&app_inst, &compat_tool, target_arch))
             .collect()
     };
 
