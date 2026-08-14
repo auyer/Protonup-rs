@@ -165,11 +165,23 @@ impl fmt::Display for CompatTool {
     }
 }
 
+fn normalize_tool_name(s: &str) -> String {
+    s.chars()
+        .filter(|c| !matches!(c, '(' | ')'))
+        .map(|c| if c == '_' { ' ' } else { c })
+        .collect::<String>()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_lowercase()
+}
+
 impl FromStr for CompatTool {
     type Err = ();
     fn from_str(input: &str) -> Result<CompatTool, Self::Err> {
+        let normalized = normalize_tool_name(input);
         for s in CompatTools.iter() {
-            if s.name.to_lowercase() == input.to_lowercase() {
+            if normalize_tool_name(&s.name) == normalized {
                 return Ok(s.clone());
             }
         }
@@ -181,6 +193,32 @@ impl FromStr for CompatTool {
 mod tests {
     // Import the functions from the parent module (or wherever they are defined)
     use super::*;
+
+    #[test]
+    fn test_from_str_underscore_and_case_insensitive() {
+        assert_eq!(
+            CompatTool::from_str("Proton_CachyOS").unwrap().name,
+            "Proton CachyOS"
+        );
+        assert_eq!(
+            CompatTool::from_str("kron4ek_wine").unwrap().name,
+            "Kron4ek Wine"
+        );
+        assert_eq!(CompatTool::from_str("geproton").unwrap().name, "GEProton");
+        assert_eq!(
+            CompatTool::from_str("GEProton_RTSP").unwrap().name,
+            "GEProton RTSP"
+        );
+        assert_eq!(
+            CompatTool::from_str("WineGE_Deprecated").unwrap().name,
+            "WineGE (Deprecated)"
+        );
+        assert_eq!(
+            CompatTool::from_str("WineGE_(Deprecated)").unwrap().name,
+            "WineGE (Deprecated)"
+        );
+        assert!(CompatTool::from_str("does-not-exist").is_err());
+    }
 
     const TEST_CASES: &[(&str, bool)] = &[
         // --- Valid Cases ---

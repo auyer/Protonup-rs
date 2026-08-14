@@ -15,10 +15,10 @@ _protonup-rs() {
 
     local context curcontext="$curcontext" state line
     _arguments "${_arguments_options[@]}" : \
-'--tool=[Compatibility tool to install (e.g., GEProton, Luxtorpeda)]:TOOL:_default' \
 '--version=[Version to install (use "latest" for the latest version)]:VERSION:_default' \
 '--for=[Target for installation. Use "steam", "lutris", or a custom path. If omitted, auto-detects Steam or Lutris]:FOR:_default' \
 '--arch=[Architecture to assume for release assets without an architecture suffix. Accepts amd64/x86_64/x86 or arm64/arm/aarch64. Defaults to amd64]:ARCH:_default' \
+'--tool=[Compatibility tool to install (e.g., GEProton, Luxtorpeda)]:TOOL:(GEProton Luxtorpeda Boxtron VKD3D-Proton Lutris-VKD3D DXVK Kron4ek_Wine GEProton_RTSP Proton_CachyOS WineGE_Deprecated)' \
 '-q[Skip Menu, auto detect apps and download using default parameters]' \
 '--quick-download[Skip Menu, auto detect apps and download using default parameters]' \
 '-f[Force install for existing apps during quick downloads]' \
