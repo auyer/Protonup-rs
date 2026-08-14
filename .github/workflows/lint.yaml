@@ -13,7 +13,7 @@ jobs:
       checks: write
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd #v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
 
       - name: Update local toolchain
         run: |
@@ -36,9 +36,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd #v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
 
       - name: Writes changes in the local checkout
-        uses: crate-ci/typos@7c572958218557a3272c2d6719629443b5cc26fd #v1.45.2
+        uses: crate-ci/typos@8a48f81b6c64dcfea44b3633223084c4be58ac5f #v1.49.0
         with:
           write_changes: true

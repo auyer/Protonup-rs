@@ -105,7 +105,7 @@ jobs:
           echo "hashes=$(cat sha256sums_${{ matrix.arch }}.txt | base64 -w0 )" >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Release and upload artifacts
-        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda #v3.0.0
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 #v3.0.2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
           name: ${{ env.RELEASE_TITLE }}
