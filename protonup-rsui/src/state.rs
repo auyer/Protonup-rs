@@ -5,6 +5,7 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 
 use libprotonup::apps::{App, AppInstallations};
+use libprotonup::architecture_variants::MicroArchVariants;
 use libprotonup::files;
 use libprotonup::sources::CompatTool;
 
@@ -31,7 +32,7 @@ pub(crate) struct ProtonupGui {
     pub available_versions: Vec<libprotonup::downloads::Release>,
     pub selected_version_indices: Vec<usize>,
 
-    pub selected_arch_variant: Option<u8>,
+    pub selected_arch_variant: Option<MicroArchVariants>,
     pub has_variant_tools: bool,
 
     pub app_installation: Option<AppInstallations>,
@@ -44,7 +45,8 @@ pub(crate) struct ProtonupGui {
     pub global_phase: DownloadPhase,
     pub global_status: String,
     pub global_progress: f32,
-    pub download_complete: Option<Result<Vec<(libprotonup::downloads::Release, CompatTool)>, String>>,
+    pub download_complete:
+        Option<Result<Vec<(libprotonup::downloads::Release, CompatTool)>, String>>,
 
     pub download_handle: Option<task::Handle>,
 

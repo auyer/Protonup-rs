@@ -1,6 +1,8 @@
 use iced::widget::{Column, Row, button, checkbox, scrollable, text};
 use iced::{Center, Element};
 
+use libprotonup::architecture_variants::MicroArchVariants;
+
 use crate::message::Message;
 use crate::state::ProtonupGui;
 
@@ -13,23 +15,25 @@ pub(crate) fn view(state: &ProtonupGui) -> Element<'_, Message> {
         .push(text("Some tools offer optimized builds for different CPU architectures.").size(12));
 
     let variants = [
-        (1, "x86_64", "Universal - all x86-64 CPUs"),
-        (2, "x86_64_v2", "Recommended - optimized for SSE3"),
-        (3, "x86_64_v3", "Modern CPUs - optimized for AVX2"),
-        (4, "x86_64_v4", "Experimental - optimized for AVX-512"),
+        MicroArchVariants::X86_64,
+        MicroArchVariants::X86_64V2,
+        MicroArchVariants::X86_64V3,
+        MicroArchVariants::X86_64V4,
     ];
 
-    for (code, name, desc) in variants {
-        let is_selected = state.selected_arch_variant == Some(code);
+    for variant in variants {
+        let is_selected = state.selected_arch_variant == Some(variant);
         column = column.push(
             Row::new()
                 .spacing(10)
                 .align_y(Center)
-                .push(checkbox(is_selected).on_toggle(move |_| Message::SelectArchitecture(code)))
+                .push(
+                    checkbox(is_selected).on_toggle(move |_| Message::SelectArchitecture(variant)),
+                )
                 .push(
                     Column::new()
-                        .push(text(name).size(14))
-                        .push(text(desc).size(10)),
+                        .push(text(variant.name()).size(14))
+                        .push(text(variant.description()).size(10)),
                 ),
         );
     }

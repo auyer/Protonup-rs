@@ -2,6 +2,7 @@ use iced::Task;
 use std::collections::HashSet;
 
 use libprotonup::apps::{App, AppInstallations, list_installed_apps};
+use libprotonup::architecture_variants::MicroArchVariants;
 use libprotonup::sources::CompatTool;
 
 use crate::download::{self, DownloadPhase};
@@ -157,7 +158,7 @@ pub(crate) fn handle(state: &mut ProtonupGui, message: Message) -> Task<Message>
 
                 if state.has_variant_tools {
                     state.selection_step = SelectionStep::SelectingArchitecture;
-                    state.selected_arch_variant = Some(2);
+                    state.selected_arch_variant = Some(MicroArchVariants::X86_64V2);
                 } else {
                     state.selection_step = SelectionStep::SelectingVersions;
                 }
@@ -173,8 +174,7 @@ pub(crate) fn handle(state: &mut ProtonupGui, message: Message) -> Task<Message>
                     && let Some(release) = state.available_versions.get(index)
                     && let Some(ref tool) = state.selected_tool
                 {
-                    state.show_changelog =
-                        Some((release.clone(), tool.clone()));
+                    state.show_changelog = Some((release.clone(), tool.clone()));
                 }
             } else if let Some(pos) = state
                 .selected_version_indices
@@ -188,8 +188,8 @@ pub(crate) fn handle(state: &mut ProtonupGui, message: Message) -> Task<Message>
             Task::none()
         }
 
-        Message::SelectArchitecture(variant_code) => {
-            state.selected_arch_variant = Some(variant_code);
+        Message::SelectArchitecture(variant) => {
+            state.selected_arch_variant = Some(variant);
             Task::none()
         }
 
@@ -322,8 +322,7 @@ pub(crate) fn handle(state: &mut ProtonupGui, message: Message) -> Task<Message>
                         let count = pairs.len();
                         state.global_progress = 100.0;
                         state.global_phase = DownloadPhase::Complete;
-                        state.global_status =
-                            format!("✓ Success! Installed {} tools.", count);
+                        state.global_status = format!("✓ Success! Installed {} tools.", count);
                         state.download_complete = Some(Ok(pairs));
                         if state.app_mode == AppMode::QuickUpdate {
                             state.quick_update_status = QuickUpdateStatus::Complete;

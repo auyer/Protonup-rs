@@ -7,6 +7,7 @@ mod tests {
     };
     use iced::widget::image;
     use iced_test::{Error, simulator};
+    use libprotonup::architecture_variants::MicroArchVariants;
     use libprotonup::downloads::Release;
     use libprotonup::sources::{CompatTool, Forge, ToolType};
     use std::path::PathBuf;
@@ -279,9 +280,7 @@ mod tests {
 
         let _ = crate::update::handle(
             &mut model,
-            Message::DownloadUpdate(DownloadUpdate::Finished(Ok(vec![(
-                release, tool,
-            )]))),
+            Message::DownloadUpdate(DownloadUpdate::Finished(Ok(vec![(release, tool)]))),
         );
 
         assert_eq!(model.global_progress, 100.0);
@@ -811,12 +810,18 @@ mod tests {
     #[test]
     fn select_architecture_variant_updates_state() {
         let mut model = ready_model();
-        model.selected_arch_variant = Some(2); // Default
+        model.selected_arch_variant = Some(MicroArchVariants::X86_64V2); // Default
 
         // Select v3
-        let _ = crate::update::handle(&mut model, Message::SelectArchitecture(3));
+        let _ = crate::update::handle(
+            &mut model,
+            Message::SelectArchitecture(MicroArchVariants::X86_64V3),
+        );
 
-        assert_eq!(model.selected_arch_variant, Some(3));
+        assert_eq!(
+            model.selected_arch_variant,
+            Some(MicroArchVariants::X86_64V3)
+        );
     }
 
     #[test]

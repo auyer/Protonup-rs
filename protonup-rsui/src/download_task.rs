@@ -4,6 +4,7 @@ use std::collections::HashSet;
 use std::future::Future;
 
 use libprotonup::apps::AppInstallations;
+use libprotonup::architecture_variants::MicroArchVariants;
 use libprotonup::downloads::Release;
 use libprotonup::sources::CompatTool;
 use tokio::sync::mpsc::UnboundedSender;
@@ -144,7 +145,7 @@ pub fn download_selected_tools(
     app_installation: AppInstallations,
     tools_and_versions: Vec<(CompatTool, Vec<Release>)>,
     force_reinstall_names: HashSet<String>,
-    arch_variant: Option<u8>,
+    arch_variant: Option<MicroArchVariants>,
 ) -> (Task<DownloadUpdate>, task::Handle) {
     sip_task(move |tx| async move {
         let result = download::download_selected_tools(

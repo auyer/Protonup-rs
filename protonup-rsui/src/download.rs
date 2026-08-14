@@ -6,7 +6,8 @@
 use anyhow::{Context, Result};
 use libprotonup::{
     apps::{self, AppInstallations},
-    architecture_variants,
+    architecture,
+    architecture_variants::{self, MicroArchVariants},
     downloads::{self, Download, Release, ReleaseList, group_and_dedup_releases},
     files, hashing,
     sources::CompatTool,
@@ -163,7 +164,10 @@ impl<R: AsyncRead + Unpin, F: Fn(SipProgress) + Send + Unpin> AsyncRead for Prog
 /// Main entry point: runs quick downloads with progress reporting through callback.
 /// Downloads are deduplicated — the same asset is downloaded once and installed to all
 /// matching applications.
-pub async fn run_with_progress_callback<F>(send_progress: F, force: bool) -> Result<Vec<(Release, CompatTool)>>
+pub async fn run_with_progress_callback<F>(
+    send_progress: F,
+    force: bool,
+) -> Result<Vec<(Release, CompatTool)>>
 where
     F: Fn(SipProgress) + Send + Sync + Clone + Unpin + 'static,
 {
@@ -249,14 +253,16 @@ where
 
         let release = release_list[0].clone();
 
+        let target_arch = architecture::detect_system_arch();
+
         let download = if compat_tool.has_multiple_asset_variations {
-            let variants = release.get_all_download_variants(app_inst, &compat_tool);
+            let variants = release.get_all_download_variants(app_inst, &compat_tool, target_arch);
             variants
                 .into_iter()
                 .next()
-                .unwrap_or_else(|| release.get_download_info(app_inst, &compat_tool))
+                .unwrap_or_else(|| release.get_download_info(app_inst, &compat_tool, target_arch))
         } else {
-            release.get_download_info(app_inst, &compat_tool)
+            release.get_download_info(app_inst, &compat_tool, target_arch)
         };
 
         // Check if already installed
@@ -289,7 +295,7 @@ where
 
     let mut handles = Vec::new();
 
-    for (_key, (download, _release, compat_tool, targets)) in &groups {
+    for (download, _release, compat_tool, targets) in groups.values() {
         let progress_callback = send_progress.clone();
         let app_names: Vec<String> = targets.iter().map(|a| a.to_string()).collect();
         let display_name = format!("{} ({})", compat_tool.name, app_names.join(", "));
@@ -688,7 +694,7 @@ pub async fn download_selected_tools<F>(
     tools_and_versions: Vec<(CompatTool, Vec<Release>)>,
     send_progress: F,
     force_reinstall_names: HashSet<String>,
-    arch_variant: Option<u8>,
+    arch_variant: Option<MicroArchVariants>,
 ) -> Result<Vec<(Release, CompatTool)>>
 where
     F: Fn(SipProgress) + Send + Sync + Clone + Unpin + 'static,
@@ -696,6 +702,8 @@ where
     let mut releases: Vec<Release> = vec![];
     let mut release_tool_pairs: Vec<(Release, CompatTool)> = vec![];
     let mut downloads_to_run: Vec<(Download, AppInstallations, CompatTool, Release)> = vec![];
+
+    let target_arch = architecture::detect_system_arch();
 
     // Phase 1: Prepare all downloads
     send_progress(SipProgress::global(
@@ -708,25 +716,25 @@ where
         for release in versions {
             // Handle tools with multiple architecture variants
             let download = if compat_tool.has_multiple_asset_variations {
-                let variants = release.get_all_download_variants(&app_installation, compat_tool);
+                let variants =
+                    release.get_all_download_variants(&app_installation, compat_tool, target_arch);
 
                 // Select variant based on arch_variant parameter
-                if let Some(variant_code) = arch_variant {
-                    let variant_name = architecture_variants::get_variant_name(variant_code);
+                if let Some(variant) = arch_variant {
                     variants
                         .into_iter()
-                        .find(|d| d.file_name.contains(variant_name))
+                        .find(|d| d.file_name.contains(variant.name()))
                         .unwrap_or_else(|| {
-                            release.get_download_info(&app_installation, compat_tool)
+                            release.get_download_info(&app_installation, compat_tool, target_arch)
                         })
                 } else {
                     // Default to v2 or first available
                     architecture_variants::select_default_variant(&variants).unwrap_or_else(|| {
-                        release.get_download_info(&app_installation, compat_tool)
+                        release.get_download_info(&app_installation, compat_tool, target_arch)
                     })
                 }
             } else {
-                release.get_download_info(&app_installation, compat_tool)
+                release.get_download_info(&app_installation, compat_tool, target_arch)
             };
 
             // Check if already installed (only if not in force reinstall set)
