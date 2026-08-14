@@ -23,16 +23,12 @@ _protonup-rs() {
 
     case "${cmd}" in
         protonup__rs)
-            opts="-q -f -w -h --quick-download --force --tool --version --for --arch --whats-new --help"
+            opts="-q -f -w -h --quick-download --force --version --for --arch --whats-new --tool --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 1 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
             case "${prev}" in
-                --tool)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
                 --version)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
@@ -43,6 +39,10 @@ _protonup-rs() {
                     ;;
                 --arch)
                     COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --tool)
+                    COMPREPLY=($(compgen -W "GEProton Luxtorpeda Boxtron VKD3D-Proton Lutris-VKD3D DXVK Kron4ek_Wine GEProton_RTSP Proton_CachyOS WineGE_Deprecated" -- "${cur}"))
                     return 0
                     ;;
                 *)
