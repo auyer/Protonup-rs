@@ -1072,7 +1072,7 @@ dependencies = [
 
 [[package]]
 name = "libprotonup"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "anyhow",
  "arcstr",
@@ -1264,7 +1264,7 @@ dependencies = [
 
 [[package]]
 name = "protonup-rs"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "anyhow",
  "arcstr",
