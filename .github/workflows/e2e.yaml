@@ -1,0 +1,53 @@
+name: e2e
+
+on:
+  push:
+    branches:
+      - main
+    schedule:
+      # At 05:05 on Saturday.”
+      - cron: '5 5 * * 6'
+  workflow_dispatch:
+
+permissions: read-all
+
+jobs:
+  cargo_test:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest  # x64
+            arch: x64
+          - os: ubuntu-24.04-arm # ARM64
+            arch: arm64
+    runs-on: ${{ matrix.os }}
+    permissions:
+      checks: write
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - name: Update local toolchain
+        run: |
+          rustup update
+          rustup install stable
+
+      - name: Build
+        run: |
+          cargo build --release
+
+      - name: Check latest GEProton release version
+        id: ge_version
+        run: |
+          GE_VERSION=$(bash ./scripts/check_latest_release.sh)
+          echo $GE_VERSION
+          echo "ge_version=$GE_VERSION" >> $GITHUB_OUTPUT
+
+      - name: run
+        run: |
+          mkdir ./download
+          # download the latest GEProton to the download folder
+          ./target/release/protonup-rs --tool GEProton --force --for ./download --version ${{ steps.ge_version.outputs.ge_version }}
+
+      - name: Check folder
+        run: |
+          ls download/ # first line for debug only
+          ls download/ | grep -q ${{ steps.ge_version.outputs.ge_version }} && echo true || echo false
