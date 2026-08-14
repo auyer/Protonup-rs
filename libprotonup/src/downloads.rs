@@ -1207,4 +1207,3 @@ mod tests {
         assert!(releases.is_empty());
     }
 }
-

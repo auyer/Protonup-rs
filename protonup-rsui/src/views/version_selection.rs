@@ -1,4 +1,4 @@
-use iced::widget::{button, checkbox, radio, scrollable, text, Column, Row, Container};
+use iced::widget::{Column, Container, Row, button, checkbox, radio, scrollable, text};
 use iced::{Element, Length};
 
 use crate::message::{GuiMode, Message};
@@ -67,7 +67,6 @@ pub(crate) fn view(state: &ProtonupGui) -> Element<'_, Message> {
                 .padding(10),
         );
     } else {
-
         left = left.push(
             button(text("Start Download").size(14))
                 .on_press(Message::StartSelectedDownloads)

@@ -1,5 +1,5 @@
-use iced::widget::{button, container, rule, scrollable, text, Column};
 use iced::Element;
+use iced::widget::{Column, button, container, rule, scrollable, text};
 
 use libprotonup::downloads::Release;
 use libprotonup::sources::CompatTool;
@@ -17,10 +17,7 @@ pub(crate) fn view<'a>(release: &'a Release, compat_tool: &'a CompatTool) -> Ele
 
     let mut column = Column::new().spacing(8);
 
-    column = column.push(
-        text(format!("{} {}", compat_tool.name, release.tag_name))
-            .size(16),
-    );
+    column = column.push(text(format!("{} {}", compat_tool.name, release.tag_name)).size(16));
 
     column = column.push(text(url).size(10));
 

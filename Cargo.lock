@@ -3722,6 +3722,8 @@ dependencies = [
  "indicatif",
  "inquire",
  "libprotonup",
+ "ron",
+ "serde",
  "serde_json",
  "tokio",
 ]

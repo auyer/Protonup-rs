@@ -1,5 +1,5 @@
-use iced::widget::{button, progress_bar, text, Column, Row};
 use iced::Element;
+use iced::widget::{Column, Row, button, progress_bar, text};
 
 use libprotonup::downloads::Release;
 use libprotonup::sources::CompatTool;
@@ -20,13 +20,13 @@ pub(crate) fn view(state: &ProtonupGui) -> Element<'_, Message> {
         let mut row = Row::new().spacing(10).push(
             Column::new()
                 .spacing(5)
-                .push(text(format!("{}", tool.name)).size(12))
+                .push(text(tool.name.to_string()).size(12))
                 .push(progress_bar(0.0..=100.0, tool.progress))
                 .push(text(tool.status_text()).size(10).color(status_color)),
         );
 
-        if tool.status == ToolStatus::_Complete {
-            if let Some(&(ref release, ref compat_tool)) = find_release_pair(state, &tool.name) {
+        if tool.status == ToolStatus::_Complete
+            && let Some((release, compat_tool)) = find_release_pair(state, &tool.name) {
                 row = row.push(
                     button(text("Changelog").size(10))
                         .on_press(Message::ToggleChangelog(Some((
@@ -36,7 +36,6 @@ pub(crate) fn view(state: &ProtonupGui) -> Element<'_, Message> {
                         .padding(3),
                 );
             }
-        }
 
         column = column.push(row);
     }
@@ -44,8 +43,8 @@ pub(crate) fn view(state: &ProtonupGui) -> Element<'_, Message> {
     if let Some(ref result) = state.download_complete {
         match result {
             Ok(pairs) => {
-                column = column
-                    .push(text("✓ All tools installed successfully!").color([0.3, 1.0, 0.3]));
+                column =
+                    column.push(text("✓ All tools installed successfully!").color([0.3, 1.0, 0.3]));
                 for (release, _) in pairs {
                     column = column.push(text(format!("  • {}", release.tag_name)).size(12));
                 }
