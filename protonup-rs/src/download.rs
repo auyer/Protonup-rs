@@ -201,7 +201,7 @@ pub async fn run_quick_downloads(
         };
 
         // Check if already installed
-        let mut download_path = PathBuf::from(&app_inst.default_install_dir().as_str());
+        let mut download_path = app_inst.installation_dir(&compat_tool).unwrap();
         download_path.push(compat_tool.installation_name(&download.version));
         if files::check_if_exists(&download_path.clone()).await && !force {
             continue;
