@@ -38,7 +38,7 @@ indicatif = { version = "0.18", features = [
   "unicode-segmentation",
   "tokio",
 ] }
-tokio = { version = "1.52", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1.53", features = ["macros", "rt-multi-thread"] }
 clap = { version = "4.6", features = ["derive"] }
 
 [build-dependencies]
