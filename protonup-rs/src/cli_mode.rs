@@ -206,6 +206,24 @@ pub async fn run_cli_mode(
         }
     }
 
+    // Skip installed releases before selecting or downloading assets.
+    let install_dir = app_inst.installation_dir(&compat_tool).unwrap();
+    let mut pending_releases = Vec::new();
+    for release in releases {
+        let install_name = compat_tool.installation_name(&release.tag_name);
+        let install_path = install_dir.join(&install_name);
+        if !force && libprotonup::files::check_if_exists(&install_path).await {
+            println!(
+                "{} already installed at {}, skipping.",
+                install_name,
+                install_path.display()
+            );
+            continue;
+        }
+        pending_releases.push(release);
+    }
+    let releases = pending_releases;
+
     // Handle tools with multiple asset variations
     let downloads_vec: Vec<downloads::Download> = if compat_tool.has_multiple_asset_variations {
         releases
@@ -233,7 +251,6 @@ pub async fn run_cli_mode(
     );
 
     for download_item in downloads_vec {
-        let install_dir = app_inst.installation_dir(&compat_tool).unwrap();
         let file = download::download_file(&download_item, multi_progress.clone())
             .await
             .map_err(|e| anyhow::anyhow!("Error downloading {}: {}", download_item.version, e))?;

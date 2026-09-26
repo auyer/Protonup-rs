@@ -51,3 +51,14 @@ jobs:
         run: |
           ls download/ # first line for debug only
           ls download/ | grep -q ${{ steps.ge_version.outputs.ge_version }} && echo true || echo false
+
+      - name: Skip an already installed version without downloading
+        env:
+          # Allow metadata requests, but make archive downloads fail.
+          HTTPS_PROXY: http://127.0.0.1:9
+          NO_PROXY: api.github.com
+        run: |
+          output=$(./target/release/protonup-rs --tool GEProton --for ./download --version ${{ steps.ge_version.outputs.ge_version }})
+          echo "$output"
+          [[ "$output" == *"already installed"* ]]
+          [[ "$output" != *"Installed "* ]]
