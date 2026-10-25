@@ -26,16 +26,17 @@ pub(crate) fn view(state: &ProtonupGui) -> Element<'_, Message> {
         );
 
         if tool.status == ToolStatus::_Complete
-            && let Some((release, compat_tool)) = find_release_pair(state, &tool.name) {
-                row = row.push(
-                    button(text("Changelog").size(10))
-                        .on_press(Message::ToggleChangelog(Some((
-                            release.clone(),
-                            compat_tool.clone(),
-                        ))))
-                        .padding(3),
-                );
-            }
+            && let Some((release, compat_tool)) = find_release_pair(state, &tool.name)
+        {
+            row = row.push(
+                button(text("Changelog").size(10))
+                    .on_press(Message::ToggleChangelog(Some((
+                        release.clone(),
+                        compat_tool.clone(),
+                    ))))
+                    .padding(3),
+            );
+        }
 
         column = column.push(row);
     }

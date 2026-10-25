@@ -29,7 +29,7 @@ pub(crate) use libprotonup::apps::AppInstallations;
 
 pub(crate) const LOGO_BYTES: &[u8] = include_bytes!(concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/protonup--rs-logo.png"
+    "/assets/protonup-rs-logo.png"
 ));
 
 #[derive(Default)]
@@ -52,5 +52,13 @@ impl App {
 pub fn main() -> iced::Result {
     iced::application(App::default, App::update, App::view)
         .subscription(App::subscription)
+        .title("ProtonUp-RS")
+        .window(iced::window::Settings {
+            platform_specific: iced::window::settings::PlatformSpecific {
+                application_id: "protonup-rsui".to_string(),
+                ..Default::default()
+            },
+            ..Default::default()
+        })
         .run()
 }

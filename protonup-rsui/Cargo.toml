@@ -2,7 +2,7 @@
 name = "protonup-rsui"
 version = "1.0.0-rc2"
 edition = "2024"
-authors = ["Auyer <auyer@rcpassos.me>"]
+authors = ["Rafael Passos <auyer@rcpassos.me>"]
 repository = "https://github.com/auyer/protonup-rs"
 license = "GPL-3.0"
 readme = "../README.md"
@@ -10,16 +10,19 @@ readme = "../README.md"
 description = "A Rust GUI app to automate the installation and update of Linux Gaming Compatibility tools, like ProtonGE, Luxtorpeda, Boxtron and others"
 
 [package.metadata.deb]
-maintainer = "Auyer <auyer@rcpassos.me>"
-copyright = "2024, Auyer <auyer@rcpassos.me>"
+maintainer = "Rafael Passos <auyer@rcpassos.me>"
+copyright = "2024, Rafael Passos <auyer@rcpassos.me>"
 extended-description = "A Rust GUI app to automate the installation and update of Linux Gaming Compatibility tools, like ProtonGE, Luxtorpeda, Boxtron and others"
 depends = "$auto"
 section = "utility"
 priority = "optional"
 assets = [
     ["target/release/protonup-rsui", "usr/bin/", "755"],
-    ["../README.md", "usr/share/doc/protonup-rs/README", "644"],
-	  # TODO: desktop launchers, icons etc
+    ["../README.md", "usr/share/doc/protonup-rsui/README", "644"],
+    ["protonup-rsui.desktop", "usr/share/applications/", "644"],
+    ["assets/protonup-rs-logo_512.png", "usr/share/icons/hicolor/512x512/apps/protonup-rsui.png", "644"],
+    ["assets/protonup-rs-logo_256.png", "usr/share/icons/hicolor/256x256/apps/protonup-rsui.png", "644"],
+    ["assets/protonup-rs-logo.png", "usr/share/pixmaps/protonup-rsui.png", "644"],
 ]
 
 [dependencies]
