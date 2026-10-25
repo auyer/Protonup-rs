@@ -1,9 +1,15 @@
-FROM docker.io/rust:trixie
+FROM docker.io/debian:forky
 
 RUN apt update && \
-	apt upgrade -y && \
-	apt install -y python3 libwayland-dev pkg-config
+    apt upgrade -y && \
+    apt install -y rustup \
+    python3 \
+    libwayland-dev \
+    pkg-config \
+    gcc \
+    clang \
+    git \
+    go-md2man
 
-
-WORKDIR /code
-
+RUN rustup toolchain install stable
+RUN rustup component add clippy rust-analyzer
