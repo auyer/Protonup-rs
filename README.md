@@ -2,7 +2,14 @@
 
 Lib, CLI and GUI program to automate the installation and update of Linux Gaming Compatibility tools, like ProtonGE, Luxtorpeda, Boxtron and others.
 
+[![Debian package rust-protonup-rs](https://img.shields.io/debian/v/rust-protonup-rs/sid)](https://tracker.debian.org/pkg/rust-protonup-rs)
+[![Crates.io](https://img.shields.io/crates/v/protonup-rs)](https://crates.io/crates/protonup-rs)
+[![docs.rs](https://docs.rs/libprotonup/badge.svg)](https://docs.rs/libprotonup)
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/10372/badge)](https://www.bestpractices.dev/projects/10372)
+
+<p align="center">
+  <img src="protonup-rsui/assets/protonup-rs-logo.png" alt="Logo" width="250" />
+</p>
 
 > **NOTE**: This has no relations with the original ProtonUp project, and I thankful for the original author.
 >
