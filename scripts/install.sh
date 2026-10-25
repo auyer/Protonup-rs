@@ -2,6 +2,9 @@
 set -euo pipefail
 
 REPO="auyer/protonup-rs"
+# Base URLs, overridable for testing (e.g. PROTONUP_RELEASES_BASE=file:///tmp/release).
+RELEASES_BASE="${PROTONUP_RELEASES_BASE:-https://github.com/${REPO}}"
+RAW_BASE="${PROTONUP_RAW_BASE:-https://raw.githubusercontent.com/${REPO}}"
 VERSION="latest"
 SYSTEM=0
 PREFIX=""
@@ -101,6 +104,7 @@ add_to_path() {
 
   for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
     if [ -f "$rc" ] && ! grep -qF "$dir" "$rc"; then
+      # shellcheck disable=SC2016  # the literal $PATH is intentional (written to the rc file)
       printf '\n# Added by the ProtonUp-RS installer\nexport PATH="$PATH:%s"\n' "$dir" >> "$rc"
     fi
   done
@@ -110,9 +114,9 @@ add_to_path() {
 bin_url() {
   local bin="$1"
   if [ "$VERSION" = "latest" ]; then
-    printf 'https://github.com/%s/releases/latest/download/%s-linux-%s.tar.gz' "$REPO" "$bin" "$ARCH"
+    printf '%s/releases/latest/download/%s-linux-%s.tar.gz' "$RELEASES_BASE" "$bin" "$ARCH"
   else
-    printf 'https://github.com/%s/releases/download/%s/%s-linux-%s.tar.gz' "$REPO" "$REF" "$bin" "$ARCH"
+    printf '%s/releases/download/%s/%s-linux-%s.tar.gz' "$RELEASES_BASE" "$REF" "$bin" "$ARCH"
   fi
 }
 
@@ -131,7 +135,7 @@ install_binary() {
 
 install_gui_desktop() {
   local bin="protonup-rsui"
-  local raw_base="https://raw.githubusercontent.com/${REPO}/${REF}/protonup-rsui"
+  local raw_base="${RAW_BASE}/${REF}/protonup-rsui"
   local desktop_file="$APP_DIR/$bin.desktop"
   local icon_256="$ICON_DIR/256x256/apps/$bin.png"
   local icon_512="$ICON_DIR/512x512/apps/$bin.png"

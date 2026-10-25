@@ -9,6 +9,9 @@ RUN apt update && \
     gcc \
     clang \
     git \
+    curl \
+    bats \
+    shellcheck \
     go-md2man
 
 RUN rustup toolchain install stable
