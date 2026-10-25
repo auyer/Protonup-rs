@@ -1,7 +1,7 @@
 #!/usr/bin/env xdg-open
 [Desktop Entry]
 Name=Install Protonup-rsui
-Exec=sh -c 'ARCH=$(uname -m); if [ "$ARCH" = "x86_64" ]; then ARCH="amd64"; elif [ "$ARCH" = "aarch64" ]; then ARCH="arm64"; else echo "Unsupported architecture: $ARCH"; read; exit 1; fi; echo "Detected architecture: $ARCH"; echo "Downloading and installing Protonup-rsui"; rm -f /tmp/protonup-rsui-linux-${ARCH}.tar.gz; if curl -S -s -L -O --output-dir /tmp/ --connect-timeout 60 https://github.com/auyer/Protonup-rsui/releases/latest/download/protonup-rsui-linux-${ARCH}.tar.gz ; then tar -xvzf /tmp/protonup-rsui-linux-${ARCH}.tar.gz -C /tmp/ && mv /tmp/protonup-rsui ${HOME}/.local/bin/ && [[ "$SHELL" == *"bash"* ]] && [ "$SHELL" = "/bin/bash" ] && echo "export PATH=$PATH:${HOME}/.local/bin" >> ${HOME}/.bashrc || ([ "$SHELL" = "/bin/zsh" ] && echo "export PATH=$PATH:${HOME}/.local/bin" >> ${HOME}/.zshrc ) && rm /tmp/protonup-rsui-linux-${ARCH}.tar.gz ; else echo "Something went wrong, please report this if it is a bug"; read; fi'
+Exec=sh -c 'if curl -fsSL https://raw.githubusercontent.com/auyer/protonup-rs/main/scripts/install.sh -o /tmp/protonup-rsui-install.sh; then bash /tmp/protonup-rsui-install.sh --gui; else echo "Something went wrong downloading the installer, please report this if it is a bug"; fi; read'
 Icon=steamdeck-gaming-return
 Terminal=true
 Type=Application
