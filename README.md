@@ -13,6 +13,12 @@ Lib, CLI and GUI program to automate the installation and update of Linux Gaming
 
 [![asciicast](https://asciinema.org/a/QZ97c4yRwQ6YczTliB1ziZy5Z.svg)](https://asciinema.org/a/QZ97c4yRwQ6YczTliB1ziZy5Z)
 
+Screenshot (GUI on the left, two screen of the TUI in the right):
+
+<p align="center">
+  <img src="docs/screenshot.jpg" alt="Screenshot" width="1024" />
+</p>
+
 ## Currently supported tools
 
 These are the tools that are currently supported by this project.
