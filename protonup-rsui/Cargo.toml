@@ -1,6 +1,6 @@
 [package]
 name = "protonup-rsui"
-version = "1.0.0-rc1"
+version = "1.0.0-rc2"
 edition = "2024"
 authors = ["Auyer <auyer@rcpassos.me>"]
 repository = "https://github.com/auyer/protonup-rs"
@@ -26,16 +26,16 @@ assets = [
 
 iced = { version = "0.14", features = ["tokio", "sipper", "image", "canvas", "advanced"] }
 iced_futures = { version = "0.14", features = ["tokio"] }
-libprotonup = { path = "../libprotonup", version = "1.0.0-rc1" }
+libprotonup = { path = "../libprotonup", version = "1.0.0-rc2" }
 lyon_algorithms = "1.0"
 rfd = "0.17"
 
-tokio = { version = "1.53", features = ["sync"] }
+tokio = { version = "1.54", features = ["sync"] }
 futures-util = "0.3"
 anyhow = "1.0"
 
 [dev-dependencies]
 iced_test = "0.14"
 serde_json = "1.0"
-tokio = { version = "1.53", features = ["macros", "rt"] }
+tokio = { version = "1.54", features = ["macros", "rt"] }
 tempfile = "3"

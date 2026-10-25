@@ -53,28 +53,18 @@ impl Release {
             ..Download::default()
         };
 
-        let mut hash_sum: Option<hashing::HashSums> = None;
+        let asset_hashsum_map = build_hashsum_map(&self.assets);
+
         let mut candidates: Vec<(&Asset, Option<CpuArch>)> = Vec::new();
 
         for asset in &self.assets {
-            if asset.name.contains("sha512") {
-                download.file_name = asset.name.clone();
-                hash_sum = Some(hashing::HashSums {
-                    sum_content: asset.browser_download_url.clone(),
-                    sum_type: hashing::HashSumType::Sha512,
-                })
-            } else if asset.name.contains("sha256") {
-                download.file_name = asset.name.clone();
-                hash_sum = Some(hashing::HashSums {
-                    sum_content: asset.browser_download_url.clone(),
-                    sum_type: hashing::HashSumType::Sha256,
-                })
-            } else {
-                let (matched, arch) =
-                    compat_tool.filter_asset_with_arch(asset.download_file_name().as_str());
-                if matched && files::check_supported_extension(&asset.name).is_ok() {
-                    candidates.push((asset, arch));
-                }
+            if asset.name.contains("sha512") || asset.name.contains("sha256") {
+                continue;
+            }
+            let (matched, arch) =
+                compat_tool.filter_asset_with_arch(asset.download_file_name().as_str());
+            if matched && files::check_supported_extension(&asset.name).is_ok() {
+                candidates.push((asset, arch));
             }
         }
 
@@ -92,6 +82,14 @@ impl Release {
                 .clone_from(&asset.browser_download_url);
             download.size = asset.size as u64;
 
+            download.hash_sum =
+                asset_hashsum_map
+                    .get(asset_base_name(&asset.name))
+                    .map(|(hash_url, hash_type)| hashing::HashSums {
+                        sum_content: hash_url.clone(),
+                        sum_type: hash_type.clone(),
+                    });
+
             if arch.unwrap_or(constants::DEFAULT_ARCH) != target_arch {
                 eprintln!(
                     "Warning: no {} build found for '{}'. Falling back to {}.",
@@ -102,7 +100,6 @@ impl Release {
             }
         }
 
-        download.hash_sum = hash_sum;
         download
     }
 
@@ -115,35 +112,7 @@ impl Release {
         target_arch: CpuArch,
     ) -> Vec<Download> {
         // Create a map from base filename to hash file URL
-        let mut asset_hashsum_map: std::collections::HashMap<
-            String,
-            (String, hashing::HashSumType),
-        > = std::collections::HashMap::new();
-
-        // Build the hash map by matching hash files to their base names
-        for asset in &self.assets {
-            if asset.name.contains("sha512") {
-                // hash_type = hashing::HashSumType::Sha512;
-                let base_name = asset.name.split(".sha512").collect::<Vec<&str>>()[0].to_owned();
-                asset_hashsum_map.insert(
-                    base_name,
-                    (
-                        asset.browser_download_url.clone(),
-                        hashing::HashSumType::Sha512,
-                    ),
-                );
-            } else if asset.name.contains("sha256") {
-                // hash_type = hashing::HashSumType::Sha256;
-                let base_name = asset.name.split(".sha256").collect::<Vec<&str>>()[0].to_owned();
-                asset_hashsum_map.insert(
-                    base_name,
-                    (
-                        asset.browser_download_url.clone(),
-                        hashing::HashSumType::Sha256,
-                    ),
-                );
-            }
-        }
+        let asset_hashsum_map = build_hashsum_map(&self.assets);
 
         let mut variants = Vec::new();
 
@@ -160,12 +129,7 @@ impl Release {
                 continue;
             }
 
-            let base_name = asset
-                .name
-                .strip_suffix(".tar.gz")
-                .or_else(|| asset.name.strip_suffix(".tar.xz"))
-                .or_else(|| asset.name.strip_suffix(".tar.zst"))
-                .unwrap_or(&asset.name);
+            let base_name = asset_base_name(&asset.name);
 
             let hash_sum = asset_hashsum_map
                 .get(base_name)
@@ -186,6 +150,41 @@ impl Release {
 
         variants
     }
+}
+
+/// Builds a map from base file name (hash suffix stripped) to its hash URL and type.
+fn build_hashsum_map(assets: &[Asset]) -> HashMap<String, (String, hashing::HashSumType)> {
+    let mut map = HashMap::new();
+    for asset in assets {
+        if asset.name.contains("sha512") {
+            let base_name = asset.name.split(".sha512").collect::<Vec<&str>>()[0].to_owned();
+            map.insert(
+                base_name,
+                (
+                    asset.browser_download_url.clone(),
+                    hashing::HashSumType::Sha512,
+                ),
+            );
+        } else if asset.name.contains("sha256") {
+            let base_name = asset.name.split(".sha256").collect::<Vec<&str>>()[0].to_owned();
+            map.insert(
+                base_name,
+                (
+                    asset.browser_download_url.clone(),
+                    hashing::HashSumType::Sha256,
+                ),
+            );
+        }
+    }
+    map
+}
+
+/// Strips the supported compression extension from an asset name, returning the base name.
+fn asset_base_name(name: &str) -> &str {
+    name.strip_suffix(".tar.gz")
+        .or_else(|| name.strip_suffix(".tar.xz"))
+        .or_else(|| name.strip_suffix(".tar.zst"))
+        .unwrap_or(name)
 }
 
 /// Selects the best asset index for the running architecture.
@@ -1048,6 +1047,124 @@ mod tests {
             CpuArch::X86,
         );
         assert_eq!(download.file_name, "GE-Proton11-4-x86_64.tar.gz");
+    }
+
+    fn geproton_11_5_release() -> Release {
+        serde_json::from_value(json!({
+            "url": null,
+            "tag_name": "GE-Proton11-5",
+            "name": "GE-Proton11-5",
+            "body": null,
+            "assets": [
+                {
+                    "url": "https://api.github.com/asset1",
+                    "id": 1,
+                    "name": "GE-Proton11-5-aarch64.tar.gz",
+                    "size": 1024,
+                    "updated_at": "2026-01-01T00:00:00Z",
+                    "browser_download_url": "https://example.com/GE-Proton11-5-aarch64.tar.gz"
+                },
+                {
+                    "url": "https://api.github.com/asset2",
+                    "id": 2,
+                    "name": "GE-Proton11-5-aarch64.sha512sum",
+                    "size": 256,
+                    "updated_at": "2026-01-01T00:00:00Z",
+                    "browser_download_url": "https://example.com/GE-Proton11-5-aarch64.sha512sum"
+                },
+                {
+                    "url": "https://api.github.com/asset3",
+                    "id": 3,
+                    "name": "GE-Proton11-5-x86_64.tar.gz",
+                    "size": 2048,
+                    "updated_at": "2026-01-01T00:00:00Z",
+                    "browser_download_url": "https://example.com/GE-Proton11-5-x86_64.tar.gz"
+                },
+                {
+                    "url": "https://api.github.com/asset4",
+                    "id": 4,
+                    "name": "GE-Proton11-5-x86_64.sha512sum",
+                    "size": 256,
+                    "updated_at": "2026-01-01T00:00:00Z",
+                    "browser_download_url": "https://example.com/GE-Proton11-5-x86_64.sha512sum"
+                }
+            ]
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn test_get_download_info_matches_sha512sum_x86() {
+        let tool = CompatTool::from_str("GEProton").unwrap();
+        let download = geproton_11_5_release().get_download_info(
+            &apps::AppInstallations::Steam,
+            &tool,
+            CpuArch::X86,
+        );
+        assert_eq!(download.file_name, "GE-Proton11-5-x86_64.tar.gz");
+        let hash_sum = download.hash_sum.expect("x86_64 hash should be present");
+        assert_eq!(
+            hash_sum.sum_content,
+            "https://example.com/GE-Proton11-5-x86_64.sha512sum"
+        );
+        assert_eq!(hash_sum.sum_type, hashing::HashSumType::Sha512);
+    }
+
+    #[test]
+    fn test_get_download_info_matches_sha512sum_arm() {
+        let tool = CompatTool::from_str("GEProton").unwrap();
+        let download = geproton_11_5_release().get_download_info(
+            &apps::AppInstallations::Steam,
+            &tool,
+            CpuArch::Arm,
+        );
+        assert_eq!(download.file_name, "GE-Proton11-5-aarch64.tar.gz");
+        let hash_sum = download.hash_sum.expect("aarch64 hash should be present");
+        assert_eq!(
+            hash_sum.sum_content,
+            "https://example.com/GE-Proton11-5-aarch64.sha512sum"
+        );
+        assert_eq!(hash_sum.sum_type, hashing::HashSumType::Sha512);
+    }
+
+    #[test]
+    fn test_get_download_info_legacy_single_arch_keeps_hash() {
+        let release: Release = serde_json::from_value(json!({
+            "url": null,
+            "tag_name": "GE-Proton11-2",
+            "name": "GE-Proton11-2",
+            "body": null,
+            "assets": [
+                {
+                    "url": "https://api.github.com/asset1",
+                    "id": 1,
+                    "name": "GE-Proton11-2.tar.gz",
+                    "size": 1024,
+                    "updated_at": "2026-01-01T00:00:00Z",
+                    "browser_download_url": "https://example.com/GE-Proton11-2.tar.gz"
+                },
+                {
+                    "url": "https://api.github.com/asset2",
+                    "id": 2,
+                    "name": "GE-Proton11-2.sha512sum",
+                    "size": 256,
+                    "updated_at": "2026-01-01T00:00:00Z",
+                    "browser_download_url": "https://example.com/GE-Proton11-2.sha512sum"
+                }
+            ]
+        }))
+        .unwrap();
+
+        let tool = CompatTool::from_str("GEProton").unwrap();
+        let download =
+            release.get_download_info(&apps::AppInstallations::Steam, &tool, CpuArch::X86);
+        assert_eq!(download.file_name, "GE-Proton11-2.tar.gz");
+        let hash_sum = download.hash_sum.expect("hash should be present");
+        assert_eq!(
+            hash_sum.sum_content,
+            "https://example.com/GE-Proton11-2.sha512sum"
+        );
+        assert_eq!(hash_sum.sum_type, hashing::HashSumType::Sha512);
     }
 
     fn make_compat_tool() -> CompatTool {

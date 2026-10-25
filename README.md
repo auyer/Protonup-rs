@@ -57,6 +57,10 @@ protonup-rs --tool GEProton --version latest --for ~/.local/steam
 protonup-rs --tool GEProton --for steam --force
 ```
 
+CLI mode fetches release metadata and skips versions already installed at the
+target location before downloading any archives. Skipping exits successfully.
+Use `--force` to download and reinstall an existing version.
+
 #### CLI Options
 
 ```
