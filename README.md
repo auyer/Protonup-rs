@@ -128,16 +128,18 @@ sudo rpm -i protonup-rsui_*.rpm
 
 ### Via the install script
 
-A single script downloads the binary, desktop entry and icons, and installs everything for you (no `.deb`/`.rpm` needed):
+A single script downloads the binaries (plus the GUI desktop entry and icons) and installs everything for you (no `.deb`/`.rpm` needed):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/auyer/protonup-rs/main/scripts/install.sh -o install.sh
 bash install.sh
 ```
 
-By default it installs for the current user (binary to `~/.local/bin`, launcher to `~/.local/share/applications`). Useful options:
+By default it installs both the CLI (`protonup-rs`) and the GUI (`protonup-rsui`) for the current user (binaries to `~/.local/bin`, launcher to `~/.local/share/applications`). Useful options:
 
 ```bash
+bash install.sh --cli        # install only the CLI
+bash install.sh --gui        # install only the GUI
 bash install.sh --system     # install system-wide (uses sudo)
 bash install.sh --version v1.0.0
 bash install.sh --uninstall
