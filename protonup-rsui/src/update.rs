@@ -363,7 +363,7 @@ pub(crate) fn handle(state: &mut ProtonupGui, message: Message) -> Task<Message>
         }
 
         Message::ToggleChangelog(changelog) => {
-            state.show_changelog = changelog;
+            state.show_changelog = *changelog;
             Task::none()
         }
 

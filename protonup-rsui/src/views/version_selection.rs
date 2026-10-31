@@ -54,9 +54,9 @@ pub(crate) fn view(state: &ProtonupGui) -> Element<'_, Message> {
             let tool = state.selected_tool.clone();
             button(text("View Changelog").size(14))
                 .on_press_with(move || {
-                    Message::ToggleChangelog(
+                    Message::ToggleChangelog(Box::new(
                         release.clone().and_then(|r| tool.clone().map(|t| (r, t))),
-                    )
+                    ))
                 })
                 .padding(10)
         });
@@ -83,9 +83,9 @@ pub(crate) fn view(state: &ProtonupGui) -> Element<'_, Message> {
             let tool = state.selected_tool.clone();
             button(text("Show Changelog").size(14))
                 .on_press_with(move || {
-                    Message::ToggleChangelog(
+                    Message::ToggleChangelog(Box::new(
                         release.clone().and_then(|r| tool.clone().map(|t| (r, t))),
-                    )
+                    ))
                 })
                 .padding(10)
         });

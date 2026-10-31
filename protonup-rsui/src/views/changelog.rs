@@ -34,7 +34,7 @@ pub(crate) fn view<'a>(release: &'a Release, compat_tool: &'a CompatTool) -> Ele
 
     column = column.push(
         button(text("Close").size(12))
-            .on_press(Message::ToggleChangelog(None))
+            .on_press(Message::ToggleChangelog(None.into()))
             .padding(5),
     );
 

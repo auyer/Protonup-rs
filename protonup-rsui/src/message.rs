@@ -40,7 +40,7 @@ pub(crate) enum Message {
     BackToInitial,
     BackToToolSelection,
 
-    ToggleChangelog(Option<(Release, CompatTool)>),
+    ToggleChangelog(Box<Option<(Release, CompatTool)>>),
 
     SelectionError(String),
 

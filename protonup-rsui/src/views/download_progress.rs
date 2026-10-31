@@ -30,10 +30,10 @@ pub(crate) fn view(state: &ProtonupGui) -> Element<'_, Message> {
         {
             row = row.push(
                 button(text("Changelog").size(10))
-                    .on_press(Message::ToggleChangelog(Some((
+                    .on_press(Message::ToggleChangelog(Box::new(Some((
                         release.clone(),
                         compat_tool.clone(),
-                    ))))
+                    )))))
                     .padding(3),
             );
         }
