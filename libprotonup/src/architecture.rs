@@ -40,8 +40,8 @@ impl FromStr for CpuArch {
     }
 }
 
-const X86_TOKENS: [&str; 4] = ["x86_64", "x86-64", "amd64", "x86"];
-const ARM_TOKENS: [&str; 3] = ["aarch64", "arm64", "arm"];
+const X86_TOKENS: [&str; 5] = ["x86_64", "-x86_64", "x86-64", "amd64", "x86"];
+const ARM_TOKENS: [&str; 4] = ["aarch64", "-aarch64", "arm64", "arm"];
 
 fn is_x86_token(token: &str) -> bool {
     X86_TOKENS.contains(&token)
