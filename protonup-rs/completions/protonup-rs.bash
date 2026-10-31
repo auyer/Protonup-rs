@@ -1,4 +1,4 @@
-_protonup-rs() {
+_protonup__rs() {
     local i cur prev opts cmd
     COMPREPLY=()
     if [[ "${BASH_VERSINFO[0]}" -ge 4 ]]; then
@@ -56,7 +56,7 @@ _protonup-rs() {
 }
 
 if [[ "${BASH_VERSINFO[0]}" -eq 4 && "${BASH_VERSINFO[1]}" -ge 4 || "${BASH_VERSINFO[0]}" -gt 4 ]]; then
-    complete -F _protonup-rs -o nosort -o bashdefault -o default protonup-rs
+    complete -F _protonup__rs -o nosort -o bashdefault -o default protonup-rs
 else
-    complete -F _protonup-rs -o bashdefault -o default protonup-rs
+    complete -F _protonup__rs -o bashdefault -o default protonup-rs
 fi
