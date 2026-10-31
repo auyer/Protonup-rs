@@ -298,7 +298,12 @@ where
     for (download, _release, compat_tool, targets) in groups.values() {
         let progress_callback = send_progress.clone();
         let app_names: Vec<String> = targets.iter().map(|a| a.to_string()).collect();
-        let display_name = format!("{} ({})", compat_tool.name, app_names.join(", "));
+        let display_name = format!(
+            "{} {} ({})",
+            compat_tool.name,
+            download.version,
+            app_names.join(", ")
+        );
         let download = download.clone();
         let compat_tool = compat_tool.clone();
         let targets = targets.clone();
