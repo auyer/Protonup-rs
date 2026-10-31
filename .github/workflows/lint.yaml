@@ -21,9 +21,12 @@ jobs:
           rustup component add clippy
           rustup install stable
 
-      - name: Lint
+      - name: Format Check
         run: |
           cargo fmt -- --check
+
+      - name: Lint
+        run: |
           cargo clippy -- -D warnings
 
       - name: Clippy Check
