@@ -80,14 +80,20 @@ jobs:
       - name: Run cargo-deb to build a debian package
         run: cargo-deb -p protonup-rs --compress-type gzip --deb-version $CURRENT_VERSION
 
-      - name: Convert DEB to RPM
+      - name: Run cargo-deb to build the GUI debian package
+        run: cargo-deb -p protonup-rsui --compress-type gzip --deb-version $CURRENT_VERSION
+
+      - name: Convert DEBs to RPMs
         run: |
           cd target/debian
           alien -k --to-rpm protonup-rs_${CURRENT_VERSION}_${{ matrix.arch }}.deb
-          # Rename RPM files to consistent naming: protonup-rs_0.11.0_amd64.rpm
-          for rpm in protonup-rs-*.rpm; do
-            new_rpm="protonup-rs_${CURRENT_VERSION}_${{ matrix.arch }}.rpm"
-            mv "$rpm" "$new_rpm"
+          alien -k --to-rpm protonup-rsui_${CURRENT_VERSION}_${{ matrix.arch }}.deb
+          # Rename RPM files to consistent naming. Example protonup-rs_0.11.0_amd64.rpm
+          for bin in protonup-rs protonup-rsui; do
+            for rpm in ${bin}-*.rpm; do
+              new_rpm="${bin}_${CURRENT_VERSION}_${{ matrix.arch }}.rpm"
+              mv "$rpm" "$new_rpm"
+            done
           done
           mv *.deb *.rpm ../release/
 
@@ -96,6 +102,8 @@ jobs:
           cd ./target/release
           zip protonup-rs-linux-${{ matrix.arch }}.zip protonup-rs
           tar -czvf protonup-rs-linux-${{ matrix.arch }}.tar.gz protonup-rs
+          zip protonup-rsui-linux-${{ matrix.arch }}.zip protonup-rsui
+          tar -czvf protonup-rsui-linux-${{ matrix.arch }}.tar.gz protonup-rsui
 
       - name: Generate hashes
         id: hash
@@ -115,8 +123,11 @@ jobs:
           append: true
           files: |
             target/release/protonup-rs**.{gz,zip,rpm,deb}
+            target/release/protonup-rsui**.{gz,zip,rpm,deb}
             target/release/sha256sums_${{ matrix.arch }}.txt
             protonup-rs-install.desktop
+            protonup-rsui-install.desktop
+            protonup-rsui/protonup-rsui.desktop
 
       - name: Output Tag Name
         id: published_version
@@ -132,6 +143,10 @@ jobs:
             target/release/protonup-rs*.zip
             target/release/protonup-rs*.deb
             target/release/protonup-rs*.rpm
+            target/release/protonup-rsui*.gz
+            target/release/protonup-rsui*.zip
+            target/release/protonup-rsui*.deb
+            target/release/protonup-rsui*.rpm
 
   provenance:
     if: ${{ !inputs.pre_release }}

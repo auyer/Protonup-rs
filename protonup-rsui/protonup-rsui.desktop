@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+TryExec=protonup-rsui
+Exec=protonup-rsui
+Icon=protonup-rsui
+Terminal=false
+Categories=Utility;
+Name=ProtonUp-RS
+GenericName=Compatibility Tools Manager
+Comment=Install and update Linux Gaming Compatibility tools like ProtonGE, Luxtorpeda, Boxtron and others
+StartupNotify=true
+StartupWMClass=protonup-rsui

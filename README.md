@@ -1,15 +1,23 @@
 # Protonup-rs
 
-Lib, CLI and GUI(wip) program to automate the installation and update of Linux Gaming Compatibility tools, like ProtonGE, Luxtorpeda, Boxtron and others.
+Lib, CLI and GUI program to automate the installation and update of Linux Gaming Compatibility tools, like ProtonGE, Luxtorpeda, Boxtron and others.
 
+[![Debian package rust-protonup-rs](https://img.shields.io/debian/v/rust-protonup-rs/sid)](https://tracker.debian.org/pkg/rust-protonup-rs)
+[![Crates.io](https://img.shields.io/crates/v/protonup-rs)](https://crates.io/crates/protonup-rs)
+[![docs.rs](https://docs.rs/libprotonup/badge.svg)](https://docs.rs/libprotonup)
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/10372/badge)](https://www.bestpractices.dev/projects/10372)
 
-> **NOTE**: This has no relations with the original ProtonUp project, and I thankful for the original author.
->
-> I've create it because the original project had a few issues with its Python dependencies (that most likely got fixed already).
-> I wanted to to re-create it in rust, in a way it could be used as a lib and a CLI.
+<p align="center">
+  <img src="protonup-rsui/assets/protonup-rs-logo.png" alt="Logo" width="250" />
+</p>
 
 [![asciicast](https://asciinema.org/a/QZ97c4yRwQ6YczTliB1ziZy5Z.svg)](https://asciinema.org/a/QZ97c4yRwQ6YczTliB1ziZy5Z)
+
+Screenshot (GUI on the left, two screen of the TUI in the right):
+
+<p align="center">
+  <img src="docs/screenshot.jpg" alt="Screenshot" width="1024" />
+</p>
 
 ## Currently supported tools
 
@@ -84,38 +92,75 @@ Options:
 
 ## Installing (Available for x86 and ARM !)
 
+Using Debian (Forky +), Ubuntu or a derivative ?
+The tool might be available in your repository.
+
+`sudo apt install protonup-rs`
+
 ### Clickable download (Steam Deck Friendly)
 
-- download .desktop file
-- drag the file from the Downloads folder to your desktop
-- run it (double click)
-- open a new terminal window to run `protonup-rs`
+Download the installer `.desktop` file for the app you want, drag it from the Downloads folder to your desktop, and run it (double click).
 
-<h3 align="center">
-  <a name="download button" href="https://github.com/auyer/protonup-rs/releases/latest/download/protonup-rs-install.desktop">Click Here to Download installer</a>
-</h3>
+<table>
+  <tr>
+    <th align="center">CLI/TUI (<code>protonup-rs</code>)</th>
+    <th align="center">GUI (<code>protonup-rsui</code>)</th>
+  </tr>
+  <tr>
+    <td align="center"><a href="https://github.com/auyer/protonup-rs/releases/latest/download/protonup-rs-install.desktop">Download CLI installer</a></td>
+    <td align="center"><a href="https://github.com/auyer/protonup-rs/releases/latest/download/protonup-rsui-install.desktop">Download GUI installer</a></td>
+  </tr>
+</table>
 
-> **NOTE**: This will download a simple ".desktop" file that will download the pre-compiled binary from release, decompress it, place it in "$HOME/.local/bin/", and add this folder to your PATH.
+> **NOTE**: These download a simple `.desktop` file that downloads the pre-compiled binary from the release, decompresses it, places it in `$HOME/.local/bin/`, and adds this folder to your PATH.
 
-### In one line
+### Via .deb or .rpm
 
-Does the same as the installer above, but from the command line
+Download the `.deb` (Debian, Ubuntu and derivatives) or `.rpm` (Fedora, openSUSE and derivatives) package for your architecture from the [latest release](https://github.com/auyer/protonup-rs/releases/latest).
+
+Then, from the folder where you downloaded it, run:
 
 ```bash
-sh -c 'ARCH=$(uname -m | sed "s/x86_64/amd64/;s/aarch64/arm64/"); FILE="protonup-rs-linux-$ARCH.tar.gz"; if curl -S -s -L -O --output-dir /tmp/ --connect-timeout 60 "https://github.com/auyer/Protonup-rs/releases/latest/download/$FILE" ; then tar -xvzf "/tmp/$FILE" -C /tmp/ && mkdir -p ${HOME}/.local/bin && mv /tmp/protonup-rs ${HOME}/.local/bin/ && (echo "$SHELL" | grep -q "bash" && echo "export PATH=\"\$PATH:${HOME}/.local/bin\"" >> ${HOME}/.bashrc || echo "$SHELL" | grep -q "zsh" && echo "export PATH=\"\$PATH:${HOME}/.local/bin\"" >> ${HOME}/.zshrc); rm "/tmp/$FILE"; else echo "Something went wrong, please report this if it is a bug"; read; fi'
+# Debian / Ubuntu
+sudo apt install ./protonup-rs_*.deb
+sudo apt install ./protonup-rsui_*.deb
+
+# Fedora / openSUSE
+sudo rpm -i protonup-rs_*.rpm
+sudo rpm -i protonup-rsui_*.rpm
 ```
 
-This assumes `/usr/bin` is in your path. You may change this to any other location (in your path `echo $PATH`).
+> On ARM systems, pick the `arm64` package instead of `amd64`.
 
-### Or manually
+### Via the install script
+
+A single script downloads the binaries (plus the GUI desktop entry and icons) and installs everything for you (no `.deb`/`.rpm` needed):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/auyer/protonup-rs/main/scripts/install.sh -o install.sh
+bash install.sh
+```
+
+By default it installs both the CLI (`protonup-rs`) and the GUI (`protonup-rsui`) for the current user (binaries to `~/.local/bin`, launcher to `~/.local/share/applications`). Useful options:
+
+```bash
+bash install.sh --cli        # install only the CLI
+bash install.sh --gui        # install only the GUI
+bash install.sh --system     # install system-wide (uses sudo)
+bash install.sh --version v1.0.0
+bash install.sh --uninstall
+bash install.sh --help       # see all options
+```
+
+### Or manually (multiple methods available)
 
 The instructions below refer to `amd64` (x86) release. If using ARM, just replace with `arm64`.
 Get the latest binary:
 
-Most devices (Intel, AMD, Steam Deck...): [Download link (x86)](https://github.com/auyer/Protonup-rs/releases/latest/download/protonup-rs-linux-amd64.zip)
+Most devices (Intel, AMD, Steam Deck...): [CLI/TUI Download link (x86)](https://github.com/auyer/Protonup-rs/releases/latest/download/protonup-rs-linux-amd64.zip) or [GUI Download link (x86)](https://github.com/auyer/protonup-rs/releases/latest/download/protonup-rsui-linux-amd64.tar.gz)
 
 if using arm (raspberry pi, phones, Asahi users, Qualcomm laptop...):
-[Download link (ARM64)](https://github.com/auyer/Protonup-rs/releases/latest/download/protonup-rs-linux-arm64.zip)
+[CLI/TUI Download link (ARM64)](https://github.com/auyer/Protonup-rs/releases/latest/download/protonup-rs-linux-arm64.zip) or [GUI Download link (ARM64)](https://github.com/auyer/protonup-rs/releases/latest/download/protonup-rsui-linux-arm64.tar.gz)
 
 It is a single binary. You can just run it, or add it to your path so you can call it from anywhere.
 
@@ -125,6 +170,8 @@ or download the zip from the releases page
 ```
 cd Downloads
 sudo unzip protonup-rs-linux-amd64.zip -d /usr/bin
+
+sudo unzip protonup-rsui-linux-amd64.zip -d /usr/bin
 ```
 
 ## Building from source
@@ -143,15 +190,20 @@ cargo build -p protonup-rs --release
 mv ./target/release/protonup-rs "your path"
 ```
 
+To build the GUI (`protonup-rsui`) instead, replace `protonup-rs` with `protonup-rsui` in the commands above.
+
 ## Docs
 
 Code docs available in the [docs/docs.md](./docs/docs.md) file, and default generated docs in [docs.rs/libprotonup](https://docs.rs/libprotonup/latest/libprotonup/).
 
 ### Roadmap
 
-1. GUI:
-  Not ready for usage. I made a few experiments with different libs, and decided to use the iced/cosmic framework.
-  I left the [base structure](https://github.com/auyer/Protonup-rs/tree/feature/gui), and hope to get to it someday or to receive contributions.
+The GUI is implemented and functional using the iced framework.
+Future improvements may include:
+
+- Additional UI polish and refinements
+- More compatibility tools support
+- Enhanced error handling and user feedback
 
 ## Feedbacks & Contributing
 
@@ -165,7 +217,11 @@ Thanks!
 
 ### Roles and Maintainers
 
-This project is maintained only by the creator [@auyer](https://rcpassos.me)
+This project is maintained only by the creator [@auyer](https://rcpassos.me).
 
-Maintaining this project does not take a lot of effort.
-The project is open to having other contributors, specially if implementing a GUI.
+The project is open to having other contributors.
+
+> **NOTE**: This has no relations with the original ProtonUp project, and I thankful for the original author.
+>
+> I've create it because the original project had a few issues with its Python dependencies (that most likely got fixed already).
+> I wanted to to re-create it in rust, in a way it could be used as a lib and a CLI.

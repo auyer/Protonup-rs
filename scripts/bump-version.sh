@@ -85,9 +85,14 @@ echo -e "${GREEN}Updating protonup-rs/Cargo.toml${NC}"
 sed -i "s/^version = \"$OLD_VERSION\"/version = \"$NEW_VERSION\"/" protonup-rs/Cargo.toml
 sed -i "s|libprotonup = { path = \"\.\./libprotonup\", version = \"$OLD_VERSION\" }|libprotonup = { path = \"../libprotonup\", version = \"$NEW_VERSION\" }|" protonup-rs/Cargo.toml
 
+echo -e "${GREEN}Updating protonup-rsui/Cargo.toml${NC}"
+sed -i "s/^version = \"$OLD_VERSION\"/version = \"$NEW_VERSION\"/" protonup-rsui/Cargo.toml
+sed -i "s|libprotonup = { path = \"\.\./libprotonup\", version = \"$OLD_VERSION\" }|libprotonup = { path = \"../libprotonup\", version = \"$NEW_VERSION\" }|" protonup-rsui/Cargo.toml
+
 echo -e "${GREEN}Updating Cargo.lock files${NC}"
 cargo update -p libprotonup --precise "$NEW_VERSION" 2>/dev/null || true
 cargo update -p protonup-rs --precise "$NEW_VERSION" 2>/dev/null || true
+cargo update -p protonup-rsui --precise "$NEW_VERSION" 2>/dev/null || true
 
 echo -e "${GREEN}Updating fuzz crate dependencies${NC}"
 cd fuzz && cargo update -p libprotonup --precise "$NEW_VERSION" 2>/dev/null || true

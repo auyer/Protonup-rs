@@ -1,11 +1,11 @@
 [package]
 name = "libprotonup"
-version = "0.15.1"
+version = "1.0.0-rc2"
 edition = "2024"
 authors = ["Auyer <auyer@rcpassos.me>"]
 repository = "https://github.com/auyer/protonup-rs"
 license = "GPL-3.0"
-readme = "../docs/docs.md"
+readme = "./README.md"
 
 description = "A Rust library to manage Linux Gaming Compatibility tools, like ProtonGE, Luxtorpeda, Boxtron and others."
 

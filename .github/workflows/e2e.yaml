@@ -4,9 +4,9 @@ on:
   push:
     branches:
       - main
-    schedule:
-      # At 05:05 on Saturday.”
-      - cron: '5 5 * * 6'
+  schedule:
+    # At 05:05 on Saturday.
+    - cron: '5 5 * * 6'
   workflow_dispatch:
 
 permissions: read-all
@@ -38,8 +38,8 @@ jobs:
         id: ge_version
         run: |
           GE_VERSION=$(bash ./scripts/check_latest_release.sh)
-          echo $GE_VERSION
-          echo "ge_version=$GE_VERSION" >> $GITHUB_OUTPUT
+          echo "$GE_VERSION"
+          echo "ge_version=$GE_VERSION" >> "$GITHUB_OUTPUT"
 
       - name: run
         run: |
@@ -50,7 +50,11 @@ jobs:
       - name: Check folder
         run: |
           ls download/ # first line for debug only
-          ls download/ | grep -q ${{ steps.ge_version.outputs.ge_version }} && echo true || echo false
+          if [ -d "download/${{ steps.ge_version.outputs.ge_version }}" ]; then
+            echo true
+          else
+            echo false
+          fi
 
       - name: Skip an already installed version without downloading
         env:
@@ -62,3 +66,21 @@ jobs:
           echo "$output"
           [[ "$output" == *"already installed"* ]]
           [[ "$output" != *"Installed "* ]]
+
+  installer_test:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest      # x64
+          - os: ubuntu-24.04-arm   # ARM64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - name: Install bats and shellcheck
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y bats shellcheck
+      - name: Lint installer script
+        run: shellcheck scripts/install.sh
+      - name: Test installer script
+        run: bats scripts/tests/
