@@ -34,7 +34,7 @@ pub(crate) enum Message {
 
     DownloadUpdate(DownloadUpdate),
 
-    QuickUpdateChecked(Vec<(String, bool)>),
+    QuickUpdateChecked(Vec<InstalledTool>),
     ForceReinstall,
 
     BackToInitial,
@@ -121,9 +121,17 @@ pub(crate) enum QuickUpdateStatus {
     #[default]
     Idle,
     Checking,
-    AllUpToDate(Vec<String>),
+    AllUpToDate(Vec<InstalledTool>),
     InProgress,
     Complete,
+}
+
+/// A tool (and its installed versions) detected for one app during Quick Update.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct InstalledTool {
+    pub app: AppInstallations,
+    pub tool: String,
+    pub versions: Vec<String>,
 }
 
 impl ToolDownload {

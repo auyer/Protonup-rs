@@ -300,22 +300,27 @@ impl ProtonupGui {
 
     pub(crate) async fn check_quick_update_installed(
         detected_apps: Vec<AppInstallations>,
-    ) -> Vec<(String, bool)> {
+    ) -> Vec<crate::message::InstalledTool> {
         let mut results = Vec::new();
 
         for app_inst in &detected_apps {
             let compat_tool = app_inst.as_app().default_compatibility_tool();
             let tool_name = compat_tool.name.clone();
 
-            let is_installed = match app_inst.list_installed_versions().await {
-                Ok(versions) => versions.iter().any(|folder| {
-                    let name = &folder.0.1;
-                    name.starts_with("GE-Proton") || name.starts_with("Proton-")
-                }),
-                Err(_) => false,
+            let installed_versions = match app_inst.list_installed_versions().await {
+                Ok(versions) => versions
+                    .into_iter()
+                    .map(|folder| folder.0.1)
+                    .filter(|name| name.starts_with("GE-Proton") || name.starts_with("Proton-"))
+                    .collect::<Vec<String>>(),
+                Err(_) => Vec::new(),
             };
 
-            results.push((tool_name, is_installed));
+            results.push(crate::message::InstalledTool {
+                app: app_inst.clone(),
+                tool: tool_name,
+                versions: installed_versions,
+            });
         }
 
         results

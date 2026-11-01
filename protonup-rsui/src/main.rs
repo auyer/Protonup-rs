@@ -20,7 +20,8 @@ pub(crate) use crate::download::DownloadPhase;
 pub(crate) use crate::download_task::{DownloadUpdate, ToolProgress};
 #[cfg(test)]
 pub(crate) use crate::message::{
-    AppMode, GuiMode, Message, QuickUpdateStatus, SelectionStep, ToolDownload, ToolStatus,
+    AppMode, GuiMode, InstalledTool, Message, QuickUpdateStatus, SelectionStep, ToolDownload,
+    ToolStatus,
 };
 #[cfg(test)]
 pub(crate) use crate::state::ProtonupGui;

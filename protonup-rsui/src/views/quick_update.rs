@@ -16,7 +16,7 @@ pub(crate) fn view(state: &ProtonupGui) -> Element<'_, Message> {
                     .padding(10),
             )
             .into(),
-        QuickUpdateStatus::AllUpToDate(tool_names) => {
+        QuickUpdateStatus::AllUpToDate(installed_tools) => {
             let mut column = Column::new().spacing(15);
 
             column = column.push(
@@ -27,13 +27,17 @@ pub(crate) fn view(state: &ProtonupGui) -> Element<'_, Message> {
 
             column = column.push(text("The following tools are already installed:").size(14));
 
-            for tool_name in tool_names {
-                column = column.push(
-                    Row::new()
-                        .spacing(10)
-                        .push(text("•").size(14))
-                        .push(text(tool_name).size(14)),
-                );
+            for installed in installed_tools {
+                column = column.push(text(format!("{}", installed.app)).size(14));
+
+                for version in &installed.versions {
+                    column = column.push(
+                        Row::new()
+                            .spacing(10)
+                            .push(text("•").size(14))
+                            .push(text(format!("{} {}", installed.tool, version)).size(14)),
+                    );
+                }
             }
 
             column = column.push(iced::widget::space::vertical().height(Length::Fixed(20.0)));

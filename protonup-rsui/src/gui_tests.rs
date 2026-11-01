@@ -2,8 +2,8 @@
 mod tests {
     use crate::download_task::{DownloadError, GlobalProgress};
     use crate::{
-        AppInstallations, AppMode, DownloadPhase, DownloadUpdate, GuiMode, Message, ProtonupGui,
-        QuickUpdateStatus, SelectionStep, ToolDownload, ToolProgress, ToolStatus,
+        AppInstallations, AppMode, DownloadPhase, DownloadUpdate, GuiMode, InstalledTool, Message,
+        ProtonupGui, QuickUpdateStatus, SelectionStep, ToolDownload, ToolProgress, ToolStatus,
     };
     use iced::widget::image;
     use iced_test::{Error, simulator};
@@ -1055,15 +1055,23 @@ mod tests {
 
         // Simulate all tools installed
         let results = vec![
-            ("GEProton".to_string(), true),
-            ("Wine-GE".to_string(), true),
+            InstalledTool {
+                app: AppInstallations::Steam,
+                tool: "GEProton".to_string(),
+                versions: vec!["GE-Proton11-11".to_string()],
+            },
+            InstalledTool {
+                app: AppInstallations::Lutris,
+                tool: "GEProton".to_string(),
+                versions: vec!["GE-Proton11-11".to_string()],
+            },
         ];
 
-        let _ = crate::update::handle(&mut model, Message::QuickUpdateChecked(results));
+        let _ = crate::update::handle(&mut model, Message::QuickUpdateChecked(results.clone()));
 
         assert_eq!(
             model.quick_update_status,
-            QuickUpdateStatus::AllUpToDate(vec!["GEProton".to_string(), "Wine-GE".to_string()])
+            QuickUpdateStatus::AllUpToDate(results)
         );
         assert_eq!(model.global_status, "Tools are up to date.");
         assert!(model.tools.is_empty()); // Still no tools populated
@@ -1078,7 +1086,11 @@ mod tests {
         model.detected_apps = vec![AppInstallations::Steam];
 
         // Simulate some tools not installed
-        let results = vec![("GEProton".to_string(), false)];
+        let results = vec![InstalledTool {
+            app: AppInstallations::Steam,
+            tool: "GEProton".to_string(),
+            versions: vec![],
+        }];
 
         let _ = crate::update::handle(&mut model, Message::QuickUpdateChecked(results));
 
@@ -1091,7 +1103,11 @@ mod tests {
         let mut model = ready_model();
         model.app_mode = AppMode::QuickUpdate;
         model.mode = GuiMode::QuickUpdate;
-        model.quick_update_status = QuickUpdateStatus::AllUpToDate(vec!["GEProton".to_string()]);
+        model.quick_update_status = QuickUpdateStatus::AllUpToDate(vec![InstalledTool {
+            app: AppInstallations::Steam,
+            tool: "GEProton".to_string(),
+            versions: vec!["GE-Proton11-11".to_string()],
+        }]);
         model.detected_apps = vec![AppInstallations::Steam];
 
         let _ = crate::update::handle(&mut model, Message::ForceReinstall);
@@ -1123,15 +1139,23 @@ mod tests {
 
         // Step 2: Simulate check result - all tools installed
         let results = vec![
-            ("GEProton".to_string(), true),
-            ("Wine-GE".to_string(), true),
+            InstalledTool {
+                app: AppInstallations::Steam,
+                tool: "GEProton".to_string(),
+                versions: vec!["GE-Proton11-11".to_string()],
+            },
+            InstalledTool {
+                app: AppInstallations::Lutris,
+                tool: "GEProton".to_string(),
+                versions: vec!["GE-Proton11-11".to_string()],
+            },
         ];
 
-        let _ = crate::update::handle(&mut model, Message::QuickUpdateChecked(results));
+        let _ = crate::update::handle(&mut model, Message::QuickUpdateChecked(results.clone()));
 
         assert_eq!(
             model.quick_update_status,
-            QuickUpdateStatus::AllUpToDate(vec!["GEProton".to_string(), "Wine-GE".to_string()])
+            QuickUpdateStatus::AllUpToDate(results)
         );
         assert_eq!(model.global_status, "Tools are up to date.");
         assert!(model.tools.is_empty()); // Still no tools populated
@@ -1183,11 +1207,8 @@ mod tests {
         let results = ProtonupGui::check_quick_update_installed(detected_apps).await;
 
         assert_eq!(results.len(), 1);
-        assert_eq!(results[0].0, "GEProton");
-        assert!(
-            results[0].1,
-            "check_quick_update_installed should return true when GEProton folder exists"
-        );
+        assert_eq!(results[0].tool, "GEProton");
+        assert_eq!(results[0].versions, vec!["GE-Proton9-27".to_string()]);
     }
 
     #[test]
@@ -1200,8 +1221,16 @@ mod tests {
 
         // Simulate some tools not installed for both apps
         let results = vec![
-            ("GEProton".to_string(), false),
-            ("GEProton".to_string(), false),
+            InstalledTool {
+                app: AppInstallations::Steam,
+                tool: "GEProton".to_string(),
+                versions: vec![],
+            },
+            InstalledTool {
+                app: AppInstallations::Lutris,
+                tool: "GEProton".to_string(),
+                versions: vec![],
+            },
         ];
 
         let _ = crate::update::handle(&mut model, Message::QuickUpdateChecked(results));
@@ -1277,7 +1306,11 @@ mod tests {
         let mut model = ready_model();
         model.app_mode = AppMode::QuickUpdate;
         model.mode = GuiMode::QuickUpdate;
-        model.quick_update_status = QuickUpdateStatus::AllUpToDate(vec!["GEProton".to_string()]);
+        model.quick_update_status = QuickUpdateStatus::AllUpToDate(vec![InstalledTool {
+            app: AppInstallations::Steam,
+            tool: "GEProton".to_string(),
+            versions: vec!["GE-Proton11-11".to_string()],
+        }]);
         model.detected_apps = vec![AppInstallations::Steam, AppInstallations::Lutris];
 
         let _ = crate::update::handle(&mut model, Message::ForceReinstall);

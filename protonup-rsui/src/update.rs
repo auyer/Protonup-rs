@@ -239,10 +239,9 @@ pub(crate) fn handle(state: &mut ProtonupGui, message: Message) -> Task<Message>
                 return Task::none();
             }
 
-            let all_installed = results.iter().all(|(_, installed)| *installed);
+            let all_installed = results.iter().all(|r| !r.versions.is_empty());
             if all_installed && !results.is_empty() {
-                let tool_names: Vec<String> = results.into_iter().map(|(name, _)| name).collect();
-                state.quick_update_status = QuickUpdateStatus::AllUpToDate(tool_names);
+                state.quick_update_status = QuickUpdateStatus::AllUpToDate(results);
                 state.global_status = "Tools are up to date.".to_string();
                 Task::none()
             } else {
