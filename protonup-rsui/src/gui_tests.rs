@@ -69,6 +69,7 @@ mod tests {
             manage_error: None,
             quick_update_status: QuickUpdateStatus::Idle,
             show_changelog: None,
+            show_all_versions: None,
             logo_handle: image::Handle::from_bytes(crate::LOGO_BYTES),
         }
     }
@@ -134,6 +135,7 @@ mod tests {
             manage_error: None,
             quick_update_status: QuickUpdateStatus::Idle,
             show_changelog: None,
+            show_all_versions: None,
             logo_handle: image::Handle::from_bytes(crate::LOGO_BYTES),
         };
         let mut ui = simulator(crate::views::app_view(&model));
@@ -1058,11 +1060,13 @@ mod tests {
             InstalledTool {
                 app: AppInstallations::Steam,
                 tool: "GEProton".to_string(),
+                latest: Some("GE-Proton11-11".to_string()),
                 versions: vec!["GE-Proton11-11".to_string()],
             },
             InstalledTool {
                 app: AppInstallations::Lutris,
                 tool: "GEProton".to_string(),
+                latest: Some("GE-Proton11-11".to_string()),
                 versions: vec!["GE-Proton11-11".to_string()],
             },
         ];
@@ -1089,6 +1093,7 @@ mod tests {
         let results = vec![InstalledTool {
             app: AppInstallations::Steam,
             tool: "GEProton".to_string(),
+            latest: None,
             versions: vec![],
         }];
 
@@ -1106,6 +1111,7 @@ mod tests {
         model.quick_update_status = QuickUpdateStatus::AllUpToDate(vec![InstalledTool {
             app: AppInstallations::Steam,
             tool: "GEProton".to_string(),
+            latest: Some("GE-Proton11-11".to_string()),
             versions: vec!["GE-Proton11-11".to_string()],
         }]);
         model.detected_apps = vec![AppInstallations::Steam];
@@ -1142,11 +1148,13 @@ mod tests {
             InstalledTool {
                 app: AppInstallations::Steam,
                 tool: "GEProton".to_string(),
+                latest: Some("GE-Proton11-11".to_string()),
                 versions: vec!["GE-Proton11-11".to_string()],
             },
             InstalledTool {
                 app: AppInstallations::Lutris,
                 tool: "GEProton".to_string(),
+                latest: Some("GE-Proton11-11".to_string()),
                 versions: vec!["GE-Proton11-11".to_string()],
             },
         ];
@@ -1224,11 +1232,13 @@ mod tests {
             InstalledTool {
                 app: AppInstallations::Steam,
                 tool: "GEProton".to_string(),
+                latest: None,
                 versions: vec![],
             },
             InstalledTool {
                 app: AppInstallations::Lutris,
                 tool: "GEProton".to_string(),
+                latest: None,
                 versions: vec![],
             },
         ];
@@ -1309,6 +1319,7 @@ mod tests {
         model.quick_update_status = QuickUpdateStatus::AllUpToDate(vec![InstalledTool {
             app: AppInstallations::Steam,
             tool: "GEProton".to_string(),
+            latest: Some("GE-Proton11-11".to_string()),
             versions: vec!["GE-Proton11-11".to_string()],
         }]);
         model.detected_apps = vec![AppInstallations::Steam, AppInstallations::Lutris];

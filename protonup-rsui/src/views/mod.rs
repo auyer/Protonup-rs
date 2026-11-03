@@ -9,6 +9,7 @@ pub mod changelog;
 pub mod confirm_reinstall;
 pub mod custom_location;
 pub mod download_progress;
+pub mod installed_versions;
 pub mod manage_installations;
 pub mod quick_update;
 pub mod selection_flow;

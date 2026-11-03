@@ -42,6 +42,8 @@ pub(crate) enum Message {
 
     ToggleChangelog(Box<Option<(Release, CompatTool)>>),
 
+    ToggleInstalledVersions(Box<Option<InstalledTool>>),
+
     SelectionError(String),
 
     TickSpinner,
@@ -131,7 +133,67 @@ pub(crate) enum QuickUpdateStatus {
 pub(crate) struct InstalledTool {
     pub app: AppInstallations,
     pub tool: String,
+    /// The latest installed version of the app's default tool, if any.
+    pub latest: Option<String>,
+    /// All installed versions for this app (default tool + other tools), newest first.
     pub versions: Vec<String>,
+}
+
+impl InstalledTool {
+    /// Number of installed entries other than the shown "latest" one.
+    pub fn other_count(&self) -> usize {
+        self.versions.len().saturating_sub(1)
+    }
+}
+
+/// Digit-aware (natural) ordering for version strings such as "GE-Proton11-11",
+/// so that "GE-Proton11-2" < "GE-Proton11-11".
+pub(crate) fn cmp_versions(a: &str, b: &str) -> std::cmp::Ordering {
+    fn chunks(s: &str) -> impl Iterator<Item = (bool, &str)> {
+        let bytes = s.as_bytes();
+        let mut i = 0usize;
+        std::iter::from_fn(move || {
+            if i >= bytes.len() {
+                return None;
+            }
+            let is_digit = bytes[i].is_ascii_digit();
+            let mut j = i + 1;
+            while j < bytes.len() && bytes[j].is_ascii_digit() == is_digit {
+                j += 1;
+            }
+            let chunk = &s[i..j];
+            i = j;
+            Some((is_digit, chunk))
+        })
+    }
+
+    fn cmp_digit_runs(a: &str, b: &str) -> std::cmp::Ordering {
+        let a = a.trim_start_matches('0');
+        let b = b.trim_start_matches('0');
+        a.len().cmp(&b.len()).then_with(|| a.cmp(b))
+    }
+
+    let mut ca = chunks(a);
+    let mut cb = chunks(b);
+    loop {
+        match (ca.next(), cb.next()) {
+            (Some((true, x)), Some((true, y))) => {
+                let c = cmp_digit_runs(x, y);
+                if c != std::cmp::Ordering::Equal {
+                    return c;
+                }
+            }
+            (Some((ta, x)), Some((tb, y))) => {
+                let c = x.cmp(y).then_with(|| ta.cmp(&tb));
+                if c != std::cmp::Ordering::Equal {
+                    return c;
+                }
+            }
+            (Some(_), None) => return std::cmp::Ordering::Greater,
+            (None, Some(_)) => return std::cmp::Ordering::Less,
+            (None, None) => return std::cmp::Ordering::Equal,
+        }
+    }
 }
 
 impl ToolDownload {

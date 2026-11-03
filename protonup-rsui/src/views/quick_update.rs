@@ -1,9 +1,10 @@
-use iced::widget::{Column, Container, Row, button, text};
+use iced::widget::{Column, Container, Row, button, scrollable, text};
 use iced::{Element, Length};
 
 use crate::circular::Circular;
 use crate::message::{Message, QuickUpdateStatus};
 use crate::state::{ProtonupGui, warning_button_style};
+use crate::views::installed_versions;
 
 pub(crate) fn view(state: &ProtonupGui) -> Element<'_, Message> {
     match &state.quick_update_status {
@@ -30,13 +31,35 @@ pub(crate) fn view(state: &ProtonupGui) -> Element<'_, Message> {
             for installed in installed_tools {
                 column = column.push(text(format!("{}", installed.app)).size(14));
 
-                for version in &installed.versions {
+                if let Some(latest) = &installed.latest {
                     column = column.push(
                         Row::new()
                             .spacing(10)
                             .push(text("•").size(14))
-                            .push(text(format!("{} {}", installed.tool, version)).size(14)),
+                            .push(text(format!("Latest: {} {}", installed.tool, latest)).size(14)),
                     );
+
+                    let other_count = installed.other_count();
+                    if other_count > 0 {
+                        let info = installed.clone();
+                        column = column.push(
+                            Row::new().spacing(10).push(
+                                iced::widget::space::horizontal().width(Length::Fixed(22.0)),
+                            ).push(
+                                button(
+                                    text(format!(
+                                        "({other_count} other version{} installed — click to see all)",
+                                        if other_count == 1 { "" } else { "s" }
+                                    ))
+                                    .size(13)
+                                    .color([0.3, 0.5, 0.9]),
+                                )
+                                .on_press(Message::ToggleInstalledVersions(Box::new(Some(info))))
+                                .style(iced::widget::button::text)
+                                .padding([1.0, 4.0]),
+                            ),
+                        );
+                    }
                 }
             }
 
@@ -55,7 +78,19 @@ pub(crate) fn view(state: &ProtonupGui) -> Element<'_, Message> {
                     .padding(10),
             );
 
-            column.into()
+            let left_element: Element<_> = scrollable(column).into();
+
+            if let Some(info) = &state.show_all_versions {
+                let right = Container::new(installed_versions::view(info))
+                    .width(Length::FillPortion(2))
+                    .padding(10);
+
+                let left_portion = Container::new(left_element).width(Length::FillPortion(1));
+
+                Row::new().push(left_portion).push(right).into()
+            } else {
+                left_element
+            }
         }
         QuickUpdateStatus::InProgress => Column::new()
             .spacing(10)

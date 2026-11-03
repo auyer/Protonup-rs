@@ -12,7 +12,8 @@ use libprotonup::sources::CompatTool;
 use crate::download::DownloadPhase;
 use crate::download_task;
 use crate::message::{
-    AppInstallationView, AppMode, GuiMode, Message, QuickUpdateStatus, SelectionStep, ToolDownload,
+    AppInstallationView, AppMode, GuiMode, InstalledTool, Message, QuickUpdateStatus,
+    SelectionStep, ToolDownload,
 };
 
 use crate::LOGO_BYTES;
@@ -63,6 +64,8 @@ pub(crate) struct ProtonupGui {
 
     pub show_changelog: Option<(libprotonup::downloads::Release, CompatTool)>,
 
+    pub show_all_versions: Option<InstalledTool>,
+
     pub logo_handle: iced::widget::image::Handle,
 }
 
@@ -98,6 +101,7 @@ impl Default for ProtonupGui {
             manage_error: None,
             quick_update_status: QuickUpdateStatus::default(),
             show_changelog: None,
+            show_all_versions: None,
             logo_handle: iced::widget::image::Handle::from_bytes(LOGO_BYTES),
         }
     }
@@ -300,7 +304,9 @@ impl ProtonupGui {
 
     pub(crate) async fn check_quick_update_installed(
         detected_apps: Vec<AppInstallations>,
-    ) -> Vec<crate::message::InstalledTool> {
+    ) -> Vec<InstalledTool> {
+        use crate::message::cmp_versions;
+
         let mut results = Vec::new();
 
         for app_inst in &detected_apps {
@@ -311,15 +317,27 @@ impl ProtonupGui {
                 Ok(versions) => versions
                     .into_iter()
                     .map(|folder| folder.0.1)
-                    .filter(|name| name.starts_with("GE-Proton") || name.starts_with("Proton-"))
                     .collect::<Vec<String>>(),
                 Err(_) => Vec::new(),
             };
 
-            results.push(crate::message::InstalledTool {
+            // Versions belonging to the app's default tool (folder naming convention).
+            let tool_versions = installed_versions
+                .iter()
+                .filter(|name| name.starts_with("GE-Proton") || name.starts_with("Proton-"));
+
+            // Latest installed version of the default tool (natural ordering).
+            let latest = tool_versions.max_by(|a, b| cmp_versions(a, b)).cloned();
+
+            // Full installed list for this app (all tools), newest first.
+            let mut versions = installed_versions;
+            versions.sort_by(|a, b| cmp_versions(b, a));
+
+            results.push(InstalledTool {
                 app: app_inst.clone(),
                 tool: tool_name,
-                versions: installed_versions,
+                latest,
+                versions,
             });
         }
 

@@ -239,7 +239,7 @@ pub(crate) fn handle(state: &mut ProtonupGui, message: Message) -> Task<Message>
                 return Task::none();
             }
 
-            let all_installed = results.iter().all(|r| !r.versions.is_empty());
+            let all_installed = results.iter().all(|r| r.latest.is_some());
             if all_installed && !results.is_empty() {
                 state.quick_update_status = QuickUpdateStatus::AllUpToDate(results);
                 state.global_status = "Tools are up to date.".to_string();
@@ -247,6 +247,7 @@ pub(crate) fn handle(state: &mut ProtonupGui, message: Message) -> Task<Message>
             } else {
                 state.quick_update_status = QuickUpdateStatus::InProgress;
                 state.global_status = "Starting Quick Update...".to_string();
+                state.show_all_versions = None;
 
                 state.tools.clear();
 
@@ -260,6 +261,7 @@ pub(crate) fn handle(state: &mut ProtonupGui, message: Message) -> Task<Message>
         Message::ForceReinstall => {
             state.quick_update_status = QuickUpdateStatus::InProgress;
             state.global_status = "Force reinstalling tools...".to_string();
+            state.show_all_versions = None;
 
             state.tools.clear();
 
@@ -363,6 +365,13 @@ pub(crate) fn handle(state: &mut ProtonupGui, message: Message) -> Task<Message>
 
         Message::ToggleChangelog(changelog) => {
             state.show_changelog = *changelog;
+            Task::none()
+        }
+
+        Message::ToggleInstalledVersions(info) => {
+            if state.app_mode == AppMode::QuickUpdate {
+                state.show_all_versions = *info;
+            }
             Task::none()
         }
 
