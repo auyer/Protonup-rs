@@ -6,7 +6,9 @@ mod tests {
         ProtonupGui, QuickUpdateStatus, SelectionStep, ToolDownload, ToolProgress, ToolStatus,
     };
     use iced::widget::image;
-    use iced_test::{Error, simulator};
+    use iced::{Settings, Size};
+    use iced_test::selector::Candidate;
+    use iced_test::{Error, Simulator, simulator};
     use libprotonup::architecture_variants::MicroArchVariants;
     use libprotonup::downloads::Release;
     use libprotonup::sources::{CompatTool, Forge, ToolType};
@@ -88,6 +90,44 @@ mod tests {
 
         // Should show placeholder text when no action selected
         assert!(ui.find("⬅️ Choose your option").is_ok());
+
+        Ok(())
+    }
+
+    #[test]
+    fn sidebar_scrolls_when_buttons_do_not_fit() -> Result<(), Error> {
+        let model = ProtonupGui::default();
+        let mut ui = Simulator::with_size(
+            Settings::default(),
+            Size::new(320.0, 400.0),
+            crate::views::app_view(&model),
+        );
+
+        // The sidebar wraps its content in a scrollable. With a small viewport
+        // the content must be taller than the scrollable viewport (i.e. it
+        // scrolls instead of clipping the buttons below the fold).
+        let (viewport, content) = ui.find(|candidate: Candidate<'_>| match candidate {
+            Candidate::Scrollable {
+                bounds,
+                content_bounds,
+                ..
+            } => Some((bounds, content_bounds)),
+            _ => None,
+        })?;
+
+        assert!(
+            content.height > viewport.height,
+            "scrollable content ({}) should exceed viewport ({})",
+            content.height,
+            viewport.height
+        );
+
+        // The Close button is pinned below the scrollable, so it stays visible.
+        let close = ui.find("Close")?;
+        let visible = close
+            .visible_bounds()
+            .expect("Close button should have visible bounds");
+        assert!(visible.height > 0.0);
 
         Ok(())
     }

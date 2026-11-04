@@ -1,4 +1,4 @@
-use iced::widget::{Column, Container, button, container, image, rule, text};
+use iced::widget::{Column, Container, button, container, image, rule, scrollable, text};
 use iced::{ContentFit, Element, Length};
 
 use crate::message::{AppMode, Message, QuickUpdateStatus, SelectionStep};
@@ -9,7 +9,7 @@ mod circular_widget {
 }
 
 pub(crate) fn sidebar(state: &ProtonupGui) -> Element<'_, Message> {
-    let mut column = Column::new().spacing(10).padding(10).width(220);
+    let mut column = Column::new().spacing(10).width(Length::Fill);
 
     let logo_handle = &state.logo_handle;
     column = column.push(
@@ -138,15 +138,25 @@ pub(crate) fn sidebar(state: &ProtonupGui) -> Element<'_, Message> {
         );
     }
 
-    column = column.push(iced::widget::space::vertical());
+    let scrollable = scrollable(column).width(Length::Fill).height(Length::Fill);
 
-    column = column.push(
-        button(text("Close").size(14))
-            .on_press(Message::CloseRequested)
-            .padding(10)
-            .width(Length::Fill)
-            .style(warning_button_style()),
-    );
+    let close_button = button(text("Close").size(14))
+        .on_press(Message::CloseRequested)
+        .padding(10)
+        .width(Length::Fill)
+        .style(warning_button_style());
 
-    container(column).style(container::rounded_box).into()
+    let content = Column::new()
+        .spacing(10)
+        .padding(10)
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .push(scrollable)
+        .push(close_button);
+
+    container(content)
+        .width(220)
+        .height(Length::Fill)
+        .style(container::rounded_box)
+        .into()
 }

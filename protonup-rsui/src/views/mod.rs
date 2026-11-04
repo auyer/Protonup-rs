@@ -1,5 +1,5 @@
 use iced::widget::{Column, Row, container, text};
-use iced::{Center, Element};
+use iced::{Center, Element, Length};
 
 use crate::message::Message;
 use crate::state::ProtonupGui;
@@ -37,7 +37,15 @@ pub(crate) fn app_view(state: &ProtonupGui) -> Element<'_, Message> {
     let main_content = selection_flow::view_main_content(state);
 
     Column::new()
+        .width(Length::Fill)
+        .height(Length::Fill)
         .push(header)
-        .push(Row::new().push(sidebar).push(main_content))
+        .push(
+            Row::new()
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .push(sidebar)
+                .push(main_content),
+        )
         .into()
 }
