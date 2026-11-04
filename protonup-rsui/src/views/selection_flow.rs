@@ -4,10 +4,45 @@ use iced::{Element, Fill};
 use crate::message::{AppMode, GuiMode, Message, QuickUpdateStatus, SelectionStep};
 use crate::state::ProtonupGui;
 
+use super::action_bar::Action;
 use super::{
     architecture_selection, confirm_reinstall, custom_location, download_progress,
     manage_installations, quick_update, tool_selection, version_selection,
 };
+
+/// The action bar for the current state.
+///
+/// This is the single source of truth for the action pane: both rendering and
+/// [`crate::input::pane_grid`] derive from it, so focus order always matches
+/// what is on screen.
+pub(crate) fn view_actions(state: &ProtonupGui) -> Vec<Action> {
+    if state.app_mode == AppMode::None {
+        return Vec::new();
+    }
+
+    if downloading(state) {
+        return download_progress::actions(state);
+    }
+
+    match &state.mode {
+        GuiMode::QuickUpdate => quick_update::actions(state),
+        GuiMode::DownloadForSteam | GuiMode::DownloadForLutris | GuiMode::DownloadForCustom => {
+            view_selection_actions(state)
+        }
+        GuiMode::CheckWhatsNew => version_selection::actions(state),
+        GuiMode::ManageInstallations => manage_installations::actions(state),
+        GuiMode::Initial => Vec::new(),
+    }
+}
+
+pub(crate) fn downloading(state: &ProtonupGui) -> bool {
+    state.download_started
+        && state.selection_step == SelectionStep::Downloading
+        && !matches!(
+            state.quick_update_status,
+            QuickUpdateStatus::Checking | QuickUpdateStatus::AllUpToDate(_)
+        )
+}
 
 pub(crate) fn view_main_content(state: &ProtonupGui) -> Element<'_, Message> {
     let content: Element<Message> = {
@@ -16,13 +51,7 @@ pub(crate) fn view_main_content(state: &ProtonupGui) -> Element<'_, Message> {
                 .width(Fill)
                 .height(Fill)
                 .into()
-        } else if state.download_started
-            && state.selection_step == SelectionStep::Downloading
-            && !matches!(
-                state.quick_update_status,
-                QuickUpdateStatus::Checking | QuickUpdateStatus::AllUpToDate(_)
-            )
-        {
+        } else if downloading(state) {
             Column::new()
                 .spacing(10)
                 .push(download_progress::view(state))
@@ -43,11 +72,21 @@ pub(crate) fn view_main_content(state: &ProtonupGui) -> Element<'_, Message> {
         }
     };
 
-    container(content)
-        .padding(20)
-        .width(Fill)
-        .height(Fill)
-        .into()
+    container(content).width(Fill).height(Fill).into()
+}
+
+fn view_selection_actions(state: &ProtonupGui) -> Vec<Action> {
+    if state.mode == GuiMode::DownloadForCustom && state.selection_step == SelectionStep::Initial {
+        return custom_location::actions(state);
+    }
+
+    match &state.selection_step {
+        SelectionStep::SelectingTools => tool_selection::actions(state),
+        SelectionStep::SelectingVersions => version_selection::actions(state),
+        SelectionStep::SelectingArchitecture => architecture_selection::actions(state),
+        SelectionStep::ConfirmReinstall => confirm_reinstall::actions(state),
+        SelectionStep::Initial | SelectionStep::Downloading => Vec::new(),
+    }
 }
 
 fn view_selection_flow(state: &ProtonupGui) -> Element<'_, Message> {

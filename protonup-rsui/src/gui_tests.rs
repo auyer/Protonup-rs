@@ -73,6 +73,11 @@ mod tests {
             show_changelog: None,
             show_all_versions: None,
             logo_handle: image::Handle::from_bytes(crate::LOGO_BYTES),
+            focus: crate::FocusState::default(),
+            show_keyboard_shortcuts: false,
+            show_controller_shortcuts: false,
+            gamepads_unavailable: false,
+            gamepads: Default::default(),
         }
     }
 
@@ -177,6 +182,11 @@ mod tests {
             show_changelog: None,
             show_all_versions: None,
             logo_handle: image::Handle::from_bytes(crate::LOGO_BYTES),
+            focus: crate::FocusState::default(),
+            show_keyboard_shortcuts: false,
+            show_controller_shortcuts: false,
+            gamepads_unavailable: false,
+            gamepads: Default::default(),
         };
         let mut ui = simulator(crate::views::app_view(&model));
 
@@ -1701,6 +1711,735 @@ mod tests {
         assert!(
             model.show_changelog.is_none(),
             "resetting to the main menu must close the changelog pane"
+        );
+    }
+
+    //
+    // Keyboard / controller navigation
+    //
+
+    use crate::input::{
+        StickState, apply_nav_action, focused_option, gamepad_to_message, keyboard_to_message,
+        pane_grid, primary_action,
+    };
+    use gilrs::Button;
+    use iced::keyboard::key::Named;
+    use iced::keyboard::{Event as KeyEvent, Key, Location, Modifiers};
+
+    fn key_pressed(named: Named, modifiers: Modifiers) -> KeyEvent {
+        KeyEvent::KeyPressed {
+            key: Key::Named(named),
+            modified_key: Key::Named(named),
+            physical_key: iced::keyboard::key::Physical::Code(iced::keyboard::key::Code::Tab),
+            location: Location::Standard,
+            modifiers,
+            text: None,
+            repeat: false,
+        }
+    }
+
+    fn repeat_pressed(named: Named) -> KeyEvent {
+        KeyEvent::KeyPressed {
+            key: Key::Named(named),
+            modified_key: Key::Named(named),
+            physical_key: iced::keyboard::key::Physical::Code(iced::keyboard::key::Code::Tab),
+            location: Location::Standard,
+            modifiers: Modifiers::default(),
+            text: None,
+            repeat: true,
+        }
+    }
+
+    fn model_in_tool_selection() -> ProtonupGui {
+        let mut model = ready_model();
+        model.mode = GuiMode::DownloadForSteam;
+        model.app_mode = AppMode::DownloadForSteam;
+        model.selection_step = SelectionStep::SelectingTools;
+        model.available_tools = vec![
+            make_test_tool(),
+            CompatTool::from_str("Luxtorpeda").unwrap(),
+            CompatTool::from_str("Luxtorpeda").unwrap(),
+        ];
+        model
+    }
+
+    /// Asserts that two messages are the same variant (messages are not PartialEq).
+    fn same_variant(label: &str, expected: &str, actual: &str) {
+        assert_eq!(expected, actual, "{}", label);
+    }
+
+    fn msg_name(message: &Message) -> String {
+        match message {
+            Message::Nav(crate::NavAction::FocusNextPane) => "FocusNextPane".into(),
+            Message::Nav(crate::NavAction::FocusPreviousPane) => "FocusPreviousPane".into(),
+            Message::Nav(crate::NavAction::MoveUp) => "MoveUp".into(),
+            Message::Nav(crate::NavAction::MoveDown) => "MoveDown".into(),
+            Message::Nav(crate::NavAction::MoveLeft) => "MoveLeft".into(),
+            Message::Nav(crate::NavAction::MoveRight) => "MoveRight".into(),
+            Message::Nav(crate::NavAction::Select) => "Select".into(),
+            Message::Nav(crate::NavAction::Primary) => "Primary".into(),
+            Message::StartSelectedDownloads => "StartSelectedDownloads".into(),
+            Message::BackToInitial => "BackToInitial".into(),
+            Message::ToolChosen(_) => "ToolChosen".into(),
+            Message::ToggleKeyboardShortcuts => "ToggleKeyboardShortcuts".into(),
+            Message::ToggleControllerShortcuts => "ToggleControllerShortcuts".into(),
+            Message::CloseShortcuts => "CloseShortcuts".into(),
+            other => format!("other({:?})", std::mem::discriminant(other)),
+        }
+    }
+
+    #[test]
+    fn keyboard_tab_maps_to_next_pane() {
+        let msg = keyboard_to_message(&key_pressed(Named::Tab, Modifiers::default()));
+        same_variant(
+            "Tab",
+            "FocusNextPane",
+            &msg_name(&msg.expect("Tab should map")),
+        );
+    }
+
+    #[test]
+    fn keyboard_shift_tab_maps_to_previous_pane() {
+        let msg = keyboard_to_message(&key_pressed(Named::Tab, Modifiers::SHIFT));
+        same_variant(
+            "Shift+Tab",
+            "FocusPreviousPane",
+            &msg_name(&msg.expect("Shift+Tab should map")),
+        );
+    }
+
+    #[test]
+    fn keyboard_arrows_map_to_movement() {
+        for (named, expected) in [
+            (Named::ArrowUp, "MoveUp"),
+            (Named::ArrowDown, "MoveDown"),
+            (Named::ArrowLeft, "MoveLeft"),
+            (Named::ArrowRight, "MoveRight"),
+        ] {
+            let msg = keyboard_to_message(&key_pressed(named, Modifiers::default()))
+                .expect("arrow should map");
+            same_variant(&format!("{:?}", named), expected, &msg_name(&msg));
+        }
+    }
+
+    #[test]
+    fn keyboard_space_selects_and_enter_is_primary() {
+        let select = keyboard_to_message(&key_pressed(Named::Space, Modifiers::default()))
+            .expect("Space should map");
+        same_variant("Space", "Select", &msg_name(&select));
+
+        let primary = keyboard_to_message(&key_pressed(Named::Enter, Modifiers::default()))
+            .expect("Enter should map");
+        same_variant("Enter", "Primary", &msg_name(&primary));
+    }
+
+    #[test]
+    fn keyboard_activation_keys_ignore_repeats() {
+        assert!(
+            keyboard_to_message(&repeat_pressed(Named::Space)).is_none(),
+            "held Space must not re-activate"
+        );
+        assert!(
+            keyboard_to_message(&repeat_pressed(Named::Enter)).is_none(),
+            "held Enter must not re-activate"
+        );
+        // Movement repeats are still allowed (hold-to-scroll).
+        assert!(keyboard_to_message(&repeat_pressed(Named::ArrowDown)).is_some());
+    }
+
+    #[test]
+    fn keyboard_question_mark_toggles_keyboard_shortcuts() {
+        let event = KeyEvent::KeyPressed {
+            key: Key::Character("?".into()),
+            modified_key: Key::Character("?".into()),
+            physical_key: iced::keyboard::key::Physical::Code(iced::keyboard::key::Code::Slash),
+            location: Location::Standard,
+            modifiers: Modifiers::SHIFT,
+            text: Some("?".into()),
+            repeat: false,
+        };
+        let msg = keyboard_to_message(&event).expect("? should map");
+        same_variant("?", "ToggleKeyboardShortcuts", &msg_name(&msg));
+    }
+
+    #[test]
+    fn keyboard_escape_closes_shortcuts() {
+        let msg = keyboard_to_message(&key_pressed(Named::Escape, Modifiers::default()))
+            .expect("Escape should map");
+        same_variant("Escape", "CloseShortcuts", &msg_name(&msg));
+    }
+
+    #[test]
+    fn keyboard_unrelated_keys_are_ignored() {
+        assert!(keyboard_to_message(&key_pressed(Named::F5, Modifiers::default())).is_none());
+        // Key releases do not navigate.
+        assert!(
+            keyboard_to_message(&KeyEvent::KeyReleased {
+                key: Key::Named(Named::Tab),
+                modified_key: Key::Named(Named::Tab),
+                physical_key: iced::keyboard::key::Physical::Code(iced::keyboard::key::Code::Tab,),
+                location: Location::Standard,
+                modifiers: Modifiers::default(),
+            })
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn gamepad_buttons_map_to_navigation() {
+        let cases = [
+            (Button::RightTrigger, "FocusNextPane"),
+            (Button::RightTrigger2, "FocusNextPane"),
+            (Button::LeftTrigger, "FocusPreviousPane"),
+            (Button::LeftTrigger2, "FocusPreviousPane"),
+            (Button::DPadUp, "MoveUp"),
+            (Button::DPadDown, "MoveDown"),
+            (Button::DPadLeft, "MoveLeft"),
+            (Button::DPadRight, "MoveRight"),
+            (Button::South, "Select"),
+            (Button::Start, "Primary"),
+            (Button::North, "ToggleControllerShortcuts"),
+            (Button::East, "CloseShortcuts"),
+        ];
+
+        for (button, expected) in cases {
+            let msg = gamepad_to_message(button).expect("button should map");
+            same_variant(&format!("{:?}", button), expected, &msg_name(&msg));
+        }
+    }
+
+    #[test]
+    fn gamepad_unmapped_buttons_are_ignored() {
+        assert!(gamepad_to_message(Button::West).is_none());
+        assert!(gamepad_to_message(Button::Select).is_none());
+    }
+
+    #[test]
+    fn stick_is_edge_triggered_with_deadzone() {
+        let mut stick = StickState::default();
+
+        // Inside the deadzone: nothing.
+        assert!(stick.sample((0.1, 0.1)).is_none());
+
+        // Pushed down past the deadzone: one step.
+        let first = stick.sample((0.0, -0.9)).expect("first push should step");
+        same_variant("stick down", "MoveDown", &msg_name(&first));
+
+        // Held: no repeat.
+        assert!(
+            stick.sample((0.0, -0.9)).is_none(),
+            "holding the stick must not repeat"
+        );
+
+        // Back to centre then down again: another step.
+        assert!(stick.sample((0.0, 0.0)).is_none());
+        assert!(stick.sample((0.0, -0.9)).is_some());
+    }
+
+    #[test]
+    fn stick_horizontal_pushes_map_to_left_and_right() {
+        let mut stick = StickState::default();
+        let right = stick.sample((0.9, 0.0)).expect("right push");
+        same_variant("stick right", "MoveRight", &msg_name(&right));
+
+        assert!(stick.sample((0.0, 0.0)).is_none());
+        let left = stick.sample((-0.9, 0.0)).expect("left push");
+        same_variant("stick left", "MoveLeft", &msg_name(&left));
+    }
+
+    #[test]
+    fn sidebar_grid_skips_disabled_entries() {
+        let mut model = ready_model();
+        assert_eq!(pane_grid(&model, crate::Pane::Sidebar).len(), 7);
+
+        // Entering a mode disables that mode's own sidebar entry.
+        model.app_mode = AppMode::DownloadForSteam;
+        let grid = pane_grid(&model, crate::Pane::Sidebar);
+        assert_eq!(
+            grid.len(),
+            6,
+            "the active mode's entry must not be focusable"
+        );
+        assert!(
+            grid.iter().all(|row| row.len() == 1),
+            "sidebar is one column"
+        );
+    }
+
+    #[test]
+    fn tool_selection_grid_matches_rendered_options() {
+        let model = model_in_tool_selection();
+        let grid = pane_grid(&model, crate::Pane::Main);
+        assert_eq!(grid.len(), 3, "one row per tool");
+        assert!(grid.iter().all(|row| row.len() == 1));
+    }
+
+    #[test]
+    fn actions_grid_matches_action_bar() {
+        let model = model_in_tool_selection();
+        let grid = pane_grid(&model, crate::Pane::Actions);
+        assert_eq!(grid.len(), 1, "actions are a single row");
+        assert_eq!(grid[0].len(), 1, "tool selection has the Back action");
+    }
+
+    #[test]
+    fn manage_grid_is_apps_columns_by_versions_rows() {
+        let mut model = ready_model();
+        model.app_mode = AppMode::ManageInstallations;
+        model.mode = GuiMode::ManageInstallations;
+        model.app_installations_views = vec![
+            crate::message::AppInstallationView {
+                app: AppInstallations::Steam,
+                versions: vec![
+                    crate::message::InstalledVersion {
+                        name: "GE-Proton9-1".into(),
+                        path: PathBuf::from("/tmp/a"),
+                        selected_for_deletion: false,
+                    },
+                    crate::message::InstalledVersion {
+                        name: "GE-Proton9-2".into(),
+                        path: PathBuf::from("/tmp/b"),
+                        selected_for_deletion: false,
+                    },
+                ],
+                loading: false,
+            },
+            crate::message::AppInstallationView {
+                app: AppInstallations::Lutris,
+                versions: vec![crate::message::InstalledVersion {
+                    name: "GE-Proton9-3".into(),
+                    path: PathBuf::from("/tmp/c"),
+                    selected_for_deletion: false,
+                }],
+                loading: false,
+            },
+        ];
+
+        let grid = pane_grid(&model, crate::Pane::Main);
+        assert_eq!(grid.len(), 2, "two version rows");
+        assert_eq!(grid[0].len(), 2, "both apps have a first version");
+        assert_eq!(grid[1].len(), 1, "only Steam has a second version");
+    }
+
+    #[test]
+    fn primary_action_per_view() {
+        // Tool selection: there is no "advance" action, Enter falls back.
+        let model = model_in_tool_selection();
+        assert!(primary_action(&model).is_none());
+
+        // Version selection for a download: Start Selected Downloads.
+        let mut model = model_in_tool_selection();
+        model.selection_step = SelectionStep::SelectingVersions;
+        model.available_versions = vec![make_test_release("v1")];
+        let msg = primary_action(&model).expect("downloads have a primary action");
+        same_variant("versions", "StartSelectedDownloads", &msg_name(&msg));
+
+        // Check What's New has no advance action.
+        let mut model = model_in_tool_selection();
+        model.mode = GuiMode::CheckWhatsNew;
+        model.app_mode = AppMode::CheckWhatsNew;
+        model.selection_step = SelectionStep::SelectingVersions;
+        assert!(primary_action(&model).is_none());
+    }
+
+    #[test]
+    fn left_right_cycles_panes_when_no_horizontal_neighbour() {
+        let mut model = model_in_tool_selection();
+        model.focus.engaged = true;
+        model.focus.pane = crate::Pane::Main;
+        model.focus.row = 0;
+        model.focus.col = 0;
+
+        // Single-column pane: right falls through to the next pane.
+        apply_nav_action(&mut model, crate::NavAction::MoveRight);
+        assert_eq!(model.focus.pane, crate::Pane::Actions);
+        assert_eq!((model.focus.row, model.focus.col), (0, 0));
+
+        // And left goes back.
+        apply_nav_action(&mut model, crate::NavAction::MoveLeft);
+        assert_eq!(model.focus.pane, crate::Pane::Main);
+    }
+
+    #[test]
+    fn left_right_moves_within_multi_column_rows() {
+        let mut model = model_in_tool_selection();
+        model.selection_step = SelectionStep::SelectingVersions;
+        model.available_versions = vec![make_test_release("v1")];
+        model.focus.engaged = true;
+        model.focus.pane = crate::Pane::Actions;
+
+        // Three action buttons in one row.
+        apply_nav_action(&mut model, crate::NavAction::MoveRight);
+        assert_eq!((model.focus.row, model.focus.col), (0, 1));
+        assert_eq!(model.focus.pane, crate::Pane::Actions);
+
+        apply_nav_action(&mut model, crate::NavAction::MoveLeft);
+        assert_eq!((model.focus.row, model.focus.col), (0, 0));
+    }
+
+    #[test]
+    fn vertical_movement_clamps_at_grid_edges() {
+        let mut model = model_in_tool_selection();
+        model.focus.engaged = true;
+        model.focus.pane = crate::Pane::Main;
+
+        apply_nav_action(&mut model, crate::NavAction::MoveUp);
+        assert_eq!(model.focus.row, 0, "cannot move above the first row");
+
+        apply_nav_action(&mut model, crate::NavAction::MoveDown);
+        assert_eq!(model.focus.row, 1);
+        apply_nav_action(&mut model, crate::NavAction::MoveDown);
+        apply_nav_action(&mut model, crate::NavAction::MoveDown);
+        assert_eq!(model.focus.row, 2, "clamped to the last row");
+    }
+
+    #[test]
+    fn focus_cursor_survives_grid_shrink() {
+        let mut model = model_in_tool_selection();
+        model.focus.engaged = true;
+        model.focus.pane = crate::Pane::Main;
+        model.focus.row = 2;
+
+        // Tools disappear (e.g. reload); moving must not panic and must clamp.
+        model.available_tools.clear();
+        apply_nav_action(&mut model, crate::NavAction::MoveDown);
+        assert!(focused_option(&model).is_none());
+    }
+
+    #[test]
+    fn select_activates_focused_option() {
+        let mut model = model_in_tool_selection();
+        model.focus.engaged = true;
+        model.focus.pane = crate::Pane::Main;
+        model.focus.row = 1;
+
+        let msg = apply_nav_action(&mut model, crate::NavAction::Select).expect("should activate");
+        assert!(
+            matches!(msg, Message::ToolChosen(1)),
+            "expected the second tool, got {:?}",
+            msg_name(&msg)
+        );
+    }
+
+    #[test]
+    fn nav_engages_focus_and_dispatches_through_update() {
+        let mut model = model_in_tool_selection();
+        assert!(!model.focus.engaged, "focus starts disengaged");
+
+        let _ = crate::update::handle(&mut model, Message::Nav(crate::NavAction::MoveDown));
+
+        assert!(model.focus.engaged, "first navigation engages highlighting");
+        assert_eq!(model.focus.row, 1, "MoveDown advanced from the start");
+    }
+
+    #[test]
+    fn shortcut_panels_toggle_exclusively() {
+        let mut model = ready_model();
+
+        let _ = crate::update::handle(&mut model, Message::ToggleKeyboardShortcuts);
+        assert!(model.show_keyboard_shortcuts);
+
+        let _ = crate::update::handle(&mut model, Message::ToggleControllerShortcuts);
+        assert!(
+            !model.show_keyboard_shortcuts,
+            "opening controller help closes keyboard help"
+        );
+        assert!(model.show_controller_shortcuts);
+
+        let _ = crate::update::handle(&mut model, Message::CloseShortcuts);
+        assert!(!model.show_keyboard_shortcuts && !model.show_controller_shortcuts);
+    }
+
+    #[test]
+    fn nav_closes_open_shortcut_panel() {
+        let mut model = ready_model();
+        model.show_keyboard_shortcuts = true;
+
+        let _ = crate::update::handle(&mut model, Message::Nav(crate::NavAction::Select));
+
+        assert!(
+            !model.show_keyboard_shortcuts,
+            "any activation closes the panel"
+        );
+        assert!(
+            !model.focus.engaged,
+            "closing the panel must not move focus"
+        );
+    }
+
+    #[test]
+    fn controller_shortcuts_refused_when_gamepads_unavailable() {
+        let mut model = ready_model();
+        model.gamepads_unavailable = true;
+
+        let _ = crate::update::handle(&mut model, Message::ToggleControllerShortcuts);
+
+        assert!(
+            !model.show_controller_shortcuts,
+            "no controller help without a controller backend"
+        );
+    }
+
+    #[test]
+    fn footer_advertises_both_shortcut_panels() -> Result<(), Error> {
+        let model = ready_model();
+        let mut ui = simulator(crate::views::app_view(&model));
+
+        assert!(
+            ui.find(crate::views::footer::KEYBOARD_HINT).is_ok(),
+            "the keyboard hint must be visible on the main pane"
+        );
+        assert!(
+            ui.find(crate::views::footer::CONTROLLER_HINT).is_ok(),
+            "the controller hint must be visible on the main pane"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn keyboard_shortcut_panel_renders() -> Result<(), Error> {
+        let mut model = ready_model();
+        model.show_keyboard_shortcuts = true;
+        let mut ui = simulator(crate::views::app_view(&model));
+
+        assert!(ui.find("Keyboard Shortcuts").is_ok());
+        assert!(
+            ui.find("Focus the next pane (Sidebar → Main → Actions)")
+                .is_ok(),
+            "the panel must list the Tab shortcut"
+        );
+        assert!(
+            ui.find("Quick Update").is_err(),
+            "the normal layout is replaced while the panel is open"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn controller_shortcut_panel_renders() -> Result<(), Error> {
+        let mut model = ready_model();
+        model.show_controller_shortcuts = true;
+        let mut ui = simulator(crate::views::app_view(&model));
+
+        assert!(ui.find("Controller Shortcuts").is_ok());
+        assert!(ui.find("RB / RT").is_ok());
+
+        Ok(())
+    }
+
+    #[test]
+    fn none_of_the_footer_hints_are_focusable() {
+        // The hint bar is informational: it must not enter any pane grid.
+        let model = ready_model();
+        let mut all = pane_grid(&model, crate::Pane::Sidebar);
+        all.extend(pane_grid(&model, crate::Pane::Main));
+        all.extend(pane_grid(&model, crate::Pane::Actions));
+
+        assert!(
+            all.iter().all(|row| row.iter().all(|option| !matches!(
+                option.message,
+                Message::ToggleKeyboardShortcuts | Message::ToggleControllerShortcuts
+            ))),
+            "hint buttons must stay out of the navigation grid"
+        );
+    }
+
+    #[test]
+    fn controller_back_button_behaves_like_escape() {
+        // (B)/(circle) must map to the same message as the Escape key.
+        let gamepad = gamepad_to_message(Button::East).expect("B must map");
+        let escape =
+            keyboard_to_message(&key_pressed(Named::Escape, Modifiers::default())).expect("Esc");
+
+        assert_eq!(msg_name(&gamepad), "CloseShortcuts");
+        assert_eq!(msg_name(&escape), "CloseShortcuts");
+    }
+
+    #[test]
+    fn controller_back_closes_an_open_shortcut_panel() {
+        let mut model = ready_model();
+        model.show_controller_shortcuts = true;
+
+        let msg = gamepad_to_message(Button::East).expect("B must map");
+        let _ = crate::update::handle(&mut model, msg);
+
+        assert!(
+            !model.show_controller_shortcuts,
+            "(B)/(circle) must close the shortcut panel like Escape"
+        );
+    }
+
+    #[test]
+    fn tab_skips_inactive_panes_at_startup() {
+        // On the initial screen only the sidebar has options: the main pane is
+        // the "choose your option" placeholder and the action bar is empty.
+        let mut model = ready_model();
+        assert!(crate::input::pane_is_active(&model, crate::Pane::Sidebar));
+        assert!(
+            !crate::input::pane_is_active(&model, crate::Pane::Main),
+            "the placeholder main pane must not be focusable"
+        );
+        assert!(
+            !crate::input::pane_is_active(&model, crate::Pane::Actions),
+            "an empty action bar must not be focusable"
+        );
+
+        model.focus.engaged = true;
+        model.focus.pane = crate::Pane::Sidebar;
+
+        // Tab must stay on the only active pane instead of entering empty ones.
+        apply_nav_action(&mut model, crate::NavAction::FocusNextPane);
+        assert_eq!(model.focus.pane, crate::Pane::Sidebar);
+
+        apply_nav_action(&mut model, crate::NavAction::FocusPreviousPane);
+        assert_eq!(model.focus.pane, crate::Pane::Sidebar);
+    }
+
+    #[test]
+    fn tab_cycles_only_active_panes_when_main_has_options() {
+        let mut model = model_in_tool_selection();
+        assert!(crate::input::pane_is_active(&model, crate::Pane::Sidebar));
+        assert!(crate::input::pane_is_active(&model, crate::Pane::Main));
+        assert!(crate::input::pane_is_active(&model, crate::Pane::Actions));
+
+        model.focus.engaged = true;
+        model.focus.pane = crate::Pane::Sidebar;
+
+        apply_nav_action(&mut model, crate::NavAction::FocusNextPane);
+        assert_eq!(model.focus.pane, crate::Pane::Main);
+        apply_nav_action(&mut model, crate::NavAction::FocusNextPane);
+        assert_eq!(model.focus.pane, crate::Pane::Actions);
+        apply_nav_action(&mut model, crate::NavAction::FocusNextPane);
+        assert_eq!(model.focus.pane, crate::Pane::Sidebar);
+    }
+
+    #[test]
+    fn horizontal_fallback_skips_inactive_panes() {
+        // On startup the sidebar is the only active pane: Left/Right must not
+        // fall through into the hidden main pane or empty action bar.
+        let mut model = ready_model();
+        model.focus.engaged = true;
+        model.focus.pane = crate::Pane::Sidebar;
+
+        apply_nav_action(&mut model, crate::NavAction::MoveRight);
+        assert_eq!(
+            model.focus.pane,
+            crate::Pane::Sidebar,
+            "Right must stay on the only active pane"
+        );
+
+        apply_nav_action(&mut model, crate::NavAction::MoveLeft);
+        assert_eq!(model.focus.pane, crate::Pane::Sidebar);
+    }
+
+    #[test]
+    fn list_selection_options_render_as_buttons() -> Result<(), Error> {
+        // Regression: tool/version options used to be bare text wrapped in a
+        // mouse_area, which looked like plain links. They must render as real
+        // buttons: a fixed-width button with 10px padding each side, so the
+        // label fills that inner area instead of shrinking to its text width.
+        let mut model = ready_model();
+        model.mode = GuiMode::DownloadForSteam;
+        model.app_mode = AppMode::DownloadForSteam;
+        model.selection_step = SelectionStep::SelectingTools;
+        model.available_tools = vec![
+            make_test_tool(),
+            CompatTool::from_str("Luxtorpeda").unwrap(),
+        ];
+
+        let mut ui = simulator(crate::views::app_view(&model));
+        let label = ui.find("GEProton")?;
+        let bounds = label.bounds();
+
+        // 10px button padding on each side of the fixed-width list button.
+        let expected_inner = crate::views::action_bar::LIST_BUTTON_WIDTH - 20.0;
+        assert!(
+            (bounds.width - expected_inner).abs() < 0.5,
+            "option label should span the button's inner width ({expected_inner}), got {}",
+            bounds.width
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn clicking_a_checkbox_option_toggles_exactly_once() -> Result<(), Error> {
+        // Options are now real buttons wrapping a checkbox: a click must emit
+        // the toggle exactly once (a duplicate would cancel itself out).
+        let mut model = ready_model();
+        model.mode = GuiMode::DownloadForSteam;
+        model.app_mode = AppMode::DownloadForSteam;
+        model.selection_step = SelectionStep::SelectingVersions;
+        model.selected_tool = Some(make_test_tool());
+        model.available_versions = vec![make_test_release("v1")];
+        model.selected_version_indices = vec![];
+
+        let mut ui = simulator(crate::views::app_view(&model));
+        ui.click("v1")?;
+
+        let messages: Vec<Message> = ui.into_messages().collect();
+        assert_eq!(messages.len(), 1, "one click must emit exactly one message");
+        assert!(
+            matches!(messages[0], Message::ToggleVersion(0)),
+            "the click must toggle version 0"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn clicking_a_list_option_picks_it() -> Result<(), Error> {
+        let mut model = ready_model();
+        model.mode = GuiMode::DownloadForSteam;
+        model.app_mode = AppMode::DownloadForSteam;
+        model.selection_step = SelectionStep::SelectingTools;
+        model.available_tools = vec![
+            make_test_tool(),
+            CompatTool::from_str("Luxtorpeda").unwrap(),
+        ];
+
+        let mut ui = simulator(crate::views::app_view(&model));
+        ui.click("Luxtorpeda")?;
+
+        let messages: Vec<Message> = ui.into_messages().collect();
+        assert!(
+            matches!(messages.as_slice(), [Message::ToolChosen(1)]),
+            "clicking the second tool must choose index 1"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn checkbox_options_use_the_same_width_limit_as_lists() {
+        // Regression: checkbox rows used to span the whole pane because they
+        // went through the Fill-width option row. They must be bounded by the
+        // shared list button width instead.
+        use crate::views::focus_style::Highlight;
+
+        let width = crate::views::action_bar::LIST_BUTTON_WIDTH;
+        let row = crate::views::focus_style::option_checkbox_row(
+            true,
+            "GE-Proton9-27",
+            Highlight::None,
+            Message::ToggleVersion(0),
+            width,
+        );
+
+        let mut ui = Simulator::with_size(Settings::default(), Size::new(1400.0, 900.0), row);
+        let bounds = ui
+            .find(|c: Candidate<'_>| match c {
+                Candidate::Container { bounds, .. } => Some(bounds),
+                _ => None,
+            })
+            .expect("checkbox row should have layout bounds");
+
+        assert!(
+            (bounds.width - width).abs() < 0.5,
+            "checkbox option should be {width} wide, got {}",
+            bounds.width
         );
     }
 }

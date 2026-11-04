@@ -65,6 +65,96 @@ pub(crate) enum Message {
     DeleteSelectedVersions,
     DeleteCompleted(Result<Vec<String>, String>),
     VersionsScanned(Vec<(AppInstallations, Vec<(PathBuf, String)>)>),
+
+    /// A navigation action requested by the keyboard or a gamepad.
+    Nav(NavAction),
+    /// Periodic gamepad poll tick.
+    PollGamepads,
+    /// Toggle the keyboard shortcuts help panel.
+    ToggleKeyboardShortcuts,
+    /// Toggle the controller shortcuts help panel.
+    ToggleControllerShortcuts,
+    /// Close any open shortcuts help panel.
+    CloseShortcuts,
+}
+
+/// A focusable region of the UI.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Pane {
+    /// The left navigation sidebar.
+    Sidebar,
+    /// The center content area.
+    Main,
+    /// The bottom action bar.
+    Actions,
+}
+
+impl Pane {
+    /// The next pane in the focus cycle (wraps around).
+    pub fn next(self) -> Self {
+        match self {
+            Self::Sidebar => Self::Main,
+            Self::Main => Self::Actions,
+            Self::Actions => Self::Sidebar,
+        }
+    }
+
+    /// The previous pane in the focus cycle (wraps around).
+    pub fn previous(self) -> Self {
+        match self {
+            Self::Sidebar => Self::Actions,
+            Self::Main => Self::Sidebar,
+            Self::Actions => Self::Main,
+        }
+    }
+}
+
+/// A user request to navigate or act via keyboard/controller.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum NavAction {
+    /// Move focus to the next pane (Tab / right shoulder / right trigger).
+    FocusNextPane,
+    /// Move focus to the previous pane (Shift+Tab / left shoulder / left trigger).
+    FocusPreviousPane,
+    /// Move focus to the previous option vertically (ArrowUp / D-pad up / stick up).
+    MoveUp,
+    /// Move focus to the next option vertically (ArrowDown / D-pad down / stick down).
+    MoveDown,
+    /// Move focus to the previous option horizontally, or the previous pane
+    /// when there is no horizontal neighbor (ArrowLeft / D-pad left / stick left).
+    MoveLeft,
+    /// Move focus to the next option horizontally, or the next pane when there
+    /// is no horizontal neighbor (ArrowRight / D-pad right / stick right).
+    MoveRight,
+    /// Activate the focused option (Space / A / Cross).
+    Select,
+    /// Trigger the current view's primary "advance" action (Enter / Start).
+    Primary,
+}
+
+/// A focusable option within a pane, in rendering order.
+#[derive(Debug, Clone)]
+pub(crate) struct Focusable {
+    /// The message to send when the option is activated.
+    pub message: Message,
+    /// For text inputs, the iced widget id to focus instead of sending a message.
+    pub widget_focus: Option<iced::widget::Id>,
+}
+
+impl Focusable {
+    pub(crate) fn new(message: Message) -> Self {
+        Self {
+            message,
+            widget_focus: None,
+        }
+    }
+
+    pub(crate) fn widget(widget_focus: impl Into<iced::widget::Id>) -> Self {
+        Self {
+            message: Message::TickSpinner, // never dispatched; widget focus is used instead
+            widget_focus: Some(widget_focus.into()),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]

@@ -1,15 +1,106 @@
 use iced::widget::{Column, Container, button, container, image, rule, scrollable, text};
 use iced::{ContentFit, Element, Length};
 
-use crate::message::{AppMode, Message, QuickUpdateStatus, SelectionStep};
+use crate::message::{AppMode, Focusable, Message, Pane, QuickUpdateStatus, SelectionStep};
 use crate::state::{ProtonupGui, warning_button_style};
+
+use super::focus_style::{self, Highlight};
 
 mod circular_widget {
     pub use crate::circular::Circular;
 }
 
+/// One sidebar entry: label, message and whether it can be activated.
+struct SidebarEntry {
+    label: &'static str,
+    message: Message,
+    enabled: bool,
+    warning: bool,
+    /// Rendered below the scrollable so it stays visible.
+    pinned: bool,
+}
+
+/// The sidebar entries for the current state, in rendering order (excluding
+/// the always-present `Close` button which is appended last).
+fn entries(state: &ProtonupGui) -> Vec<SidebarEntry> {
+    let is_downloading = state.download_started
+        && state.selection_step == SelectionStep::Downloading
+        && state.download_complete.is_none();
+
+    let mk = |label: &'static str, message: Message, disabled_for: bool| SidebarEntry {
+        label,
+        message,
+        enabled: !(is_downloading || disabled_for),
+        warning: false,
+        pinned: false,
+    };
+
+    let mut entries = vec![
+        mk(
+            "Quick Update",
+            Message::SelectQuickUpdate,
+            state.app_mode == AppMode::QuickUpdate,
+        ),
+        mk(
+            "Download for Steam",
+            Message::SelectDownloadForSteam,
+            state.app_mode == AppMode::DownloadForSteam,
+        ),
+        mk(
+            "Download for Lutris",
+            Message::SelectDownloadForLutris,
+            state.app_mode == AppMode::DownloadForLutris,
+        ),
+        mk(
+            "Download for Custom Location",
+            Message::SelectDownloadForCustom,
+            state.app_mode == AppMode::DownloadForCustom,
+        ),
+        mk(
+            "Check What's New",
+            Message::SelectCheckWhatsNew,
+            state.app_mode == AppMode::CheckWhatsNew,
+        ),
+        mk(
+            "Manage Existing Installations",
+            Message::SelectManageInstallations,
+            state.app_mode == AppMode::ManageInstallations,
+        ),
+    ];
+
+    if is_downloading {
+        entries.push(SidebarEntry {
+            label: "Cancel",
+            message: Message::Cancel,
+            enabled: true,
+            warning: true,
+            pinned: false,
+        });
+    }
+
+    entries.push(SidebarEntry {
+        label: "Close",
+        message: Message::CloseRequested,
+        enabled: true,
+        warning: true,
+        pinned: true,
+    });
+
+    entries
+}
+
+/// Focusable sidebar options as a one-column grid (row = option index).
+pub(crate) fn focusable_options(state: &ProtonupGui) -> Vec<Vec<Focusable>> {
+    entries(state)
+        .into_iter()
+        .filter(|entry| entry.enabled)
+        .map(|entry| vec![Focusable::new(entry.message)])
+        .collect()
+}
+
 pub(crate) fn sidebar(state: &ProtonupGui) -> Element<'_, Message> {
     let mut column = Column::new().spacing(10).width(Length::Fill);
+    let mut pinned = Column::new().spacing(10).width(Length::Fill);
 
     let logo_handle = &state.logo_handle;
     column = column.push(
@@ -56,95 +147,56 @@ pub(crate) fn sidebar(state: &ProtonupGui) -> Element<'_, Message> {
         );
     }
 
-    let quick_update_disabled = is_downloading || state.app_mode == AppMode::QuickUpdate;
-    column = column.push(if quick_update_disabled {
-        button(text("Quick Update").size(14))
-            .padding(10)
-            .width(Length::Fill)
-    } else {
-        button(text("Quick Update").size(14))
-            .on_press(Message::SelectQuickUpdate)
-            .padding(10)
-            .width(Length::Fill)
-    });
+    // Focus index mirrors `focusable_options`, which skips disabled entries.
+    let mut focus_index = 0usize;
 
-    let steam_disabled = is_downloading || state.app_mode == AppMode::DownloadForSteam;
-    column = column.push(if steam_disabled {
-        button(text("Download for Steam").size(14))
-            .padding(10)
-            .width(Length::Fill)
-    } else {
-        button(text("Download for Steam").size(14))
-            .on_press(Message::SelectDownloadForSteam)
-            .padding(10)
-            .width(Length::Fill)
-    });
+    for entry in entries(state) {
+        let highlight = if entry.enabled {
+            let highlight = Highlight::from(focus_style::is_focused(
+                state,
+                Pane::Sidebar,
+                focus_index,
+                0,
+            ));
+            focus_index += 1;
+            highlight
+        } else {
+            Highlight::None
+        };
 
-    let lutris_disabled = is_downloading || state.app_mode == AppMode::DownloadForLutris;
-    column = column.push(if lutris_disabled {
-        button(text("Download for Lutris").size(14))
-            .padding(10)
+        let label = Container::new(text(entry.label).size(14))
             .width(Length::Fill)
-    } else {
-        button(text("Download for Lutris").size(14))
-            .on_press(Message::SelectDownloadForLutris)
-            .padding(10)
-            .width(Length::Fill)
-    });
+            .center_x(Length::Fill)
+            .padding(10);
 
-    let custom_disabled = is_downloading || state.app_mode == AppMode::DownloadForCustom;
-    column = column.push(if custom_disabled {
-        button(text("Download for Custom Location").size(14))
-            .padding(10)
-            .width(Length::Fill)
-    } else {
-        button(text("Download for Custom Location").size(14))
-            .on_press(Message::SelectDownloadForCustom)
-            .padding(10)
-            .width(Length::Fill)
-    });
+        // The pinned `Close` entry is rendered outside the scrollable, so it
+        // stays reachable when the list is taller than the viewport.
+        if entry.pinned {
+            pinned = pinned.push(focus_style::focus_frame(
+                button(label)
+                    .on_press(entry.message)
+                    .width(Length::Fill)
+                    .style(warning_button_style()),
+                highlight,
+            ));
+            continue;
+        }
 
-    let whats_new_disabled = is_downloading || state.app_mode == AppMode::CheckWhatsNew;
-    column = column.push(if whats_new_disabled {
-        button(text("Check What's New").size(14))
-            .padding(10)
-            .width(Length::Fill)
-    } else {
-        button(text("Check What's New").size(14))
-            .on_press(Message::SelectCheckWhatsNew)
-            .padding(10)
-            .width(Length::Fill)
-    });
-
-    let manage_disabled = is_downloading || state.app_mode == AppMode::ManageInstallations;
-    column = column.push(if manage_disabled {
-        button(text("Manage Existing Installations").size(14))
-            .padding(10)
-            .width(Length::Fill)
-    } else {
-        button(text("Manage Existing Installations").size(14))
-            .on_press(Message::SelectManageInstallations)
-            .padding(10)
-            .width(Length::Fill)
-    });
-
-    if is_downloading {
-        column = column.push(
-            button(text("Cancel").size(14))
-                .on_press(Message::Cancel)
-                .padding(10)
+        let styled = if entry.warning && entry.enabled {
+            button(label)
+                .on_press(entry.message)
                 .width(Length::Fill)
-                .style(warning_button_style()),
-        );
+                .style(warning_button_style())
+        } else if entry.enabled {
+            button(label).on_press(entry.message).width(Length::Fill)
+        } else {
+            button(label).width(Length::Fill)
+        };
+
+        column = column.push(focus_style::focus_frame(styled, highlight));
     }
 
     let scrollable = scrollable(column).width(Length::Fill).height(Length::Fill);
-
-    let close_button = button(text("Close").size(14))
-        .on_press(Message::CloseRequested)
-        .padding(10)
-        .width(Length::Fill)
-        .style(warning_button_style());
 
     let content = Column::new()
         .spacing(10)
@@ -152,7 +204,7 @@ pub(crate) fn sidebar(state: &ProtonupGui) -> Element<'_, Message> {
         .width(Length::Fill)
         .height(Length::Fill)
         .push(scrollable)
-        .push(close_button);
+        .push(pinned);
 
     container(content)
         .width(220)

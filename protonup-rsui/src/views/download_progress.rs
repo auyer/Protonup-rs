@@ -4,12 +4,56 @@ use iced::widget::{Column, Row, button, progress_bar, scrollable, text};
 use libprotonup::downloads::Release;
 use libprotonup::sources::CompatTool;
 
-use crate::message::{Message, ToolStatus};
+use crate::message::{Focusable, Message, Pane, ToolStatus};
 use crate::state::ProtonupGui;
 use crate::views::action_bar::{self, Action};
 
+use super::focus_style::{self, Highlight};
+
+/// The changelog buttons rendered for each completed tool, in rendering order.
+fn changelog_buttons(state: &ProtonupGui) -> Vec<Message> {
+    state
+        .tools
+        .iter()
+        .filter(|tool| tool.status == ToolStatus::_Complete)
+        .filter_map(|tool| {
+            find_release_pair(state, &tool.name).map(|(release, compat_tool)| {
+                Message::ToggleChangelog(Box::new(Some((release.clone(), compat_tool.clone()))))
+            })
+        })
+        .collect()
+}
+
+/// Focusable options: one changelog button per completed tool.
+pub(crate) fn main_focusable_options(state: &ProtonupGui) -> Vec<Vec<Focusable>> {
+    changelog_buttons(state)
+        .into_iter()
+        .map(|message| vec![Focusable::new(message)])
+        .collect()
+}
+
+pub(crate) fn actions(state: &ProtonupGui) -> Vec<Action> {
+    match &state.download_complete {
+        Some(Ok(_)) => vec![Action::new("Back to Main Menu", Message::BackToInitial)],
+        Some(Err(_)) => vec![Action::new("Try Again", Message::StartSelectedDownloads)],
+        None => Vec::new(),
+    }
+}
+
+/// The primary "next" action of the download view.
+pub(crate) fn primary_action(state: &ProtonupGui) -> Option<Message> {
+    match &state.download_complete {
+        Some(Ok(_)) => Some(Message::BackToInitial),
+        Some(Err(_)) => Some(Message::StartSelectedDownloads),
+        None => None,
+    }
+}
+
 pub(crate) fn view(state: &ProtonupGui) -> Element<'_, Message> {
     let mut column = Column::new().spacing(10);
+
+    let changelog_messages = changelog_buttons(state);
+    let mut changelog_index = 0usize;
 
     for tool in &state.tools {
         let status_color = match &tool.status {
@@ -27,22 +71,26 @@ pub(crate) fn view(state: &ProtonupGui) -> Element<'_, Message> {
         );
 
         if tool.status == ToolStatus::_Complete
-            && let Some((release, compat_tool)) = find_release_pair(state, &tool.name)
+            && let Some(message) = changelog_messages.get(changelog_index)
         {
-            row = row.push(
+            let highlight = Highlight::from(focus_style::is_focused(
+                state,
+                Pane::Main,
+                changelog_index,
+                0,
+            ));
+            changelog_index += 1;
+
+            row = row.push(focus_style::focus_frame(
                 button(text("Changelog").size(10))
-                    .on_press(Message::ToggleChangelog(Box::new(Some((
-                        release.clone(),
-                        compat_tool.clone(),
-                    )))))
+                    .on_press(message.clone())
                     .padding(3),
-            );
+                highlight,
+            ));
         }
 
         column = column.push(row);
     }
-
-    let mut actions: Vec<Action> = Vec::new();
 
     if let Some(ref result) = state.download_complete {
         match result {
@@ -52,21 +100,22 @@ pub(crate) fn view(state: &ProtonupGui) -> Element<'_, Message> {
                 for (release, _) in pairs {
                     column = column.push(text(format!("  • {}", release.tag_name)).size(12));
                 }
-                actions.push(Action::new("Back to Main Menu", Message::BackToInitial));
             }
             Err(e) => {
                 column = column.push(text(format!("✗ Failed: {}", e)).color([1.0, 0.3, 0.3]));
-                actions.push(Action::new("Try Again", Message::StartSelectedDownloads));
             }
         }
     }
 
     let content: Element<'_, Message> = scrollable(column).into();
 
+    let actions = actions(state);
     if actions.is_empty() {
-        content
+        action_bar::without_actions(content)
     } else {
-        action_bar::with_actions(content, actions)
+        action_bar::with_actions(content, actions, |col| {
+            focus_style::action_focused(state, col)
+        })
     }
 }
 

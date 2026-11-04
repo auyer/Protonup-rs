@@ -32,6 +32,7 @@ iced_futures = { version = "0.14", features = ["tokio"] }
 libprotonup = { path = "../libprotonup", version = "1.0.0-rc3" }
 lyon_algorithms = "1.0"
 rfd = "0.17"
+gilrs = "0.11"
 
 tokio = { version = "1.54", features = ["sync"] }
 futures-util = "0.3"

@@ -8,7 +8,8 @@ use libprotonup::sources::CompatTool;
 use crate::download::{self, DownloadPhase};
 use crate::download_task::{self, DownloadError, DownloadUpdate};
 use crate::message::{
-    AppInstallationView, AppMode, GuiMode, Message, QuickUpdateStatus, SelectionStep, ToolDownload,
+    AppInstallationView, AppMode, GuiMode, Message, NavAction, QuickUpdateStatus, SelectionStep,
+    ToolDownload,
 };
 use crate::state::ProtonupGui;
 
@@ -472,7 +473,87 @@ pub(crate) fn handle(state: &mut ProtonupGui, message: Message) -> Task<Message>
             );
             Task::none()
         }
+
+        Message::Nav(action) => handle_nav(state, action),
+
+        Message::PollGamepads => {
+            let messages = state.poll_gamepads();
+            // Gamepad input is low-frequency and independent; run it in order.
+            for message in messages {
+                let _ = handle(state, message);
+            }
+            Task::none()
+        }
+
+        Message::ToggleKeyboardShortcuts => {
+            state.show_keyboard_shortcuts = !state.show_keyboard_shortcuts;
+            state.show_controller_shortcuts = false;
+            Task::none()
+        }
+
+        Message::ToggleControllerShortcuts => {
+            if state.gamepads_unavailable {
+                return Task::none();
+            }
+            state.show_controller_shortcuts = !state.show_controller_shortcuts;
+            state.show_keyboard_shortcuts = false;
+            Task::none()
+        }
+
+        Message::CloseShortcuts => {
+            state.show_keyboard_shortcuts = false;
+            state.show_controller_shortcuts = false;
+            Task::none()
+        }
     }
+}
+
+/// Applies a keyboard/controller navigation action.
+fn handle_nav(state: &mut ProtonupGui, action: NavAction) -> Task<Message> {
+    // While a shortcut panel is open, navigation just closes it.
+    if state.show_keyboard_shortcuts || state.show_controller_shortcuts {
+        if !matches!(action, NavAction::MoveUp | NavAction::MoveDown) {
+            state.show_keyboard_shortcuts = false;
+            state.show_controller_shortcuts = false;
+        }
+        return Task::none();
+    }
+
+    // First navigation input engages focus highlighting.
+    if !state.focus.engaged {
+        state.focus.engage();
+    }
+
+    if action == NavAction::Select
+        && let Some(id) = crate::input::focused_widget_focus(state)
+    {
+        return iced::widget::operation::focus(id);
+    }
+
+    let before = view_fingerprint(state);
+
+    let task = match crate::input::apply_nav_action(state, action) {
+        Some(message) => handle(state, message),
+        None => Task::none(),
+    };
+
+    // If the activation moved the user to a different step, the option grid
+    // changed underneath the cursor: re-anchor it so the highlight stays valid.
+    if before != view_fingerprint(state) {
+        state.focus.reanchor_after_view_change();
+    }
+
+    task
+}
+
+/// Identifies the currently rendered step, to detect view changes.
+fn view_fingerprint(state: &ProtonupGui) -> (AppMode, GuiMode, SelectionStep, bool) {
+    (
+        state.app_mode.clone(),
+        state.mode.clone(),
+        state.selection_step.clone(),
+        state.download_complete.is_some(),
+    )
 }
 
 /// Applies the "Continue" behavior for a chosen tool: for the custom-location

@@ -9,6 +9,7 @@ mod circular;
 pub(crate) mod download;
 pub(crate) mod download_task;
 mod easing;
+pub(crate) mod input;
 
 #[cfg(test)]
 mod gui_tests;
@@ -20,11 +21,11 @@ pub(crate) use crate::download::DownloadPhase;
 pub(crate) use crate::download_task::{DownloadUpdate, ToolProgress};
 #[cfg(test)]
 pub(crate) use crate::message::{
-    AppMode, GuiMode, InstalledTool, Message, QuickUpdateStatus, SelectionStep, ToolDownload,
-    ToolStatus,
+    AppMode, GuiMode, InstalledTool, Message, NavAction, Pane, QuickUpdateStatus, SelectionStep,
+    ToolDownload, ToolStatus,
 };
 #[cfg(test)]
-pub(crate) use crate::state::ProtonupGui;
+pub(crate) use crate::state::{FocusState, ProtonupGui};
 #[cfg(test)]
 pub(crate) use libprotonup::apps::AppInstallations;
 

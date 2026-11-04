@@ -67,6 +67,84 @@ pub(crate) struct ProtonupGui {
     pub show_all_versions: Option<InstalledTool>,
 
     pub logo_handle: iced::widget::image::Handle,
+
+    /// Keyboard/controller focus state.
+    pub focus: FocusState,
+
+    /// Whether the keyboard shortcuts help panel is open.
+    pub show_keyboard_shortcuts: bool,
+    /// Whether the controller shortcuts help panel is open.
+    pub show_controller_shortcuts: bool,
+    /// Set when gamepad support could not be initialized (headless, no udev, …).
+    pub gamepads_unavailable: bool,
+
+    /// Lazily initialized gamepad backend; `None` until first poll.
+    pub gamepads: GamepadState,
+}
+
+/// Where keyboard/controller focus currently is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct FocusState {
+    /// Only draw highlights after the first navigation input.
+    pub engaged: bool,
+    pub pane: crate::message::Pane,
+    pub row: usize,
+    pub col: usize,
+}
+
+impl Default for FocusState {
+    fn default() -> Self {
+        Self {
+            engaged: false,
+            pane: crate::message::Pane::Sidebar,
+            row: 0,
+            col: 0,
+        }
+    }
+}
+
+impl FocusState {
+    /// Turns on focus highlighting at the current cursor position.
+    pub fn engage(&mut self) {
+        self.engaged = true;
+    }
+
+    /// Re-anchors the focus cursor after the visible layout changed.
+    ///
+    /// Views call this whenever they advance to another step so the highlight
+    /// cannot point at an option that no longer exists.
+    pub fn focus_pane(&mut self, pane: crate::message::Pane) {
+        self.engaged = true;
+        self.pane = pane;
+        self.row = 0;
+        self.col = 0;
+    }
+
+    /// Re-anchors focus on the main pane when highlighting is already active.
+    ///
+    /// This keeps the user in the content pane across step changes without
+    /// forcing highlights on for people who never used the keyboard/controller.
+    pub fn reanchor_after_view_change(&mut self) {
+        if self.engaged {
+            self.focus_pane(crate::message::Pane::Main);
+        }
+    }
+}
+
+/// Lazily initialized gamepad backend.
+#[derive(Default)]
+pub(crate) struct GamepadState {
+    pub backend: Option<gilrs::Gilrs>,
+    pub stick: crate::input::StickState,
+}
+
+impl std::fmt::Debug for GamepadState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("GamepadState")
+            .field("backend", &self.backend.is_some())
+            .field("stick", &self.stick)
+            .finish()
+    }
 }
 
 impl Default for ProtonupGui {
@@ -103,6 +181,11 @@ impl Default for ProtonupGui {
             show_changelog: None,
             show_all_versions: None,
             logo_handle: iced::widget::image::Handle::from_bytes(LOGO_BYTES),
+            focus: FocusState::default(),
+            show_keyboard_shortcuts: false,
+            show_controller_shortcuts: false,
+            gamepads_unavailable: false,
+            gamepads: GamepadState::default(),
         }
     }
 }
@@ -188,6 +271,8 @@ impl ProtonupGui {
         self.manage_error = None;
 
         self.quick_update_status = QuickUpdateStatus::Idle;
+
+        self.focus = FocusState::default();
     }
 
     pub fn start_downloads(&mut self, force_reinstall_names: HashSet<String>) -> Task<Message> {
@@ -367,6 +452,70 @@ impl ProtonupGui {
                 .push(iced::window::frames().map(|_| crate::message::Message::TickSpinner));
         }
 
+        // Keyboard navigation (only sees events no widget consumed).
+        subscriptions.push(
+            iced::keyboard::listen().filter_map(|event| crate::input::keyboard_to_message(&event)),
+        );
+
+        // Gamepad polling: skipped entirely once initialization has failed.
+        if !self.gamepads_unavailable {
+            subscriptions.push(
+                iced::time::every(std::time::Duration::from_millis(50))
+                    .map(|_| crate::message::Message::PollGamepads),
+            );
+        }
+
         iced::Subscription::batch(subscriptions)
+    }
+
+    /// Polls connected gamepads, lazily creating the backend on first use.
+    ///
+    /// Returns the navigation messages produced by this poll.
+    pub(crate) fn poll_gamepads(&mut self) -> Vec<Message> {
+        if self.gamepads.backend.is_none() {
+            // `Gilrs::new()` returns an error instead of panicking when the
+            // platform backend is unavailable (e.g. no udev/uinput in a
+            // headless environment).
+            match gilrs::Gilrs::new() {
+                Ok(backend) => self.gamepads.backend = Some(backend),
+                Err(_) => {
+                    self.gamepads_unavailable = true;
+                    return Vec::new();
+                }
+            }
+        }
+
+        let Some(ref mut backend) = self.gamepads.backend else {
+            return Vec::new();
+        };
+
+        let mut messages = Vec::new();
+
+        // gilrs emits one `ButtonPressed` per press (and per trigger
+        // threshold crossing), which is exactly the edge-triggering we want.
+        while let Some(gilrs::Event { event, .. }) = backend.next_event() {
+            if let gilrs::EventType::ButtonPressed(button, _) = event
+                && let Some(message) = crate::input::gamepad_to_message(button)
+            {
+                messages.push(message);
+            }
+        }
+
+        // Left stick: edge-triggered via `StickState`, sampled from the first
+        // connected gamepad (menus are driven by a single controller).
+        let stick = backend.gamepads().next().map(|(_, pad)| {
+            (
+                pad.value(gilrs::Axis::LeftStickX),
+                pad.value(gilrs::Axis::LeftStickY),
+            )
+        });
+
+        if let Some((x, y)) = stick
+            && let Some(message) = self.gamepads.stick.sample((x, y))
+        {
+            messages.push(message);
+        }
+
+        messages
     }
 }
