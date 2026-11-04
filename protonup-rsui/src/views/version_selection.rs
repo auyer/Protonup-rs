@@ -52,7 +52,7 @@ pub(crate) fn view(state: &ProtonupGui) -> Element<'_, Message> {
             .or_else(|| state.available_versions.first())
             .cloned();
         let tool = state.selected_tool.clone();
-        Message::ToggleChangelog(Box::new(release.and_then(|r| tool.map(|t| (r, t)))))
+        Message::ToggleChangelog(Box::new(release.zip(tool)))
     };
 
     let actions = if state.mode == GuiMode::CheckWhatsNew {
