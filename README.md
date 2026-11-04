@@ -201,9 +201,11 @@ Code docs available in the [docs/docs.md](./docs/docs.md) file, and default gene
 The GUI is implemented and functional using the iced framework.
 Future improvements may include:
 
-- Additional UI polish and refinements
-- More compatibility tools support
-- Enhanced error handling and user feedback
+- [x] More compatibility tools support
+- [x] Additional UI polish and refinements
+- [ ] Side-bar should scroll to fit small screens
+- [ ] Replace radial selectors by list of action buttons (removing the need for two clicks) 
+- [ ] Add Keyboard/Gamepad interaction
 
 ## Feedbacks & Contributing
 
