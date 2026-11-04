@@ -113,6 +113,8 @@ pub(crate) fn handle(state: &mut ProtonupGui, message: Message) -> Task<Message>
         Message::VersionsFetched(releases) => {
             state.available_versions = releases;
             state.selected_version_indices.clear();
+            // A new release list invalidates any previously open changelog.
+            state.show_changelog = None;
             if !state.available_versions.is_empty() {
                 state.selected_version_indices.push(0);
             }
@@ -307,6 +309,7 @@ pub(crate) fn handle(state: &mut ProtonupGui, message: Message) -> Task<Message>
             state.selected_version_indices.clear();
             state.available_versions.clear();
             state.selected_tool = None;
+            state.show_changelog = None;
             Task::none()
         }
 
@@ -476,6 +479,9 @@ pub(crate) fn handle(state: &mut ProtonupGui, message: Message) -> Task<Message>
 /// first step it validates the path and moves on to the tool list; otherwise it
 /// locks in the selected tool and starts fetching its releases.
 fn confirm_tool_selection(state: &mut ProtonupGui) -> Task<Message> {
+    // Starting a new tool's context invalidates any previously open changelog.
+    state.show_changelog = None;
+
     if state.mode == GuiMode::DownloadForCustom && state.app_installation.is_none() {
         if state.custom_path_input.is_empty() {
             state.path_error = Some("Please enter a valid path".to_string());

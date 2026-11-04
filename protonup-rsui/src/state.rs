@@ -173,6 +173,7 @@ impl ProtonupGui {
         self.selected_tool = None;
         self.available_versions.clear();
         self.selected_version_indices.clear();
+        self.show_changelog = None;
         self.app_installation = None;
         self.download_started = false;
         self.tools.clear();

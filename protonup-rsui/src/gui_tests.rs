@@ -1600,4 +1600,67 @@ mod tests {
 
         Ok(())
     }
+
+    //
+    // Changelog pane lifecycle (it must close when navigating away)
+    //
+
+    fn model_with_changelog_open() -> ProtonupGui {
+        let mut model = ready_model();
+        model.mode = GuiMode::CheckWhatsNew;
+        model.app_mode = AppMode::CheckWhatsNew;
+        model.selection_step = SelectionStep::SelectingVersions;
+        model.available_tools = vec![
+            make_test_tool(),
+            CompatTool::from_str("Luxtorpeda").unwrap(),
+        ];
+        model.selected_tool = Some(make_test_tool());
+        model.available_versions = vec![make_test_release("v1"), make_test_release("v2")];
+        model.selected_version_indices = vec![0];
+
+        let _ = crate::update::handle(&mut model, Message::VersionChosen(1));
+        assert!(model.show_changelog.is_some(), "precondition: pane is open");
+        model
+    }
+
+    #[test]
+    fn back_to_tool_selection_closes_changelog() {
+        let mut model = model_with_changelog_open();
+
+        let _ = crate::update::handle(&mut model, Message::BackToToolSelection);
+
+        assert!(
+            model.show_changelog.is_none(),
+            "navigating back must close the changelog pane"
+        );
+    }
+
+    #[test]
+    fn new_tool_clears_stale_changelog() {
+        let mut model = model_with_changelog_open();
+
+        let _ = crate::update::handle(&mut model, Message::BackToToolSelection);
+        let _ = crate::update::handle(&mut model, Message::ToolChosen(1));
+        let _ = crate::update::handle(
+            &mut model,
+            Message::VersionsFetched(vec![make_test_release("new-1"), make_test_release("new-2")]),
+        );
+
+        assert!(
+            model.show_changelog.is_none(),
+            "fetching a new tool's versions must not carry over the old changelog"
+        );
+    }
+
+    #[test]
+    fn back_to_initial_closes_changelog() {
+        let mut model = model_with_changelog_open();
+
+        let _ = crate::update::handle(&mut model, Message::BackToInitial);
+
+        assert!(
+            model.show_changelog.is_none(),
+            "resetting to the main menu must close the changelog pane"
+        );
+    }
 }
