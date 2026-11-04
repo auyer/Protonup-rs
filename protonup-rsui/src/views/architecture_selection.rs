@@ -1,5 +1,5 @@
-use iced::widget::{Column, Row, checkbox, scrollable, text};
-use iced::{Center, Element};
+use iced::Element;
+use iced::widget::{Column, scrollable, text};
 
 use libprotonup::architecture_variants::MicroArchVariants;
 
@@ -7,7 +7,7 @@ use crate::message::Message;
 use crate::state::ProtonupGui;
 use crate::views::action_bar::{self, Action};
 
-pub(crate) fn view(state: &ProtonupGui) -> Element<'_, Message> {
+pub(crate) fn view(_state: &ProtonupGui) -> Element<'_, Message> {
     let mut column = Column::new().spacing(10);
 
     column = column.push(text("Select CPU Architecture Variant:").size(16));
@@ -23,29 +23,18 @@ pub(crate) fn view(state: &ProtonupGui) -> Element<'_, Message> {
     ];
 
     for variant in variants {
-        let is_selected = state.selected_arch_variant == Some(variant);
-        column = column.push(
-            Row::new()
-                .spacing(10)
-                .align_y(Center)
-                .push(
-                    checkbox(is_selected).on_toggle(move |_| Message::SelectArchitecture(variant)),
-                )
-                .push(
-                    Column::new()
-                        .push(text(variant.name()).size(14))
-                        .push(text(variant.description()).size(10)),
-                ),
-        );
+        column = column.push(action_bar::list_button(
+            Column::new()
+                .push(text(variant.name()).size(14))
+                .push(text(variant.description()).size(10)),
+            Message::ArchitectureChosen(variant),
+        ));
     }
 
     let content: Element<'_, Message> = scrollable(column).into();
 
     action_bar::with_actions(
         content,
-        [
-            Action::new("Continue", Message::StartSelectedDownloads),
-            Action::new("Back", Message::VersionsFetched(vec![])),
-        ],
+        [Action::new("Back", Message::VersionsFetched(vec![]))],
     )
 }

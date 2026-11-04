@@ -45,6 +45,23 @@ impl Action {
     }
 }
 
+/// Width (in logical pixels) of list-selection buttons.
+///
+/// iced 0.14 has no "max" length, so all list buttons share this uniform width.
+pub(crate) const LIST_BUTTON_WIDTH: f32 = 220.0;
+
+/// A list-selection button with a uniform `LIST_BUTTON_WIDTH`, left-aligned
+/// within its row.
+pub(crate) fn list_button<'a>(
+    content: impl Into<Element<'a, Message>>,
+    message: Message,
+) -> iced::widget::Button<'a, Message> {
+    button(content)
+        .on_press(message)
+        .padding(10)
+        .width(Length::Fixed(LIST_BUTTON_WIDTH))
+}
+
 /// Wraps the view content in a layout where the content occupies the remaining
 /// vertical space (and scrolls if it is the scrollable body of a view) while
 /// the given actions stay pinned in a horizontal pane at the bottom, always

@@ -204,7 +204,7 @@ Future improvements may include:
 - [x] More compatibility tools support
 - [x] Additional UI polish and refinements
 - [ ] Side-bar should scroll to fit small screens
-- [ ] Replace radial selectors by list of action buttons (removing the need for two clicks) 
+- [x] Replace radial selectors by list of action buttons (removing the need for two clicks) 
 - [ ] Add Keyboard/Gamepad interaction
 
 ## Feedbacks & Contributing

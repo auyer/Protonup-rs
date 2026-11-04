@@ -184,16 +184,6 @@ mod tests {
     }
 
     #[test]
-    fn tool_selected_does_not_crash() {
-        let mut model = ProtonupGui::default();
-
-        let _ = crate::update::handle(&mut model, Message::ToolSelected(0));
-
-        // Should not crash, and tool should be selected
-        assert_eq!(model.selected_tool_indices, vec![0]);
-    }
-
-    #[test]
     fn selection_error_sets_status() {
         let mut model = ProtonupGui::default();
 
@@ -351,16 +341,16 @@ mod tests {
             CompatTool::from_str("Luxtorpeda").unwrap(),
         ];
 
-        // Select first tool (radio button behavior - only one at a time)
-        let _ = crate::update::handle(&mut model, Message::ToolSelected(0));
+        // Select first tool (button behavior - only one at a time)
+        let _ = crate::update::handle(&mut model, Message::ToolChosen(0));
         assert_eq!(model.selected_tool_indices, vec![0]);
 
         // Select second tool (replaces first)
-        let _ = crate::update::handle(&mut model, Message::ToolSelected(1));
+        let _ = crate::update::handle(&mut model, Message::ToolChosen(1));
         assert_eq!(model.selected_tool_indices, vec![1]);
 
         // Select first tool again (replaces second)
-        let _ = crate::update::handle(&mut model, Message::ToolSelected(0));
+        let _ = crate::update::handle(&mut model, Message::ToolChosen(0));
         assert_eq!(model.selected_tool_indices, vec![0]);
     }
 
@@ -404,12 +394,9 @@ mod tests {
             None,
         )];
 
-        // Select tool
-        let _ = crate::update::handle(&mut model, Message::ToolSelected(0));
+        // Clicking the tool button selects and advances in one action
+        let _ = crate::update::handle(&mut model, Message::ToolChosen(0));
         assert_eq!(model.selected_tool_indices, vec![0]);
-
-        // Confirm selection should move to version selection
-        let _ = crate::update::handle(&mut model, Message::ToolSelectionConfirmed);
         assert_eq!(model.selection_step, SelectionStep::SelectingVersions);
         assert!(model.selected_tool.is_some());
     }
@@ -814,10 +801,10 @@ mod tests {
         let mut model = ready_model();
         model.selected_arch_variant = Some(MicroArchVariants::X86_64V2); // Default
 
-        // Select v3
+        // Click the v3 variant button (selects and attempts to start download)
         let _ = crate::update::handle(
             &mut model,
-            Message::SelectArchitecture(MicroArchVariants::X86_64V3),
+            Message::ArchitectureChosen(MicroArchVariants::X86_64V3),
         );
 
         assert_eq!(
@@ -1428,9 +1415,14 @@ mod tests {
 
         let mut ui = simulator(crate::views::app_view(&model));
 
+        // Tools are now direct-action buttons; there is no "Continue" step.
         assert!(
-            ui.find("Continue").is_ok(),
-            "Continue action should be visible"
+            ui.find("GEProton").is_ok(),
+            "each tool should be rendered as a clickable button"
+        );
+        assert!(
+            ui.find("Continue").is_err(),
+            "Continue should be gone from the action bar"
         );
         assert!(ui.find("Back").is_ok(), "Back action should be visible");
 
@@ -1519,9 +1511,90 @@ mod tests {
 
         let mut ui = simulator(crate::views::app_view(&model));
 
+        // Version rows are direct-action buttons; there is no "View Changelog" step.
         assert!(
-            ui.find("View Changelog").is_ok(),
-            "View Changelog should be visible"
+            ui.find("View Changelog").is_err(),
+            "View Changelog should be gone from the action bar"
+        );
+        assert!(ui.find("Back").is_ok(), "Back should be visible");
+
+        Ok(())
+    }
+
+    //
+    // Direct-action list buttons (replacing radio single-select)
+    //
+
+    #[test]
+    fn tool_chosen_selects_and_advances_in_one_click() {
+        use libprotonup::sources::CompatTool;
+
+        let mut model = ready_model();
+        model.mode = GuiMode::DownloadForSteam;
+        model.app_mode = AppMode::DownloadForSteam;
+        model.selection_step = SelectionStep::SelectingTools;
+        model.app_installation = Some(AppInstallations::Steam);
+        model.available_tools = vec![
+            CompatTool::from_str("GEProton").unwrap(),
+            CompatTool::from_str("Luxtorpeda").unwrap(),
+        ];
+
+        let _ = crate::update::handle(&mut model, Message::ToolChosen(1));
+
+        assert_eq!(model.selected_tool_indices, vec![1]);
+        assert!(
+            model.selected_tool.is_some(),
+            "clicking a tool should lock in the selection"
+        );
+        assert_eq!(model.selection_step, SelectionStep::SelectingVersions);
+    }
+
+    #[test]
+    fn architecture_chosen_selects_and_starts_download() {
+        let mut model = ready_model();
+        model.mode = GuiMode::DownloadForSteam;
+        model.app_mode = AppMode::DownloadForSteam;
+        model.selection_step = SelectionStep::SelectingArchitecture;
+        model.selected_arch_variant = Some(MicroArchVariants::X86_64V2);
+
+        let _ = crate::update::handle(
+            &mut model,
+            Message::ArchitectureChosen(MicroArchVariants::X86_64V3),
+        );
+
+        assert_eq!(
+            model.selected_arch_variant,
+            Some(MicroArchVariants::X86_64V3)
+        );
+        // Without a full selection the download step reports a status instead of panicking.
+        assert!(model.global_status.contains("select"));
+    }
+
+    #[test]
+    fn version_chosen_is_exclusive_in_check_whats_new() {
+        let mut model = ready_model();
+        model.mode = GuiMode::CheckWhatsNew;
+        model.app_mode = AppMode::CheckWhatsNew;
+        model.selection_step = SelectionStep::SelectingVersions;
+        model.selected_version_indices = vec![0];
+
+        let _ = crate::update::handle(&mut model, Message::VersionChosen(2));
+
+        assert_eq!(model.selected_version_indices, vec![2]);
+    }
+
+    #[test]
+    fn architecture_selection_renders_buttons_without_continue() -> Result<(), Error> {
+        let mut model = ready_model();
+        model.mode = GuiMode::DownloadForSteam;
+        model.app_mode = AppMode::DownloadForSteam;
+        model.selection_step = SelectionStep::SelectingArchitecture;
+
+        let mut ui = simulator(crate::views::app_view(&model));
+
+        assert!(
+            ui.find("Continue").is_err(),
+            "Continue should be gone; clicking a variant starts the download"
         );
         assert!(ui.find("Back").is_ok(), "Back should be visible");
 

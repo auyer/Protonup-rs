@@ -1,4 +1,4 @@
-use iced::widget::{Column, Container, Row, checkbox, radio, scrollable, text};
+use iced::widget::{Column, Container, Row, checkbox, scrollable, text};
 use iced::{Element, Length};
 
 use crate::message::{GuiMode, Message};
@@ -20,17 +20,10 @@ pub(crate) fn view(state: &ProtonupGui) -> Element<'_, Message> {
         left = left.push(text("Loading versions...").size(14));
     } else if state.mode == GuiMode::CheckWhatsNew {
         for (index, release) in state.available_versions.iter().enumerate() {
-            left = left.push(
-                Row::new()
-                    .spacing(10)
-                    .push(radio(
-                        "",
-                        index,
-                        state.selected_version_indices.first().copied(),
-                        Message::ToggleVersion,
-                    ))
-                    .push(text(&release.tag_name).size(14)),
-            );
+            left = left.push(action_bar::list_button(
+                text(&release.tag_name).size(14),
+                Message::VersionChosen(index),
+            ));
         }
     } else {
         for (index, release) in state.available_versions.iter().enumerate() {
@@ -56,10 +49,7 @@ pub(crate) fn view(state: &ProtonupGui) -> Element<'_, Message> {
     };
 
     let actions = if state.mode == GuiMode::CheckWhatsNew {
-        vec![
-            Action::new("View Changelog", changelog_message),
-            Action::new("Back", Message::BackToToolSelection),
-        ]
+        vec![Action::new("Back", Message::BackToToolSelection)]
     } else {
         vec![
             Action::new("Start Download", Message::StartSelectedDownloads),

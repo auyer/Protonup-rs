@@ -102,42 +102,13 @@ pub(crate) fn handle(state: &mut ProtonupGui, message: Message) -> Task<Message>
             Task::none()
         }
 
-        Message::ToolSelected(index) => {
+        Message::ToolChosen(index) => {
             state.selected_tool_indices.clear();
             state.selected_tool_indices.push(index);
-            Task::none()
+            confirm_tool_selection(state)
         }
 
-        Message::ToolSelectionConfirmed => {
-            if state.mode == GuiMode::DownloadForCustom && state.app_installation.is_none() {
-                if state.custom_path_input.is_empty() {
-                    state.path_error = Some("Please enter a valid path".to_string());
-                    return Task::none();
-                }
-
-                state.app_installation = Some(AppInstallations::new_custom_app_install(
-                    state.custom_path_input.clone(),
-                ));
-
-                state.available_tools = libprotonup::sources::CompatTools.clone();
-                state.selected_tool_indices.clear();
-                state.selection_step = SelectionStep::SelectingTools;
-                state.global_status = "Select tools to install".to_string();
-                return Task::none();
-            }
-
-            if state.selected_tool_indices.is_empty() {
-                state.global_status = "Please select at least one tool".to_string();
-                return Task::none();
-            }
-
-            let tool = state.available_tools[state.selected_tool_indices[0]].clone();
-            state.selected_tool = Some(tool.clone());
-            state.selection_step = SelectionStep::SelectingVersions;
-            state.global_status = format!("Fetching releases for {}...", tool.name);
-
-            Task::perform(download::fetch_releases(tool), Message::VersionsFetched)
-        }
+        Message::ToolSelectionConfirmed => confirm_tool_selection(state),
 
         Message::VersionsFetched(releases) => {
             state.available_versions = releases;
@@ -168,14 +139,7 @@ pub(crate) fn handle(state: &mut ProtonupGui, message: Message) -> Task<Message>
 
         Message::ToggleVersion(index) => {
             if state.mode == GuiMode::CheckWhatsNew {
-                state.selected_version_indices.clear();
-                state.selected_version_indices.push(index);
-                if state.show_changelog.is_some()
-                    && let Some(release) = state.available_versions.get(index)
-                    && let Some(ref tool) = state.selected_tool
-                {
-                    state.show_changelog = Some((release.clone(), tool.clone()));
-                }
+                select_version_exclusive(state, index);
             } else if let Some(pos) = state
                 .selected_version_indices
                 .iter()
@@ -188,35 +152,18 @@ pub(crate) fn handle(state: &mut ProtonupGui, message: Message) -> Task<Message>
             Task::none()
         }
 
-        Message::SelectArchitecture(variant) => {
-            state.selected_arch_variant = Some(variant);
+        Message::VersionChosen(index) => {
+            select_version_exclusive(state, index);
+            show_changelog_for_selected_version(state);
             Task::none()
         }
 
-        Message::StartSelectedDownloads => {
-            if state.selected_tool_indices.is_empty() || state.selected_version_indices.is_empty() {
-                state.global_status = "Please select tools and versions".to_string();
-                return Task::none();
-            }
-
-            let mut tools_and_versions = Vec::new();
-            for &tool_idx in &state.selected_tool_indices {
-                let tool = state.available_tools[tool_idx].clone();
-                let versions: Vec<libprotonup::downloads::Release> = state
-                    .selected_version_indices
-                    .iter()
-                    .map(|&v_idx| state.available_versions[v_idx].clone())
-                    .collect();
-                tools_and_versions.push((tool, versions));
-            }
-
-            let app_inst = state.app_installation.clone().unwrap();
-
-            Task::perform(
-                ProtonupGui::check_already_installed(app_inst, tools_and_versions),
-                Message::AlreadyInstalledChecked,
-            )
+        Message::ArchitectureChosen(variant) => {
+            state.selected_arch_variant = Some(variant);
+            start_selected_downloads(state)
         }
+
+        Message::StartSelectedDownloads => start_selected_downloads(state),
 
         Message::AlreadyInstalledChecked(already_installed) => {
             state.already_installed_tools = already_installed;
@@ -523,4 +470,89 @@ pub(crate) fn handle(state: &mut ProtonupGui, message: Message) -> Task<Message>
             Task::none()
         }
     }
+}
+
+/// Applies the "Continue" behavior for a chosen tool: for the custom-location
+/// first step it validates the path and moves on to the tool list; otherwise it
+/// locks in the selected tool and starts fetching its releases.
+fn confirm_tool_selection(state: &mut ProtonupGui) -> Task<Message> {
+    if state.mode == GuiMode::DownloadForCustom && state.app_installation.is_none() {
+        if state.custom_path_input.is_empty() {
+            state.path_error = Some("Please enter a valid path".to_string());
+            return Task::none();
+        }
+
+        state.app_installation = Some(AppInstallations::new_custom_app_install(
+            state.custom_path_input.clone(),
+        ));
+
+        state.available_tools = libprotonup::sources::CompatTools.clone();
+        state.selected_tool_indices.clear();
+        state.selection_step = SelectionStep::SelectingTools;
+        state.global_status = "Select tools to install".to_string();
+        return Task::none();
+    }
+
+    if state.selected_tool_indices.is_empty() {
+        state.global_status = "Please select at least one tool".to_string();
+        return Task::none();
+    }
+
+    let tool = state.available_tools[state.selected_tool_indices[0]].clone();
+    state.selected_tool = Some(tool.clone());
+    state.selection_step = SelectionStep::SelectingVersions;
+    state.global_status = format!("Fetching releases for {}...", tool.name);
+
+    Task::perform(download::fetch_releases(tool), Message::VersionsFetched)
+}
+
+/// Selects exactly one version (radio semantics), used by the Check-What's-New pane.
+fn select_version_exclusive(state: &mut ProtonupGui, index: usize) {
+    state.selected_version_indices.clear();
+    state.selected_version_indices.push(index);
+
+    if state.show_changelog.is_some() {
+        show_changelog_for_selected_version(state);
+    }
+}
+
+/// Points `show_changelog` at the currently selected version, if resolvable.
+fn show_changelog_for_selected_version(state: &mut ProtonupGui) {
+    let index = match state.selected_version_indices.last() {
+        Some(&index) => index,
+        None => return,
+    };
+
+    if let (Some(release), Some(tool)) = (
+        state.available_versions.get(index).cloned(),
+        state.selected_tool.clone(),
+    ) {
+        state.show_changelog = Some((release, tool));
+    }
+}
+
+/// Advances the selection flow into the download step for the current selection.
+fn start_selected_downloads(state: &mut ProtonupGui) -> Task<Message> {
+    if state.selected_tool_indices.is_empty() || state.selected_version_indices.is_empty() {
+        state.global_status = "Please select tools and versions".to_string();
+        return Task::none();
+    }
+
+    let mut tools_and_versions = Vec::new();
+    for &tool_idx in &state.selected_tool_indices {
+        let tool = state.available_tools[tool_idx].clone();
+        let versions: Vec<libprotonup::downloads::Release> = state
+            .selected_version_indices
+            .iter()
+            .map(|&v_idx| state.available_versions[v_idx].clone())
+            .collect();
+        tools_and_versions.push((tool, versions));
+    }
+
+    let app_inst = state.app_installation.clone().unwrap();
+
+    Task::perform(
+        ProtonupGui::check_already_installed(app_inst, tools_and_versions),
+        Message::AlreadyInstalledChecked,
+    )
 }

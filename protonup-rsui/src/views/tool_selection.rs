@@ -1,5 +1,5 @@
-use iced::widget::{Column, Row, radio, scrollable, text};
-use iced::{Center, Element};
+use iced::Element;
+use iced::widget::{Column, scrollable, text};
 
 use crate::message::{GuiMode, Message};
 use crate::state::ProtonupGui;
@@ -25,28 +25,14 @@ pub(crate) fn view(state: &ProtonupGui) -> Element<'_, Message> {
         column = column.push(text("Loading tools...").size(14));
     } else {
         for (index, tool) in state.available_tools.iter().enumerate() {
-            column = column.push(
-                Row::new()
-                    .spacing(10)
-                    .align_y(Center)
-                    .push(radio(
-                        "",
-                        index,
-                        state.selected_tool_indices.first().copied(),
-                        Message::ToolSelected,
-                    ))
-                    .push(text(&tool.name).size(14)),
-            );
+            column = column.push(action_bar::list_button(
+                text(&tool.name).size(14),
+                Message::ToolChosen(index),
+            ));
         }
     }
 
     let content: Element<'_, Message> = scrollable(column).into();
 
-    action_bar::with_actions(
-        content,
-        [
-            Action::new("Continue", Message::ToolSelectionConfirmed),
-            Action::new("Back", Message::BackToInitial),
-        ],
-    )
+    action_bar::with_actions(content, [Action::new("Back", Message::BackToInitial)])
 }

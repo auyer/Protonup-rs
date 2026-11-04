@@ -19,14 +19,17 @@ pub(crate) enum Message {
     SelectCheckWhatsNew,
 
     AppInstallationDetected(AppInstallations),
-    ToolSelected(usize),
+    /// Selects a tool and immediately advances (list-button click).
+    ToolChosen(usize),
     ToolSelectionConfirmed,
 
     VersionsFetched(Vec<libprotonup::downloads::Release>),
     ToggleVersion(usize),
+    VersionChosen(usize),
     StartSelectedDownloads,
 
-    SelectArchitecture(MicroArchVariants),
+    /// Selects an architecture and immediately starts downloading (list-button click).
+    ArchitectureChosen(MicroArchVariants),
 
     AlreadyInstalledChecked(Vec<ToolDownload>),
     ToggleReinstall(usize),
