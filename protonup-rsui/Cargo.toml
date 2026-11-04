@@ -1,6 +1,6 @@
 [package]
 name = "protonup-rsui"
-version = "1.0.0-rc2"
+version = "1.0.0-rc3"
 edition = "2024"
 authors = ["Rafael Passos <auyer@rcpassos.me>"]
 repository = "https://github.com/auyer/protonup-rs"
@@ -29,7 +29,7 @@ assets = [
 
 iced = { version = "0.14", features = ["tokio", "sipper", "image", "canvas", "advanced"] }
 iced_futures = { version = "0.14", features = ["tokio"] }
-libprotonup = { path = "../libprotonup", version = "1.0.0-rc2" }
+libprotonup = { path = "../libprotonup", version = "1.0.0-rc3" }
 lyon_algorithms = "1.0"
 rfd = "0.17"
 
