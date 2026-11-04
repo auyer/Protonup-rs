@@ -1,8 +1,9 @@
-use iced::widget::{Column, Row, button, radio, scrollable, text};
+use iced::widget::{Column, Row, radio, scrollable, text};
 use iced::{Center, Element};
 
 use crate::message::{GuiMode, Message};
 use crate::state::ProtonupGui;
+use crate::views::action_bar::{self, Action};
 
 pub(crate) fn view(state: &ProtonupGui) -> Element<'_, Message> {
     let title = match state.mode {
@@ -39,17 +40,13 @@ pub(crate) fn view(state: &ProtonupGui) -> Element<'_, Message> {
         }
     }
 
-    column = column.push(
-        button(text("Continue").size(14))
-            .on_press(Message::ToolSelectionConfirmed)
-            .padding(10),
-    );
+    let content: Element<'_, Message> = scrollable(column).into();
 
-    column = column.push(
-        button(text("Back").size(14))
-            .on_press(Message::BackToInitial)
-            .padding(10),
-    );
-
-    scrollable(column).into()
+    action_bar::with_actions(
+        content,
+        [
+            Action::new("Continue", Message::ToolSelectionConfirmed),
+            Action::new("Back", Message::BackToInitial),
+        ],
+    )
 }

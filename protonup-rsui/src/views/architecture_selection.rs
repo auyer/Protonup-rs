@@ -1,10 +1,11 @@
-use iced::widget::{Column, Row, button, checkbox, scrollable, text};
+use iced::widget::{Column, Row, checkbox, scrollable, text};
 use iced::{Center, Element};
 
 use libprotonup::architecture_variants::MicroArchVariants;
 
 use crate::message::Message;
 use crate::state::ProtonupGui;
+use crate::views::action_bar::{self, Action};
 
 pub(crate) fn view(state: &ProtonupGui) -> Element<'_, Message> {
     let mut column = Column::new().spacing(10);
@@ -38,17 +39,13 @@ pub(crate) fn view(state: &ProtonupGui) -> Element<'_, Message> {
         );
     }
 
-    column = column.push(
-        button(text("Continue").size(14))
-            .on_press(Message::StartSelectedDownloads)
-            .padding(10),
-    );
+    let content: Element<'_, Message> = scrollable(column).into();
 
-    column = column.push(
-        button(text("Back").size(14))
-            .on_press(Message::VersionsFetched(vec![]))
-            .padding(10),
-    );
-
-    scrollable(column).into()
+    action_bar::with_actions(
+        content,
+        [
+            Action::new("Continue", Message::StartSelectedDownloads),
+            Action::new("Back", Message::VersionsFetched(vec![])),
+        ],
+    )
 }

@@ -1,8 +1,9 @@
-use iced::widget::{Column, Container, Row, button, checkbox, radio, scrollable, text};
+use iced::widget::{Column, Container, Row, checkbox, radio, scrollable, text};
 use iced::{Element, Length};
 
 use crate::message::{GuiMode, Message};
 use crate::state::ProtonupGui;
+use crate::views::action_bar::{self, Action};
 use crate::views::changelog;
 
 pub(crate) fn view(state: &ProtonupGui) -> Element<'_, Message> {
@@ -43,71 +44,44 @@ pub(crate) fn view(state: &ProtonupGui) -> Element<'_, Message> {
         }
     }
 
-    if state.mode == GuiMode::CheckWhatsNew {
-        left = left.push({
-            let release = state
-                .selected_version_indices
-                .last()
-                .and_then(|&i| state.available_versions.get(i))
-                .or_else(|| state.available_versions.first())
-                .cloned();
-            let tool = state.selected_tool.clone();
-            button(text("View Changelog").size(14))
-                .on_press_with(move || {
-                    Message::ToggleChangelog(Box::new(
-                        release.clone().and_then(|r| tool.clone().map(|t| (r, t))),
-                    ))
-                })
-                .padding(10)
-        });
+    let changelog_message = {
+        let release = state
+            .selected_version_indices
+            .last()
+            .and_then(|&i| state.available_versions.get(i))
+            .or_else(|| state.available_versions.first())
+            .cloned();
+        let tool = state.selected_tool.clone();
+        Message::ToggleChangelog(Box::new(release.and_then(|r| tool.map(|t| (r, t)))))
+    };
 
-        left = left.push(
-            button(text("Back").size(14))
-                .on_press(Message::BackToToolSelection)
-                .padding(10),
-        );
+    let actions = if state.mode == GuiMode::CheckWhatsNew {
+        vec![
+            Action::new("View Changelog", changelog_message),
+            Action::new("Back", Message::BackToToolSelection),
+        ]
     } else {
-        left = left.push(
-            button(text("Start Download").size(14))
-                .on_press(Message::StartSelectedDownloads)
-                .padding(10),
-        );
-
-        left = left.push({
-            let release = state
-                .selected_version_indices
-                .last()
-                .and_then(|&i| state.available_versions.get(i))
-                .or_else(|| state.available_versions.first())
-                .cloned();
-            let tool = state.selected_tool.clone();
-            button(text("Show Changelog").size(14))
-                .on_press_with(move || {
-                    Message::ToggleChangelog(Box::new(
-                        release.clone().and_then(|r| tool.clone().map(|t| (r, t))),
-                    ))
-                })
-                .padding(10)
-        });
-
-        left = left.push(
-            button(text("Back").size(14))
-                .on_press(Message::BackToToolSelection)
-                .padding(10),
-        );
-    }
+        vec![
+            Action::new("Start Download", Message::StartSelectedDownloads),
+            Action::new("Show Changelog", changelog_message),
+            Action::new("Back", Message::BackToToolSelection),
+        ]
+    };
 
     let left_element: Element<_> = scrollable(left).into();
 
-    if let Some((ref release, ref compat_tool)) = state.show_changelog {
-        let right = Container::new(changelog::view(release, compat_tool))
-            .width(Length::FillPortion(2))
-            .padding(10);
+    let content: Element<'_, Message> =
+        if let Some((ref release, ref compat_tool)) = state.show_changelog {
+            let right = Container::new(changelog::view(release, compat_tool))
+                .width(Length::FillPortion(2))
+                .padding(10);
 
-        let left_portion = Container::new(left_element).width(Length::FillPortion(1));
+            let left_portion = Container::new(left_element).width(Length::FillPortion(1));
 
-        Row::new().push(left_portion).push(right).into()
-    } else {
-        left_element
-    }
+            Row::new().push(left_portion).push(right).into()
+        } else {
+            left_element
+        };
+
+    action_bar::with_actions(content, actions)
 }

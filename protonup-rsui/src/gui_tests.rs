@@ -1412,4 +1412,119 @@ mod tests {
         );
         assert_eq!(model.tools[1].name, "Luxtorpeda (Steam)");
     }
+
+    //
+    // Action Pane (bottom-anchored actions) Tests
+    //
+
+    #[test]
+    fn action_pane_renders_tool_selection_actions() -> Result<(), Error> {
+        let mut model = ready_model();
+        model.mode = GuiMode::DownloadForSteam;
+        model.app_mode = AppMode::DownloadForSteam;
+        model.selection_step = SelectionStep::SelectingTools;
+        model.available_tools =
+            vec![libprotonup::sources::CompatTool::from_str("GEProton").unwrap()];
+
+        let mut ui = simulator(crate::views::app_view(&model));
+
+        assert!(
+            ui.find("Continue").is_ok(),
+            "Continue action should be visible"
+        );
+        assert!(ui.find("Back").is_ok(), "Back action should be visible");
+
+        Ok(())
+    }
+
+    #[test]
+    fn action_pane_renders_quick_update_actions() -> Result<(), Error> {
+        let mut model = ready_model();
+        model.mode = GuiMode::QuickUpdate;
+        model.app_mode = AppMode::QuickUpdate;
+        model.selection_step = SelectionStep::Downloading;
+        model.download_started = true;
+        model.quick_update_status = QuickUpdateStatus::AllUpToDate(vec![InstalledTool {
+            app: AppInstallations::Steam,
+            tool: "GEProton".to_string(),
+            latest: Some("GE-Proton11-11".to_string()),
+            versions: vec!["GE-Proton11-11".to_string()],
+        }]);
+
+        let mut ui = simulator(crate::views::app_view(&model));
+
+        assert!(
+            ui.find("Force Reinstallation").is_ok(),
+            "Force Reinstallation action should be visible"
+        );
+        assert!(
+            ui.find("Back to Main Menu").is_ok(),
+            "Back to Main Menu action should be visible"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn action_pane_renders_manage_installations_actions() -> Result<(), Error> {
+        let mut model = ready_model();
+        model.mode = GuiMode::ManageInstallations;
+        model.app_mode = AppMode::ManageInstallations;
+
+        let mut ui = simulator(crate::views::app_view(&model));
+
+        // No selections yet => Delete Selected is rendered but disabled, and still present.
+        assert!(
+            ui.find("Delete Selected").is_ok(),
+            "Delete Selected should be visible"
+        );
+        assert!(
+            ui.find("Back to Main Menu").is_ok(),
+            "Back to Main Menu should be visible"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn action_pane_renders_version_selection_actions() -> Result<(), Error> {
+        let mut model = ready_model();
+        model.mode = GuiMode::DownloadForSteam;
+        model.app_mode = AppMode::DownloadForSteam;
+        model.selection_step = SelectionStep::SelectingVersions;
+        model.selected_tool = Some(libprotonup::sources::CompatTool::from_str("GEProton").unwrap());
+
+        let mut ui = simulator(crate::views::app_view(&model));
+
+        assert!(
+            ui.find("Start Download").is_ok(),
+            "Start Download should be visible"
+        );
+        assert!(
+            ui.find("Show Changelog").is_ok(),
+            "Show Changelog should be visible"
+        );
+        assert!(ui.find("Back").is_ok(), "Back should be visible");
+
+        Ok(())
+    }
+
+    #[test]
+    fn action_pane_renders_check_whats_new_actions() -> Result<(), Error> {
+        let mut model = ready_model();
+        model.mode = GuiMode::CheckWhatsNew;
+        model.app_mode = AppMode::CheckWhatsNew;
+        model.selection_step = SelectionStep::SelectingVersions;
+        model.selected_tool = Some(libprotonup::sources::CompatTool::from_str("GEProton").unwrap());
+
+        let mut ui = simulator(crate::views::app_view(&model));
+
+        assert!(
+            ui.find("View Changelog").is_ok(),
+            "View Changelog should be visible"
+        );
+        assert!(ui.find("Back").is_ok(), "Back should be visible");
+
+        Ok(())
+    }
 }

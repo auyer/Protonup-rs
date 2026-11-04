@@ -3,7 +3,8 @@ use iced::{Element, Length};
 
 use crate::circular::Circular;
 use crate::message::{Message, QuickUpdateStatus};
-use crate::state::{ProtonupGui, warning_button_style};
+use crate::state::ProtonupGui;
+use crate::views::action_bar::{self, Action};
 use crate::views::installed_versions;
 
 pub(crate) fn view(state: &ProtonupGui) -> Element<'_, Message> {
@@ -63,34 +64,29 @@ pub(crate) fn view(state: &ProtonupGui) -> Element<'_, Message> {
                 }
             }
 
-            column = column.push(iced::widget::space::vertical().height(Length::Fixed(20.0)));
+            let content: Element<'_, Message> = {
+                let left_element: Element<_> = scrollable(column).into();
 
-            column = column.push(
-                button(text("Force Reinstallation").size(14))
-                    .on_press(Message::ForceReinstall)
-                    .padding(10)
-                    .style(warning_button_style()),
-            );
+                if let Some(info) = &state.show_all_versions {
+                    let right = Container::new(installed_versions::view(info))
+                        .width(Length::FillPortion(2))
+                        .padding(10);
 
-            column = column.push(
-                button(text("Back to Main Menu").size(14))
-                    .on_press(Message::BackToInitial)
-                    .padding(10),
-            );
+                    let left_portion = Container::new(left_element).width(Length::FillPortion(1));
 
-            let left_element: Element<_> = scrollable(column).into();
+                    Row::new().push(left_portion).push(right).into()
+                } else {
+                    left_element
+                }
+            };
 
-            if let Some(info) = &state.show_all_versions {
-                let right = Container::new(installed_versions::view(info))
-                    .width(Length::FillPortion(2))
-                    .padding(10);
-
-                let left_portion = Container::new(left_element).width(Length::FillPortion(1));
-
-                Row::new().push(left_portion).push(right).into()
-            } else {
-                left_element
-            }
+            action_bar::with_actions(
+                content,
+                [
+                    Action::new("Force Reinstallation", Message::ForceReinstall).warning(),
+                    Action::new("Back to Main Menu", Message::BackToInitial),
+                ],
+            )
         }
         QuickUpdateStatus::InProgress => Column::new()
             .spacing(10)

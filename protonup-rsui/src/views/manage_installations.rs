@@ -1,11 +1,12 @@
-use iced::widget::{Column, Row, button, checkbox, container, rule, scrollable, text};
-use iced::{Center, Element, Fill, Length};
+use iced::widget::{Column, Row, checkbox, container, rule, scrollable, text};
+use iced::{Center, Element, Length};
 
 use crate::message::Message;
 use crate::state::ProtonupGui;
+use crate::views::action_bar::{self, Action};
 
 pub(crate) fn view(state: &ProtonupGui) -> Element<'_, Message> {
-    let mut main_column = Column::new().spacing(20);
+    let mut main_column: Column<'_, Message> = Column::new().spacing(20);
 
     main_column = main_column.push(text(&state.manage_status).size(14));
 
@@ -51,23 +52,19 @@ pub(crate) fn view(state: &ProtonupGui) -> Element<'_, Message> {
         .iter()
         .any(|v| v.versions.iter().any(|ver| ver.selected_for_deletion));
 
-    main_column = main_column.push(if has_selections {
-        button(text("Delete Selected").size(14))
-            .on_press(Message::DeleteSelectedVersions)
-            .padding(10)
+    let delete_action = if has_selections {
+        Action::new("Delete Selected", Message::DeleteSelectedVersions)
     } else {
-        button(text("Delete Selected").size(14)).padding(10)
-    });
+        Action::disabled("Delete Selected")
+    };
 
-    main_column = main_column.push(
-        button(text("Back to Main Menu").size(14))
-            .on_press(Message::BackToInitial)
-            .padding(10),
-    );
+    let content: Element<'_, Message> = scrollable(main_column).into();
 
-    container(scrollable(main_column))
-        .padding(20)
-        .width(Fill)
-        .height(Fill)
-        .into()
+    action_bar::with_actions(
+        content,
+        [
+            delete_action,
+            Action::new("Back to Main Menu", Message::BackToInitial),
+        ],
+    )
 }

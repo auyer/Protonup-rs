@@ -1,11 +1,12 @@
 use iced::Element;
-use iced::widget::{Column, Row, button, progress_bar, text};
+use iced::widget::{Column, Row, button, progress_bar, scrollable, text};
 
 use libprotonup::downloads::Release;
 use libprotonup::sources::CompatTool;
 
 use crate::message::{Message, ToolStatus};
 use crate::state::ProtonupGui;
+use crate::views::action_bar::{self, Action};
 
 pub(crate) fn view(state: &ProtonupGui) -> Element<'_, Message> {
     let mut column = Column::new().spacing(10);
@@ -41,6 +42,8 @@ pub(crate) fn view(state: &ProtonupGui) -> Element<'_, Message> {
         column = column.push(row);
     }
 
+    let mut actions: Vec<Action> = Vec::new();
+
     if let Some(ref result) = state.download_complete {
         match result {
             Ok(pairs) => {
@@ -49,24 +52,22 @@ pub(crate) fn view(state: &ProtonupGui) -> Element<'_, Message> {
                 for (release, _) in pairs {
                     column = column.push(text(format!("  • {}", release.tag_name)).size(12));
                 }
-                column = column.push(
-                    button(text("Back to Main Menu").size(14))
-                        .on_press(Message::BackToInitial)
-                        .padding(5),
-                );
+                actions.push(Action::new("Back to Main Menu", Message::BackToInitial));
             }
             Err(e) => {
                 column = column.push(text(format!("✗ Failed: {}", e)).color([1.0, 0.3, 0.3]));
-                column = column.push(
-                    button(text("Try Again").size(14))
-                        .on_press(Message::StartSelectedDownloads)
-                        .padding(5),
-                );
+                actions.push(Action::new("Try Again", Message::StartSelectedDownloads));
             }
         }
     }
 
-    column.into()
+    let content: Element<'_, Message> = scrollable(column).into();
+
+    if actions.is_empty() {
+        content
+    } else {
+        action_bar::with_actions(content, actions)
+    }
 }
 
 fn find_release_pair<'a>(

@@ -3,6 +3,7 @@ use iced::widget::{Column, button, scrollable, text, text_input};
 
 use crate::message::Message;
 use crate::state::ProtonupGui;
+use crate::views::action_bar::{self, Action};
 
 pub(crate) fn view(state: &ProtonupGui) -> Element<'_, Message> {
     let mut column = Column::new().spacing(10);
@@ -29,17 +30,13 @@ pub(crate) fn view(state: &ProtonupGui) -> Element<'_, Message> {
         column = column.push(text(error).size(12).color([1.0, 0.3, 0.3]));
     }
 
-    column = column.push(
-        button(text("Continue").size(14))
-            .on_press(Message::ToolSelectionConfirmed)
-            .padding(10),
-    );
+    let content: Element<'_, Message> = scrollable(column).into();
 
-    column = column.push(
-        button(text("Back").size(14))
-            .on_press(Message::BackToInitial)
-            .padding(10),
-    );
-
-    scrollable(column).into()
+    action_bar::with_actions(
+        content,
+        [
+            Action::new("Continue", Message::ToolSelectionConfirmed),
+            Action::new("Back", Message::BackToInitial),
+        ],
+    )
 }

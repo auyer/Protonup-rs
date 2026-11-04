@@ -4,6 +4,7 @@ use iced::{Center, Element};
 use crate::message::Message;
 use crate::state::ProtonupGui;
 
+pub mod action_bar;
 pub mod architecture_selection;
 pub mod changelog;
 pub mod confirm_reinstall;
