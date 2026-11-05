@@ -13,7 +13,8 @@ RUN apt update && \
     curl \
     bats \
     shellcheck \
-    go-md2man
+    go-md2man \
+    libudev-dev
 
 RUN rustup toolchain install stable
 RUN rustup component add clippy rust-analyzer
