@@ -2017,6 +2017,61 @@ mod tests {
         assert_eq!(grid[0].len(), 1, "tool selection has the Back action");
     }
 
+    /// Apps with installed tools come first; apps without are grouped into one
+    /// non-interactive column, so they contribute no focusable options.
+    #[test]
+    fn manage_partition_puts_populated_apps_first() {
+        use crate::views::manage_installations::partition_views;
+
+        let version = |name: &str| crate::message::InstalledVersion {
+            name: name.into(),
+            path: PathBuf::from("/tmp").join(name),
+            selected_for_deletion: false,
+        };
+
+        let views = vec![
+            crate::message::AppInstallationView {
+                app: AppInstallations::Steam,
+                versions: vec![version("GE-Proton9-1")],
+                loading: false,
+            },
+            crate::message::AppInstallationView {
+                app: AppInstallations::SteamFlatpak,
+                versions: vec![],
+                loading: false,
+            },
+            crate::message::AppInstallationView {
+                app: AppInstallations::Lutris,
+                versions: vec![version("GE-Proton9-2"), version("GE-Proton9-3")],
+                loading: false,
+            },
+            crate::message::AppInstallationView {
+                app: AppInstallations::LutrisFlatpak,
+                versions: vec![],
+                loading: false,
+            },
+        ];
+
+        let (populated, empty) = partition_views(&views);
+        let names = |group: &[&crate::message::AppInstallationView]| {
+            group.iter().map(|v| v.app.clone()).collect::<Vec<_>>()
+        };
+
+        assert_eq!(
+            names(&populated),
+            vec![AppInstallations::Steam, AppInstallations::Lutris],
+            "apps with tools come first, in original order"
+        );
+        assert_eq!(
+            names(&empty),
+            vec![
+                AppInstallations::SteamFlatpak,
+                AppInstallations::LutrisFlatpak
+            ],
+            "apps without tools keep their original order"
+        );
+    }
+
     #[test]
     fn manage_grid_is_apps_columns_by_versions_rows() {
         let mut model = ready_model();
