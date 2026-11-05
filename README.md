@@ -203,9 +203,13 @@ Future improvements may include:
 
 - [x] More compatibility tools support
 - [x] Additional UI polish and refinements
-- [ ] Side-bar should scroll to fit small screens
+- [x] Side-bar should scroll to fit small screens
 - [x] Replace radial selectors by list of action buttons (removing the need for two clicks) 
-- [ ] Add Keyboard/Gamepad interaction
+- [x] Add Keyboard/Gamepad interaction
+    - [x] Scroll with the right stick
+    - [ ] Hold key to repeat action (or left stick)
+- [ ] Installer option to add to Steam
+
 
 ## Feedbacks & Contributing
 
