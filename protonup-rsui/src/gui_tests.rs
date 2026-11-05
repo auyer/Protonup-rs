@@ -99,6 +99,42 @@ mod tests {
     }
 
     #[test]
+    fn chrome_visible_at_steam_deck_resolution() -> Result<(), Error> {
+        // Steam Deck / gamescope runs at 1280x800. The header, footer hints and
+        // the pinned sidebar `Close` button must stay within the viewport.
+        // (Light-mode legibility is a contrast concern and is verified
+        // manually; here we guard the geometric layout.)
+        let model = ready_model();
+        let mut ui = Simulator::with_size(
+            Settings::default(),
+            Size::new(1280.0, 800.0),
+            crate::views::app_view(&model),
+        );
+
+        for label in [
+            "Protonup-rs",
+            crate::views::footer::KEYBOARD_HINT,
+            crate::views::footer::CONTROLLER_HINT,
+            "Close",
+        ] {
+            let node = ui.find(label)?;
+            let visible = node
+                .visible_bounds()
+                .unwrap_or_else(|| panic!("{label:?} should have visible bounds"));
+            assert!(
+                visible.height > 0.0 && visible.width > 0.0,
+                "{label:?} should be visible, got {visible:?}"
+            );
+            assert!(
+                visible.y >= 0.0 && visible.y + visible.height <= 800.0,
+                "{label:?} should be within the viewport, got {visible:?}"
+            );
+        }
+
+        Ok(())
+    }
+
+    #[test]
     fn sidebar_scrolls_when_buttons_do_not_fit() -> Result<(), Error> {
         let model = ProtonupGui::default();
         let mut ui = Simulator::with_size(

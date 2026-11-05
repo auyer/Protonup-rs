@@ -295,6 +295,36 @@ pub(crate) fn action_bar_style(
     }
 }
 
+/// Style for a chrome panel (header, sidebar, footer).
+pub(crate) fn panel_style() -> impl Fn(&Theme) -> container::Style + 'static {
+    |theme| {
+        let palette = theme.extended_palette();
+        container::Style {
+            background: Some(Background::Color(palette.background.weak.color)),
+            border: Border {
+                radius: 4.0.into(),
+                width: 1.0,
+                color: panel_border_color(theme),
+            },
+            ..container::Style::default()
+        }
+    }
+}
+
+/// Border color for a chrome panel.
+pub(crate) fn panel_border_color(theme: &Theme) -> Color {
+    let palette = theme.extended_palette();
+
+    if palette.background.base.color == Color::WHITE {
+        Color {
+            a: 0.35,
+            ..palette.background.base.text
+        }
+    } else {
+        palette.background.strongest.color
+    }
+}
+
 /// Style for the footer hint bar.
 pub(crate) fn footer_style() -> impl Fn(&Theme) -> container::Style + 'static {
     |theme| {
@@ -304,7 +334,7 @@ pub(crate) fn footer_style() -> impl Fn(&Theme) -> container::Style + 'static {
             border: Border {
                 radius: 4.0.into(),
                 width: 1.0,
-                color: palette.background.strong.color,
+                color: panel_border_color(theme),
             },
             ..container::Style::default()
         }
@@ -338,4 +368,87 @@ pub(crate) fn keycap<'a>(label: &'a str) -> Element<'a, Message> {
 /// A vertical divider/rule helper re-exported for shortcut panels.
 pub(crate) fn panel_rule() -> Element<'static, Message> {
     rule::horizontal(1).into()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Relative luminance (WCAG) of a color with an opaque background behind it.
+    fn luminance_on(color: Color, behind: Color) -> f32 {
+        let a = color.a;
+        let r = color.r * a + behind.r * (1.0 - a);
+        let g = color.g * a + behind.g * (1.0 - a);
+        let b = color.b * a + behind.b * (1.0 - a);
+
+        fn channel(c: f32) -> f32 {
+            if c <= 0.03928 {
+                c / 12.92
+            } else {
+                ((c + 0.055) / 1.055).powf(2.4)
+            }
+        }
+
+        0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b)
+    }
+
+    fn contrast_on(color: Color, behind: Color) -> f32 {
+        let l1 = luminance_on(color, behind);
+        let l2 = luminance_on(behind, behind);
+        let (hi, lo) = if l1 > l2 { (l1, l2) } else { (l2, l1) };
+        (hi + 0.05) / (lo + 0.05)
+    }
+
+    /// The panel border must be discernible against a light window background.
+    ///
+    /// iced's `background.strong*` shades are only ~15–20% off white, which
+    /// made the header/sidebar/footer edges effectively invisible under
+    /// gamescope light mode.
+    #[test]
+    fn panel_border_reads_in_light_theme() {
+        let theme = Theme::Light;
+        let palette = theme.extended_palette();
+        assert_eq!(palette.background.base.color, Color::WHITE);
+
+        let border = panel_border_color(&theme);
+        let contrast = contrast_on(border, palette.background.base.color);
+
+        assert!(
+            contrast >= 1.3,
+            "panel border contrast on light background was {contrast:.2}, expected >= 1.3"
+        );
+
+        // The old `background.strong` shade would not have passed this bar.
+        let legacy = contrast_on(
+            palette.background.strong.color,
+            palette.background.base.color,
+        );
+        assert!(
+            contrast > legacy,
+            "new border ({contrast:.2}) should beat the old strong shade ({legacy:.2})"
+        );
+    }
+
+    /// In dark themes keep iced's strongest background shade.
+    #[test]
+    fn panel_border_keeps_strongest_shade_in_dark_theme() {
+        let theme = Theme::Dark;
+        let palette = theme.extended_palette();
+
+        assert_eq!(
+            panel_border_color(&theme),
+            palette.background.strongest.color
+        );
+    }
+
+    /// `rounded_box` carries a radius but no border width, which is why the
+    /// sidebar used to have no visible edge.
+    #[test]
+    fn panel_style_draws_a_visible_border() {
+        let style = panel_style()(&Theme::Light);
+
+        assert_eq!(style.border.width, 1.0);
+        assert!(style.border.color.a > 0.0);
+        assert!(style.background.is_some());
+    }
 }

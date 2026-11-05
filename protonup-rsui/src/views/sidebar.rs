@@ -10,6 +10,9 @@ mod circular_widget {
     pub use crate::circular::Circular;
 }
 
+/// Height reserved by the sidebar logo, in logical pixels.
+const LOGO_HEIGHT: f32 = 120.0;
+
 /// One sidebar entry: label, message and whether it can be activated.
 struct SidebarEntry {
     label: &'static str,
@@ -101,20 +104,21 @@ pub(crate) fn focusable_options(state: &ProtonupGui) -> Vec<Vec<Focusable>> {
 pub(crate) fn sidebar(state: &ProtonupGui) -> Element<'_, Message> {
     let mut column = Column::new().spacing(10).width(Length::Fill);
     let mut pinned = Column::new().spacing(10).width(Length::Fill);
+    let mut header = Column::new().spacing(10).width(Length::Fill);
 
     let logo_handle = &state.logo_handle;
-    column = column.push(
+    header = header.push(
         Container::new(
             image(logo_handle)
-                .width(180)
-                .height(Length::Fixed(180.0))
+                .width(Length::Fill)
+                .height(Length::Fixed(LOGO_HEIGHT))
                 .content_fit(ContentFit::Contain),
         )
         .center_x(Length::Fill)
         .padding(5),
     );
 
-    column = column.push(rule::horizontal(1));
+    header = header.push(rule::horizontal(1));
 
     let is_downloading = state.download_started
         && state.selection_step == SelectionStep::Downloading
@@ -129,18 +133,18 @@ pub(crate) fn sidebar(state: &ProtonupGui) -> Element<'_, Message> {
         );
 
     if show_spinner {
-        column = column.push(
+        header = header.push(
             Container::new(circular_widget::Circular::new().size(40.0).bar_height(4.0))
                 .center_x(Length::Fill)
                 .padding(10),
         );
 
-        column = column
+        header = header
             .push(Container::new(text("Download in progress...").size(12)).center_x(Length::Fill));
     }
 
     if is_complete {
-        column = column.push(
+        header = header.push(
             Container::new(text("Completed ✅").size(14))
                 .center_x(Length::Fill)
                 .padding(10),
@@ -201,17 +205,21 @@ pub(crate) fn sidebar(state: &ProtonupGui) -> Element<'_, Message> {
         .width(Length::Fill)
         .height(Length::Fill);
 
+    // The logo/status header sits above the scrollable so a short viewport
+    // never has to fit it alongside the (scrollable) navigation entries. The
+    // pinned `Close`/`Cancel` bar sits below it and therefore always shows.
     let content = Column::new()
         .spacing(10)
         .padding(10)
         .width(Length::Fill)
         .height(Length::Fill)
+        .push(header)
         .push(scrollable)
         .push(pinned);
 
     container(content)
         .width(220)
         .height(Length::Fill)
-        .style(container::rounded_box)
+        .style(focus_style::panel_style())
         .into()
 }

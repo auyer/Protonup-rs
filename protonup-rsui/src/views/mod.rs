@@ -4,6 +4,9 @@ use iced::{Center, Element, Length};
 use crate::message::Message;
 use crate::state::ProtonupGui;
 
+/// Height reserved by the header bar, in logical pixels.
+pub(crate) const HEADER_HEIGHT: f32 = 44.0;
+
 pub mod action_bar;
 pub mod architecture_selection;
 pub mod changelog;
@@ -40,6 +43,8 @@ pub(crate) fn app_view(state: &ProtonupGui) -> Element<'_, Message> {
         return shortcuts::controller_view();
     }
 
+    // The header is fixed-height so it always reserves space, even when the
+    // viewport is small (e.g. gamescope on a Steam Deck).
     let header = container(
         Row::new()
             .push(text("Protonup-rs").size(20))
@@ -48,15 +53,15 @@ pub(crate) fn app_view(state: &ProtonupGui) -> Element<'_, Message> {
             .padding(10)
             .align_y(Center),
     )
-    .style(|theme: &iced::Theme| {
-        let palette = theme.extended_palette();
-        container::Style::default()
-            .border(iced::border::color(palette.background.strong.color).width(1))
-    });
+    .width(Length::Fill)
+    .height(Length::Fixed(HEADER_HEIGHT))
+    .style(focus_style::panel_style());
 
     let sidebar = self::sidebar::sidebar(state);
     let main_content = selection_flow::view_main_content(state);
 
+    // Only the main content stretches; the footer keeps its reserved height so
+    // it can never be pushed off-screen by a tall content pane.
     let main_column = Column::new()
         .width(Length::Fill)
         .height(Length::Fill)

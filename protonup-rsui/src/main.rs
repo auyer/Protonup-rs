@@ -56,6 +56,10 @@ pub fn main() -> iced::Result {
         .subscription(App::subscription)
         .title("ProtonUp-RS")
         .window(iced::window::Settings {
+            // Start at the Steam Deck resolution (1280x800).
+            size: iced::Size::new(1280.0, 800.0),
+            min_size: Some(iced::Size::new(512.0, 360.0)),
+            maximized: false,
             platform_specific: iced::window::settings::PlatformSpecific {
                 application_id: "protonup-rsui".to_string(),
                 ..Default::default()
