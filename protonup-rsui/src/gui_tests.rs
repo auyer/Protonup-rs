@@ -2072,6 +2072,82 @@ mod tests {
         );
     }
 
+    /// Regression: Steam Native + Lutris Flatpak installed (with Steam Flatpak
+    /// and Lutris Native missing) must leave two populated columns, and the
+    /// controller's column cursor must align with the *populated-app rank*,
+    /// not the original `APP_INSTALLATIONS_VARIANTS` index. The right arrow
+    /// must walk Sidebar -> Steam -> Lutris Flatpak before wrapping to Actions.
+    #[test]
+    fn manage_nav_reaches_lutris_flatpak_after_steam_native() {
+        let mut model = ready_model();
+        model.app_mode = AppMode::ManageInstallations;
+        model.mode = GuiMode::ManageInstallations;
+
+        let version = |name: &str| crate::message::InstalledVersion {
+            name: name.into(),
+            path: PathBuf::from("/tmp").join(name),
+            selected_for_deletion: false,
+        };
+
+        // Original AppInstallations order: Steam(0), SteamFlatpak(1), Lutris(2),
+        // LutrisFlatpak(3). Only Steam and LutrisFlatpak are populated.
+        model.app_installations_views = vec![
+            crate::message::AppInstallationView {
+                app: AppInstallations::Steam,
+                versions: vec![version("GE-Proton9-1")],
+                loading: false,
+            },
+            crate::message::AppInstallationView {
+                app: AppInstallations::SteamFlatpak,
+                versions: vec![],
+                loading: false,
+            },
+            crate::message::AppInstallationView {
+                app: AppInstallations::Lutris,
+                versions: vec![],
+                loading: false,
+            },
+            crate::message::AppInstallationView {
+                app: AppInstallations::LutrisFlatpak,
+                versions: vec![version("GE-Proton9-2")],
+                loading: false,
+            },
+        ];
+
+        // Two populated columns (Steam, LutrisFlatpak) in one version row.
+        let grid = pane_grid(&model, crate::Pane::Main);
+        assert_eq!(grid.len(), 1, "one version row");
+        assert_eq!(grid[0].len(), 2, "two populated app columns");
+
+        // Cursor col 1 (second populated column) drives navigation and must
+        // correspond to LutrisFlatpak, not the original index-1 app.
+        model.focus.engaged = true;
+        model.focus.pane = crate::Pane::Main;
+        model.focus.row = 0;
+        model.focus.col = 0;
+
+        // Right arrow: Steam -> LutrisFlatpak (stays in Main pane).
+        apply_nav_action(&mut model, crate::NavAction::MoveRight);
+        assert_eq!(
+            model.focus.pane,
+            crate::Pane::Main,
+            "still in main after first right"
+        );
+        assert_eq!(
+            (model.focus.row, model.focus.col),
+            (0, 1),
+            "cursor on second populated column"
+        );
+
+        // Only the next right arrow wraps out to Actions.
+        apply_nav_action(&mut model, crate::NavAction::MoveRight);
+        assert_eq!(
+            model.focus.pane,
+            crate::Pane::Actions,
+            "third right wraps to actions"
+        );
+    }
+
     #[test]
     fn manage_grid_is_apps_columns_by_versions_rows() {
         let mut model = ready_model();

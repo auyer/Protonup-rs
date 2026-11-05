@@ -85,11 +85,11 @@ pub(crate) fn view(state: &ProtonupGui) -> Element<'_, Message> {
     let mut row = Row::new().spacing(20);
 
     // Apps with installed tools first, each in its own column.
-    for view in populated {
+    for (col_rank, view) in populated.iter().enumerate() {
         let app_idx = state
             .app_installations_views
             .iter()
-            .position(|candidate| std::ptr::eq(candidate, view))
+            .position(|candidate| std::ptr::eq(candidate, *view))
             .unwrap_or_default();
 
         let mut col = Column::new().spacing(10).width(Length::Fill);
@@ -99,8 +99,14 @@ pub(crate) fn view(state: &ProtonupGui) -> Element<'_, Message> {
         col = col.push(rule::horizontal(1));
 
         for (ver_idx, version) in view.versions.iter().enumerate() {
-            let highlight =
-                Highlight::from(focus_style::is_focused(state, Pane::Main, ver_idx, app_idx));
+            // The focus cursor's column is the populated-app rank, matching
+            // the grid built by `main_focusable_options` — not `app_idx`.
+            let highlight = Highlight::from(focus_style::is_focused(
+                state,
+                Pane::Main,
+                ver_idx,
+                col_rank,
+            ));
 
             col = col.push(focus_style::option_row(
                 Row::new()
