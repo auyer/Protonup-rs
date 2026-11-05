@@ -6,16 +6,44 @@
 //! [`crate::input::pane_grid`].
 
 use iced::widget::{button, checkbox, container, rule, text_input};
-use iced::{Background, Border, Color, Element, Font, Length, Theme};
+use iced::{Background, Border, Color, Element, Font, Length, Shadow, Theme, Vector};
 
 use crate::message::{Message, Pane};
 use crate::state::ProtonupGui;
 
-/// Accent color of the focus ring.
-const FOCUS_COLOR: Color = Color::from_rgb(0.30, 0.62, 1.0);
+/// Visible thickness of the focus ring, in logical
+const FOCUS_RING_WIDTH: f32 = FOCUS_RING_VISIBLE * 2.0;
+
+/// The ring thickness the user actually perceives, in logical pixels.
+const FOCUS_RING_VISIBLE: f32 = 3.0;
+
+/// Alpha of the focus fill drawn behind the focused option.
+const FOCUS_FILL_ALPHA: f32 = 0.4;
+
+/// Blur radius of the inner glow drawn inside the focus ring.
+const FOCUS_GLOW_BLUR: f32 = FOCUS_RING_VISIBLE * 2.5;
+
+/// Alpha of the inner glow.
+const FOCUS_GLOW_ALPHA: f32 = 0.55;
+
+/// Accent color of the focus ring, derived from the active theme.
+fn focus_color(theme: &Theme) -> Color {
+    theme.extended_palette().secondary.strong.color
+}
 
 /// Fill color of the focused option row.
-const FOCUS_FILL: Color = Color::from_rgba(0.30, 0.62, 1.0, 0.18);
+fn focus_fill(theme: &Theme) -> Background {
+    Background::Color(focus_color(theme).scale_alpha(FOCUS_FILL_ALPHA))
+}
+
+/// Inner glow drawn inside the focus ring: a soft, blurred accent shadow.
+fn focus_glow(theme: &Theme) -> Shadow {
+    Shadow {
+        color: focus_color(theme).scale_alpha(FOCUS_GLOW_ALPHA),
+        offset: Vector::ZERO,
+        blur_radius: FOCUS_GLOW_BLUR,
+    }
+}
 
 /// Which element of a pane should be drawn as focused.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -53,12 +81,12 @@ pub(crate) fn action_focused(state: &ProtonupGui, col: usize) -> bool {
     is_focused(state, Pane::Actions, 0, col)
 }
 
-fn border_of(highlight: Highlight) -> Border {
+fn border_of(theme: &Theme, highlight: Highlight) -> Border {
     if highlight.is_focused() {
         Border {
             radius: 4.0.into(),
-            width: 2.0,
-            color: FOCUS_COLOR,
+            width: FOCUS_RING_WIDTH,
+            color: focus_color(theme),
         }
     } else {
         Border {
@@ -69,10 +97,8 @@ fn border_of(highlight: Highlight) -> Border {
     }
 }
 
-fn background_of(highlight: Highlight) -> Option<Background> {
-    highlight
-        .is_focused()
-        .then_some(Background::Color(FOCUS_FILL))
+fn background_of(theme: &Theme, highlight: Highlight) -> Option<Background> {
+    highlight.is_focused().then(|| focus_fill(theme))
 }
 
 /// Container style that draws the focus ring/fill when focused, and an
@@ -81,11 +107,12 @@ pub(crate) fn option_container_style(
     highlight: Highlight,
     base_background: Option<Background>,
 ) -> impl Fn(&Theme) -> container::Style + 'static {
-    move |_theme| {
+    move |theme| {
         if highlight.is_focused() {
             container::Style {
-                background: background_of(highlight),
-                border: border_of(highlight),
+                background: background_of(theme, highlight),
+                border: border_of(theme, highlight),
+                shadow: focus_glow(theme),
                 ..container::Style::default()
             }
         } else {
@@ -110,12 +137,14 @@ pub(crate) fn option_row<'a>(
     let content: Element<'a, Message> = content.into();
 
     match on_press {
-        Some(message) => button(content)
-            .on_press(message)
-            .padding(10)
-            .width(Length::Fill)
-            .style(option_button_style(highlight))
-            .into(),
+        Some(message) => focus_frame(
+            button(content)
+                .on_press(message)
+                .padding(10)
+                .width(Length::Fill)
+                .style(option_button_style),
+            highlight,
+        ),
         None => container(content)
             .padding(10)
             .width(Length::Fill)
@@ -137,12 +166,14 @@ pub(crate) fn option_list_row<'a>(
     let content: Element<'a, Message> = content.into();
 
     match on_press {
-        Some(message) => button(content)
-            .on_press(message)
-            .padding(10)
-            .width(Length::Fixed(width))
-            .style(option_button_style(highlight))
-            .into(),
+        Some(message) => focus_frame(
+            button(content)
+                .on_press(message)
+                .padding(10)
+                .width(Length::Fixed(width))
+                .style(option_button_style),
+            highlight,
+        ),
         None => container(content)
             .padding(10)
             .width(Length::Fixed(width))
@@ -178,45 +209,37 @@ pub(crate) fn option_checkbox_row<'a>(
     option_list_row(row, highlight, Some(toggle), width)
 }
 
-/// Style for an option [`iced::widget::button`]: the standard button look,
-/// with a focus ring when the keyboard/controller cursor is on it.
-pub(crate) fn option_button_style(
-    highlight: Highlight,
-) -> impl Fn(&Theme, button::Status) -> button::Style + 'static {
-    move |theme, status| {
-        let mut style = button::primary(theme, status);
-        style.border = if highlight.is_focused() {
-            Border {
-                radius: 4.0.into(),
-                width: 2.0,
-                color: FOCUS_COLOR,
-            }
-        } else {
-            Border {
-                radius: 4.0.into(),
-                width: 1.0,
-                color: theme.extended_palette().background.strong.color,
-            }
-        };
-        style
-    }
+/// Style for an option [`iced::widget::button`]: the standard button look.
+pub(crate) fn option_button_style(theme: &Theme, status: button::Status) -> button::Style {
+    let mut style = button::primary(theme, status);
+    style.border = Border {
+        radius: 4.0.into(),
+        width: 1.0,
+        color: theme.extended_palette().background.strong.color,
+    };
+    style
 }
 
 /// Wraps `content` in a focus ring when `highlight` is focused.
-///
-/// Used for action buttons, where the ring is drawn by an outer container so
-/// iced's button style is untouched.
 pub(crate) fn focus_frame<'a>(
     content: impl Into<Element<'a, Message>>,
     highlight: Highlight,
 ) -> Element<'a, Message> {
     container(content.into())
-        .padding(if highlight.is_focused() { 2 } else { 0 })
+        .padding(if highlight.is_focused() {
+            FOCUS_RING_VISIBLE
+        } else {
+            0.0
+        })
         .style(option_container_style(highlight, None))
         .into()
 }
 
 /// Style for a [`iced::widget::checkbox`] that draws the focus ring on the box.
+///
+/// The checkbox draws its own chrome, so unlike [`focus_frame`] the ring has to
+/// be an inline border here; [`FOCUS_RING_WIDTH`] already compensates for the
+/// half-stroke clipping that iced applies to quad borders.
 pub(crate) fn checkbox_style(
     highlight: Highlight,
 ) -> impl Fn(&Theme, checkbox::Status) -> checkbox::Style + 'static {
@@ -225,8 +248,8 @@ pub(crate) fn checkbox_style(
         if highlight.is_focused() {
             style.border = Border {
                 radius: 4.0.into(),
-                width: 2.0,
-                color: FOCUS_COLOR,
+                width: FOCUS_RING_WIDTH,
+                color: focus_color(theme),
             };
         }
         style
@@ -234,6 +257,9 @@ pub(crate) fn checkbox_style(
 }
 
 /// Style for a [`iced::widget::text_input`] that shows a focus ring.
+///
+/// Like [`checkbox_style`], this is an inline border with the width already
+/// compensated for iced's half-stroke clipping.
 pub(crate) fn text_input_style(
     highlight: Highlight,
 ) -> impl Fn(&Theme, text_input::Status) -> text_input::Style + 'static {
@@ -242,8 +268,8 @@ pub(crate) fn text_input_style(
         if highlight.is_focused() {
             style.border = Border {
                 radius: 4.0.into(),
-                width: 2.0,
-                color: FOCUS_COLOR,
+                width: FOCUS_RING_WIDTH,
+                color: focus_color(theme),
             };
         }
         style
@@ -260,9 +286,10 @@ pub(crate) fn action_bar_style(
         if highlight.is_focused() {
             style.border = Border {
                 radius: 4.0.into(),
-                width: 2.0,
-                color: FOCUS_COLOR,
+                width: FOCUS_RING_WIDTH,
+                color: focus_color(theme),
             };
+            style.shadow = focus_glow(theme);
         }
         style
     }
