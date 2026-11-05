@@ -2224,6 +2224,11 @@ mod tests {
 
         assert!(ui.find("Controller Shortcuts").is_ok());
         assert!(ui.find("RB / RT").is_ok());
+        // Every input the gamepad stream can emit should be documented.
+        assert!(
+            ui.find("RIGHT STICK").is_ok(),
+            "the right stick scrolls, so it must appear in the shortcut panel"
+        );
 
         Ok(())
     }

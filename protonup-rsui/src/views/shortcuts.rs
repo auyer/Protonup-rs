@@ -47,6 +47,10 @@ const CONTROLLER_SHORTCUTS: &[(&str, &str)] = &[
         "",
         "(cycles panes when there is no option in that direction)",
     ),
+    (
+        "RIGHT STICK",
+        "Scroll the focused pane up / down and left / right",
+    ),
     ("(A) / (X)", "Select / activate the focused option"),
     (
         "START",
