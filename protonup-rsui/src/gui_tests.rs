@@ -77,7 +77,6 @@ mod tests {
             show_keyboard_shortcuts: false,
             show_controller_shortcuts: false,
             gamepads_unavailable: false,
-            gamepads: Default::default(),
         }
     }
 
@@ -186,7 +185,6 @@ mod tests {
             show_keyboard_shortcuts: false,
             show_controller_shortcuts: false,
             gamepads_unavailable: false,
-            gamepads: Default::default(),
         };
         let mut ui = simulator(crate::views::app_view(&model));
 

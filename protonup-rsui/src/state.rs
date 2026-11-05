@@ -77,9 +77,6 @@ pub(crate) struct ProtonupGui {
     pub show_controller_shortcuts: bool,
     /// Set when gamepad support could not be initialized (headless, no udev, …).
     pub gamepads_unavailable: bool,
-
-    /// Lazily initialized gamepad backend; `None` until first poll.
-    pub gamepads: GamepadState,
 }
 
 /// Where keyboard/controller focus currently is.
@@ -131,22 +128,6 @@ impl FocusState {
     }
 }
 
-/// Lazily initialized gamepad backend.
-#[derive(Default)]
-pub(crate) struct GamepadState {
-    pub backend: Option<gilrs::Gilrs>,
-    pub stick: crate::input::StickState,
-}
-
-impl std::fmt::Debug for GamepadState {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("GamepadState")
-            .field("backend", &self.backend.is_some())
-            .field("stick", &self.stick)
-            .finish()
-    }
-}
-
 impl Default for ProtonupGui {
     fn default() -> Self {
         Self {
@@ -185,7 +166,6 @@ impl Default for ProtonupGui {
             show_keyboard_shortcuts: false,
             show_controller_shortcuts: false,
             gamepads_unavailable: false,
-            gamepads: GamepadState::default(),
         }
     }
 }
@@ -457,65 +437,83 @@ impl ProtonupGui {
             iced::keyboard::listen().filter_map(|event| crate::input::keyboard_to_message(&event)),
         );
 
-        // Gamepad polling: skipped entirely once initialization has failed.
+        // Gamepad support runs in a background task so the UI thread never
+        // blocks on `Gilrs` initialization or event polling.
         if !self.gamepads_unavailable {
-            subscriptions.push(
-                iced::time::every(std::time::Duration::from_millis(50))
-                    .map(|_| crate::message::Message::PollGamepads),
-            );
+            subscriptions.push(gamepad_subscription());
         }
 
         iced::Subscription::batch(subscriptions)
     }
+}
 
-    /// Polls connected gamepads, lazily creating the backend on first use.
-    ///
-    /// Returns the navigation messages produced by this poll.
-    pub(crate) fn poll_gamepads(&mut self) -> Vec<Message> {
-        if self.gamepads.backend.is_none() {
-            // `Gilrs::new()` returns an error instead of panicking when the
-            // platform backend is unavailable (e.g. no udev/uinput in a
-            // headless environment).
-            match gilrs::Gilrs::new() {
-                Ok(backend) => self.gamepads.backend = Some(backend),
-                Err(_) => {
-                    self.gamepads_unavailable = true;
-                    return Vec::new();
-                }
+/// Runs the gamepad backend in a background task, off the UI thread.
+pub(crate) fn gamepad_subscription() -> iced::Subscription<Message> {
+    iced::Subscription::run(gamepad_stream)
+}
+
+fn gamepad_stream() -> impl iced::futures::Stream<Item = Message> {
+    use iced::futures::sink::SinkExt;
+
+    iced::stream::channel(64, async |mut output| {
+        let mut backend = match gilrs::Gilrs::new() {
+            Ok(backend) => Some(backend),
+            Err(_) => {
+                let _ = output.send(Message::GamepadUnavailable).await;
+                return;
             }
-        }
-
-        let Some(ref mut backend) = self.gamepads.backend else {
-            return Vec::new();
         };
 
-        let mut messages = Vec::new();
+        // TODO: not needed. All connected controllers should trigger the same action
+        // Per-gamepad edge-triggering state for the left stick, so several
+        // controllers can navigate independently.
+        let mut sticks: std::collections::HashMap<gilrs::GamepadId, crate::input::StickState> =
+            std::collections::HashMap::new();
 
-        // gilrs emits one `ButtonPressed` per press (and per trigger
-        // threshold crossing), which is exactly the edge-triggering we want.
-        while let Some(gilrs::Event { event, .. }) = backend.next_event() {
-            if let gilrs::EventType::ButtonPressed(button, _) = event
-                && let Some(message) = crate::input::gamepad_to_message(button)
-            {
-                messages.push(message);
+        // Locked ~60 Hz cadence.
+        let mut tick = tokio::time::interval(std::time::Duration::from_millis(16));
+        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+        loop {
+            tick.tick().await;
+
+            // Collect inputs while borrowing `backend`, then release the
+            // borrow before awaiting. `Gilrs` is `Send` but not `Sync`, so a
+            // `&Gilrs` (e.g. the `gamepads()` iterator) held across an await
+            // would make this future non-`Send`.
+            let pending = {
+                let mut pending = Vec::new();
+
+                if let Some(backend) = backend.as_mut() {
+                    // 1. Drain discrete events (button presses, hot-plug).
+                    while let Some(gilrs::Event { event, .. }) = backend.next_event() {
+                        if let gilrs::EventType::ButtonPressed(button, _) = event
+                            && let Some(message) = crate::input::gamepad_to_message(button)
+                        {
+                            pending.push(message);
+                        }
+                    }
+
+                    // 2. Poll the continuous left-stick axes on every
+                    // connected gamepad, edge-triggering navigation steps.
+                    for (id, pad) in backend.gamepads() {
+                        let (x, y) = (
+                            pad.value(gilrs::Axis::LeftStickX),
+                            pad.value(gilrs::Axis::LeftStickY),
+                        );
+
+                        if let Some(message) = sticks.entry(id).or_default().sample((x, y)) {
+                            pending.push(message);
+                        }
+                    }
+                }
+
+                pending
+            };
+
+            for message in pending {
+                let _ = output.send(message).await;
             }
         }
-
-        // Left stick: edge-triggered via `StickState`, sampled from the first
-        // connected gamepad (menus are driven by a single controller).
-        let stick = backend.gamepads().next().map(|(_, pad)| {
-            (
-                pad.value(gilrs::Axis::LeftStickX),
-                pad.value(gilrs::Axis::LeftStickY),
-            )
-        });
-
-        if let Some((x, y)) = stick
-            && let Some(message) = self.gamepads.stick.sample((x, y))
-        {
-            messages.push(message);
-        }
-
-        messages
-    }
+    })
 }

@@ -476,12 +476,9 @@ pub(crate) fn handle(state: &mut ProtonupGui, message: Message) -> Task<Message>
 
         Message::Nav(action) => handle_nav(state, action),
 
-        Message::PollGamepads => {
-            let messages = state.poll_gamepads();
-            // Gamepad input is low-frequency and independent; run it in order.
-            for message in messages {
-                let _ = handle(state, message);
-            }
+        Message::GamepadUnavailable => {
+            state.gamepads_unavailable = true;
+            state.show_controller_shortcuts = false;
             Task::none()
         }
 

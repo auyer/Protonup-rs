@@ -68,8 +68,8 @@ pub(crate) enum Message {
 
     /// A navigation action requested by the keyboard or a gamepad.
     Nav(NavAction),
-    /// Periodic gamepad poll tick.
-    PollGamepads,
+    /// The gamepad backend could not be initialized; controller support is disabled.
+    GamepadUnavailable,
     /// Toggle the keyboard shortcuts help panel.
     ToggleKeyboardShortcuts,
     /// Toggle the controller shortcuts help panel.
