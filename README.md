@@ -191,6 +191,7 @@ mv ./target/release/protonup-rs "your path"
 ```
 
 To build the GUI (`protonup-rsui`) instead, replace `protonup-rs` with `protonup-rsui` in the commands above.
+> Building the UI requires [libudev](https://man7.org/linux/man-pages/man3/libudev.3.html) (`libudev-dev` and `pkg-config` on the Debian family).
 
 ## Docs
 
