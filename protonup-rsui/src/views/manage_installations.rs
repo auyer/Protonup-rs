@@ -109,7 +109,7 @@ pub(crate) fn view(state: &ProtonupGui) -> Element<'_, Message> {
 
     main_column = main_column.push(row);
 
-    let content: Element<'_, Message> = scrollable(main_column).into();
+    let content: Element<'_, Message> = scrollable(main_column).id(super::scroll_id::main()).into();
 
     action_bar::with_actions(content, actions(state), |col| {
         focus_style::action_focused(state, col)

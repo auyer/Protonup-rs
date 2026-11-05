@@ -505,6 +505,17 @@ fn gamepad_stream() -> impl iced::futures::Stream<Item = Message> {
                         if let Some(message) = sticks.entry(id).or_default().sample((x, y)) {
                             pending.push(message);
                         }
+
+                        // The right stick drives continuous scrolling of the
+                        // focused pane (edge-free, one pixel step per tick).
+                        let (rx, ry) = (
+                            pad.value(gilrs::Axis::RightStickX),
+                            pad.value(gilrs::Axis::RightStickY),
+                        );
+
+                        if let Some(message) = crate::input::right_stick_to_scroll((rx, ry)) {
+                            pending.push(message);
+                        }
                     }
                 }
 

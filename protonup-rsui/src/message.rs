@@ -68,6 +68,12 @@ pub(crate) enum Message {
 
     /// A navigation action requested by the keyboard or a gamepad.
     Nav(NavAction),
+    /// A right-stick scroll request: a continuous pixel delta applied to the
+    /// scrollable that currently holds focus.
+    Scroll {
+        x: f32,
+        y: f32,
+    },
     /// The gamepad backend could not be initialized; controller support is disabled.
     GamepadUnavailable,
     /// Toggle the keyboard shortcuts help panel.

@@ -107,7 +107,7 @@ pub(crate) fn view(state: &ProtonupGui) -> Element<'_, Message> {
         }
     }
 
-    let content: Element<'_, Message> = scrollable(column).into();
+    let content: Element<'_, Message> = scrollable(column).id(super::scroll_id::main()).into();
 
     let actions = actions(state);
     if actions.is_empty() {

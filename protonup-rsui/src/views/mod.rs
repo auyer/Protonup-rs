@@ -15,6 +15,7 @@ pub mod footer;
 pub mod installed_versions;
 pub mod manage_installations;
 pub mod quick_update;
+pub mod scroll_id;
 pub mod selection_flow;
 pub mod shortcuts;
 pub mod sidebar;

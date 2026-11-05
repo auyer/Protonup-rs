@@ -38,7 +38,7 @@ pub(crate) fn view<'a>(release: &'a Release, compat_tool: &'a CompatTool) -> Ele
             .padding(5),
     );
 
-    container(scrollable(column))
+    container(scrollable(column).id(crate::views::scroll_id::main_right()))
         .padding(10)
         .style(container::rounded_box)
         .into()

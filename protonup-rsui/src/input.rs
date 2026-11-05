@@ -4,16 +4,23 @@
 
 use gilrs::Button;
 
+use iced::Task;
 use iced::keyboard::{self, Key};
+use iced::widget::Id;
 
 use crate::message::{Focusable, Message, NavAction, Pane};
 use crate::state::ProtonupGui;
 use crate::views::{
     architecture_selection, confirm_reinstall, custom_location, download_progress,
-    manage_installations, quick_update, selection_flow, sidebar, tool_selection, version_selection,
+    manage_installations, quick_update, scroll_id, selection_flow, sidebar, tool_selection,
+    version_selection,
 };
 
 const STICK_DEADZONE: f32 = 0.5;
+/// Deadzone for the right stick before it drives scrolling.
+const RIGHT_STICK_SCROLL_DEADZONE: f32 = 0.25;
+/// Pixel step per tick at full right-stick deflection.
+const RIGHT_STICK_SCROLL_SPEED: f32 = 25.0;
 
 /// Maps an ignored iced keyboard event to a navigation message.
 ///
@@ -81,6 +88,27 @@ pub(crate) fn gamepad_to_message(button: Button) -> Option<Message> {
     };
 
     Some(Message::Nav(action))
+}
+
+/// Maps a right-stick sample to a continuous scroll request.
+///
+/// Returns `None` while the stick sits in the deadzone. The returned delta is
+/// a pixel step for the current tick: pushing the stick up scrolls toward the
+/// top of the content (matching the left stick's "up = up" direction), and
+/// pushing it right scrolls to the right.
+pub(crate) fn right_stick_to_scroll(stick: (f32, f32)) -> Option<Message> {
+    let (x, y) = stick;
+
+    if x.abs() < RIGHT_STICK_SCROLL_DEADZONE && y.abs() < RIGHT_STICK_SCROLL_DEADZONE {
+        return None;
+    }
+
+    // `y` is negated: a positive stick `y` (pushed up) should scroll the view
+    // toward the top, i.e. a negative iced offset delta.
+    Some(Message::Scroll {
+        x: x * RIGHT_STICK_SCROLL_SPEED,
+        y: -y * RIGHT_STICK_SCROLL_SPEED,
+    })
 }
 
 /// The direction the left stick is currently pointing (dominant axis only).
@@ -380,4 +408,53 @@ pub(crate) fn focused_option(state: &ProtonupGui) -> Option<Focusable> {
         .into_iter()
         .nth(row)
         .and_then(|row| row.into_iter().nth(col))
+}
+
+/// The scrollable that currently holds the focus cursor, if any.
+///
+/// Follows the focus cursor: the sidebar cursor scrolls the sidebar, the main
+/// cursor scrolls the main list, and the action bar has no scrollable.
+pub(crate) fn scroll_target_id(state: &ProtonupGui) -> Option<Id> {
+    match state.focus.pane {
+        Pane::Sidebar => Some(scroll_id::sidebar()),
+        Pane::Main => Some(scroll_id::main()),
+        Pane::Actions => None,
+    }
+}
+
+/// A task that snaps the focused scrollable so the focused option is visible.
+///
+/// Uses a relative (percentage) offset derived from the focus cursor's
+/// position within its pane grid, so it works without knowing the exact pixel
+/// geometry of any option. Returns `None` when there is nothing to scroll.
+pub(crate) fn reveal_focused_scroll(state: &ProtonupGui) -> Option<Task<Message>> {
+    let grid = pane_grid(state, state.focus.pane);
+    let rows = grid.len();
+    if rows == 0 {
+        return None;
+    }
+
+    let row = state.focus.row.min(rows - 1);
+    let cols = grid[row].len().max(1);
+    let col = state.focus.col.min(cols - 1);
+
+    // Map the cursor's grid position to a scroll percentage (0.0 = start,
+    // 1.0 = end) so the focused option is brought into view.
+    let y = if rows > 1 {
+        row as f32 / (rows - 1) as f32
+    } else {
+        0.0
+    };
+    let x = if cols > 1 {
+        col as f32 / (cols - 1) as f32
+    } else {
+        0.0
+    };
+
+    let id = scroll_target_id(state)?;
+
+    Some(iced::widget::operation::snap_to(
+        id,
+        iced::widget::operation::RelativeOffset { x, y },
+    ))
 }

@@ -30,7 +30,7 @@ pub(crate) fn view(tool: &InstalledTool) -> Element<'_, Message> {
             .padding(5),
     );
 
-    container(scrollable(column))
+    container(scrollable(column).id(crate::views::scroll_id::main_right()))
         .padding(10)
         .style(container::rounded_box)
         .into()

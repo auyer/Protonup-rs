@@ -133,7 +133,8 @@ pub(crate) fn view(state: &ProtonupGui) -> Element<'_, Message> {
             }
 
             let content: Element<'_, Message> = {
-                let left_element: Element<_> = scrollable(column).into();
+                let left_element: Element<_> =
+                    scrollable(column).id(super::scroll_id::main()).into();
 
                 if let Some(info) = &state.show_all_versions {
                     let right = Container::new(installed_versions::view(info))

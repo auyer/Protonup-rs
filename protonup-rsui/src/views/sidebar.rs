@@ -196,7 +196,10 @@ pub(crate) fn sidebar(state: &ProtonupGui) -> Element<'_, Message> {
         column = column.push(focus_style::focus_frame(styled, highlight));
     }
 
-    let scrollable = scrollable(column).width(Length::Fill).height(Length::Fill);
+    let scrollable = scrollable(column)
+        .id(super::scroll_id::sidebar())
+        .width(Length::Fill)
+        .height(Length::Fill);
 
     let content = Column::new()
         .spacing(10)

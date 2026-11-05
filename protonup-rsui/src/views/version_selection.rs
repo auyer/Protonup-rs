@@ -110,7 +110,7 @@ pub(crate) fn view(state: &ProtonupGui) -> Element<'_, Message> {
         ));
     }
 
-    let left_element: Element<_> = scrollable(left).into();
+    let left_element: Element<_> = scrollable(left).id(super::scroll_id::main()).into();
 
     let content: Element<'_, Message> =
         if let Some((ref release, ref compat_tool)) = state.show_changelog {

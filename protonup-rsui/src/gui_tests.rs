@@ -1782,6 +1782,7 @@ mod tests {
             Message::ToggleKeyboardShortcuts => "ToggleKeyboardShortcuts".into(),
             Message::ToggleControllerShortcuts => "ToggleControllerShortcuts".into(),
             Message::CloseShortcuts => "CloseShortcuts".into(),
+            Message::Scroll { .. } => "Scroll".into(),
             other => format!("other({:?})", std::mem::discriminant(other)),
         }
     }
@@ -2438,6 +2439,133 @@ mod tests {
             (bounds.width - width).abs() < 0.5,
             "checkbox option should be {width} wide, got {}",
             bounds.width
+        );
+    }
+
+    //
+    // Right-stick scrolling and focused-option reveal
+    //
+
+    #[test]
+    fn right_stick_inside_deadzone_does_not_scroll() {
+        assert!(crate::input::right_stick_to_scroll((0.0, 0.0)).is_none());
+        assert!(crate::input::right_stick_to_scroll((0.1, -0.2)).is_none());
+        assert!(crate::input::right_stick_to_scroll((0.24, 0.24)).is_none());
+    }
+
+    #[test]
+    fn right_stick_up_scrolls_toward_top() {
+        // gilrs reports a positive `y` when the stick is pushed up, and iced's
+        // `scroll_by` adds the delta to the offset, so up must be negative.
+        let message = crate::input::right_stick_to_scroll((0.0, 1.0)).expect("should scroll");
+        match message {
+            Message::Scroll { x, y } => {
+                assert_eq!(x, 0.0);
+                assert!(y < 0.0, "pushing up should scroll toward the top, got {y}");
+            }
+            other => panic!("expected Scroll, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn right_stick_down_scrolls_toward_bottom() {
+        let message = crate::input::right_stick_to_scroll((0.0, -1.0)).expect("should scroll");
+        match message {
+            Message::Scroll { x, y } => {
+                assert_eq!(x, 0.0);
+                assert!(
+                    y > 0.0,
+                    "pushing down should scroll toward the bottom, got {y}"
+                );
+            }
+            other => panic!("expected Scroll, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn right_stick_horizontal_is_proportional() {
+        let message = crate::input::right_stick_to_scroll((1.0, 0.0)).expect("should scroll");
+        match message {
+            Message::Scroll { x, y } => {
+                assert!(x > 0.0, "pushing right should scroll right, got {x}");
+                assert_eq!(y, 0.0);
+            }
+            other => panic!("expected Scroll, got {other:?}"),
+        }
+
+        // Partial deflection produces a smaller step than full deflection.
+        let full = crate::input::right_stick_to_scroll((1.0, 0.0));
+        let half = crate::input::right_stick_to_scroll((0.5, 0.0));
+        match (full, half) {
+            (Some(Message::Scroll { x: full, .. }), Some(Message::Scroll { x: half, .. })) => {
+                assert!(
+                    half.abs() < full.abs(),
+                    "partial deflection should step less"
+                );
+            }
+            _ => panic!("both samples should scroll"),
+        }
+    }
+
+    #[test]
+    fn scroll_target_follows_focus_cursor() {
+        let mut model = model_in_tool_selection();
+
+        model.focus.pane = crate::Pane::Sidebar;
+        assert_eq!(
+            crate::input::scroll_target_id(&model),
+            Some(crate::views::scroll_id::sidebar())
+        );
+
+        model.focus.pane = crate::Pane::Main;
+        assert_eq!(
+            crate::input::scroll_target_id(&model),
+            Some(crate::views::scroll_id::main())
+        );
+    }
+
+    #[test]
+    fn action_pane_has_no_scroll_target() {
+        let mut model = model_in_tool_selection();
+        model.focus.pane = crate::Pane::Actions;
+        assert_eq!(crate::input::scroll_target_id(&model), None);
+    }
+
+    #[test]
+    fn reveal_scroll_starts_at_first_option() {
+        let mut model = model_in_tool_selection();
+        model.focus.pane = crate::Pane::Main;
+        model.focus.row = 0;
+        model.focus.col = 0;
+
+        // The first option sits at the top of the list.
+        assert!(crate::input::reveal_focused_scroll(&model).is_some());
+    }
+
+    #[test]
+    fn reveal_scroll_is_none_when_there_is_nothing_to_scroll() {
+        let mut model = model_in_tool_selection();
+        model.focus.pane = crate::Pane::Actions;
+        assert!(crate::input::reveal_focused_scroll(&model).is_none());
+    }
+
+    #[test]
+    fn nav_movement_keeps_focus_in_bounds_and_reveals() {
+        let mut model = model_in_tool_selection();
+        model.focus.pane = crate::Pane::Main;
+        model.focus.engaged = true;
+
+        // Walk down past the end of the list; the cursor must stay valid.
+        for _ in 0..10 {
+            let _ = crate::update::handle(&mut model, Message::Nav(crate::NavAction::MoveDown));
+        }
+
+        let rows = crate::input::pane_grid(&model, crate::Pane::Main).len();
+        assert!(rows > 0, "tool selection should expose options");
+        assert!(
+            model.focus.row < rows,
+            "focus row {} out of bounds for {rows} rows",
+            model.focus.row
         );
     }
 }

@@ -476,6 +476,14 @@ pub(crate) fn handle(state: &mut ProtonupGui, message: Message) -> Task<Message>
 
         Message::Nav(action) => handle_nav(state, action),
 
+        Message::Scroll { x, y } => match crate::input::scroll_target_id(state) {
+            Some(id) => iced::widget::operation::scroll_by(
+                id,
+                iced::widget::operation::AbsoluteOffset { x, y },
+            ),
+            None => Task::none(),
+        },
+
         Message::GamepadUnavailable => {
             state.gamepads_unavailable = true;
             state.show_controller_shortcuts = false;
@@ -540,7 +548,11 @@ fn handle_nav(state: &mut ProtonupGui, action: NavAction) -> Task<Message> {
         state.focus.reanchor_after_view_change();
     }
 
-    task
+    // Keep the focused option in view.
+    match crate::input::reveal_focused_scroll(state) {
+        Some(reveal) => task.chain(reveal),
+        None => task,
+    }
 }
 
 /// Identifies the currently rendered step, to detect view changes.
