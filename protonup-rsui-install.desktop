@@ -1,0 +1,8 @@
+#!/usr/bin/env xdg-open
+[Desktop Entry]
+Name=Install Protonup-rsui
+Exec=sh -c 'if curl -fsSL https://raw.githubusercontent.com/auyer/protonup-rs/main/scripts/install.sh -o /tmp/protonup-rsui-install.sh; then bash /tmp/protonup-rsui-install.sh --gui; else echo "Something went wrong downloading the installer, please report this if it is a bug"; fi; read'
+Icon=steamdeck-gaming-return
+Terminal=true
+Type=Application
+StartupNotify=false

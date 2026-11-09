@@ -1,0 +1,20 @@
+FROM docker.io/debian:forky
+
+RUN apt update && \
+    apt upgrade -y && \
+    apt install -y rustup \
+    python3 \
+    libwayland-dev \
+    pkg-config \
+    gcc \
+    mold \
+    clang \
+    git \
+    curl \
+    bats \
+    shellcheck \
+    go-md2man \
+    libudev-dev
+
+RUN rustup toolchain install stable
+RUN rustup component add clippy rust-analyzer

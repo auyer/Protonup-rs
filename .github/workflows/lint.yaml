@@ -21,6 +21,12 @@ jobs:
           rustup component add clippy
           rustup install stable
 
+      - name: Install GUI build dependencies
+        run: |
+          # the GUI crate depends on gilrs, which links against libudev
+          sudo apt-get update -y
+          sudo apt-get install -y libudev-dev pkg-config
+
       - name: Format Check
         run: |
           cargo fmt -- --check
