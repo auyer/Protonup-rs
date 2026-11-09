@@ -272,6 +272,13 @@ pub(crate) fn primary_action(state: &ProtonupGui) -> Option<Message> {
         crate::message::GuiMode::DownloadForSteam
         | crate::message::GuiMode::DownloadForLutris
         | crate::message::GuiMode::DownloadForCustom
+            if state.selection_step == crate::message::SelectionStep::ConfirmReinstall =>
+        {
+            Some(Message::ConfirmReinstallSelection)
+        }
+        crate::message::GuiMode::DownloadForSteam
+        | crate::message::GuiMode::DownloadForLutris
+        | crate::message::GuiMode::DownloadForCustom
         | crate::message::GuiMode::CheckWhatsNew
             if state.selection_step == crate::message::SelectionStep::SelectingVersions =>
         {
@@ -313,7 +320,28 @@ pub(crate) fn apply_nav_action(state: &mut ProtonupGui, action: NavAction) -> Op
                 .map(|option| option.message);
         }
         NavAction::Primary => {
-            return primary_action(state).or_else(|| focused_option(state).map(|o| o.message));
+            // Enter/Start first moves focus to the view's main button on the
+            // action bar. Only when focus is already on that button does it
+            // trigger it. Without a main action, it falls back to activating
+            // the focused option.
+            if let Some(main_action) = primary_action(state) {
+                let on_main_button = state.focus.pane == Pane::Actions
+                    && state.focus.row == 0
+                    && state.focus.col == 0;
+
+                if on_main_button {
+                    return Some(main_action);
+                }
+
+                state.focus.pane = Pane::Actions;
+                state.focus.row = 0;
+                state.focus.col = 0;
+                return None;
+            }
+
+            return focused_option(state)
+                .filter(|option| option.widget_focus.is_none())
+                .map(|option| option.message);
         }
     }
 

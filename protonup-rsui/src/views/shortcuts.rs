@@ -26,7 +26,7 @@ const KEYBOARD_SHORTCUTS: &[(&str, &str)] = &[
     ("SPACE", "Select / activate the focused option"),
     (
         "ENTER",
-        "Perform the view's main action (Continue, Download, …)",
+        "Focus the main action button; press again to activate it",
     ),
     ("?", "Show this keyboard shortcut list"),
     ("ESC", "Close an open shortcut list"),
@@ -54,7 +54,7 @@ const CONTROLLER_SHORTCUTS: &[(&str, &str)] = &[
     ("(A) / (X)", "Select / activate the focused option"),
     (
         "START",
-        "Perform the view's main action (Continue, Download, …)",
+        "Focus the main action button; press again to activate it",
     ),
     ("(△/Y)", "Show this controller shortcut list"),
     ("(B) / (○)", "Close an open shortcut list (same as Esc)"),

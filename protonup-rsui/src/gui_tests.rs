@@ -2323,6 +2323,16 @@ mod tests {
         let msg = primary_action(&model).expect("downloads have a primary action");
         same_variant("versions", "StartSelectedDownloads", &msg_name(&msg));
 
+        // Reinstall confirmation: continue with the selected reinstalls.
+        let mut model = model_in_tool_selection();
+        model.selection_step = SelectionStep::ConfirmReinstall;
+        let msg = primary_action(&model).expect("reinstall has a primary action");
+        assert!(
+            matches!(msg, Message::ConfirmReinstallSelection),
+            "expected the reinstall confirmation, got {:?}",
+            msg_name(&msg)
+        );
+
         // Check What's New has no advance action.
         let mut model = model_in_tool_selection();
         model.mode = GuiMode::CheckWhatsNew;
@@ -2408,6 +2418,60 @@ mod tests {
             "expected the second tool, got {:?}",
             msg_name(&msg)
         );
+    }
+
+    #[test]
+    fn primary_jumps_focus_to_main_action_button() {
+        let mut model = model_in_tool_selection();
+        model.selection_step = SelectionStep::SelectingVersions;
+        model.available_versions = vec![make_test_release("v1")];
+        model.focus.engaged = true;
+        model.focus.pane = crate::Pane::Main;
+        model.focus.row = 0;
+        model.focus.col = 0;
+
+        let msg = apply_nav_action(&mut model, crate::NavAction::Primary);
+        assert!(msg.is_none(), "the first Enter only moves focus");
+        assert_eq!(model.focus.pane, crate::Pane::Actions);
+        assert_eq!((model.focus.row, model.focus.col), (0, 0));
+    }
+
+    #[test]
+    fn primary_triggers_main_button_when_already_focused() {
+        let mut model = model_in_tool_selection();
+        model.selection_step = SelectionStep::SelectingVersions;
+        model.available_versions = vec![make_test_release("v1")];
+        model.focus.engaged = true;
+        model.focus.pane = crate::Pane::Actions;
+        model.focus.row = 0;
+        model.focus.col = 0; // "Start Download"
+
+        let msg = apply_nav_action(&mut model, crate::NavAction::Primary)
+            .expect("the focused main button should activate");
+        assert!(
+            matches!(msg, Message::StartSelectedDownloads),
+            "Enter on the main button should trigger it, got {:?}",
+            msg_name(&msg)
+        );
+    }
+
+    #[test]
+    fn primary_refocuses_secondary_action_button_to_main_button() {
+        let mut model = model_in_tool_selection();
+        model.selection_step = SelectionStep::SelectingVersions;
+        model.available_versions = vec![make_test_release("v1")];
+        model.focus.engaged = true;
+        model.focus.pane = crate::Pane::Actions;
+        model.focus.row = 0;
+        model.focus.col = 2; // "Back"
+
+        let msg = apply_nav_action(&mut model, crate::NavAction::Primary);
+        assert!(
+            msg.is_none(),
+            "Enter from a secondary button only refocuses"
+        );
+        assert_eq!(model.focus.pane, crate::Pane::Actions);
+        assert_eq!((model.focus.row, model.focus.col), (0, 0));
     }
 
     #[test]

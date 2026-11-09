@@ -134,7 +134,8 @@ pub(crate) enum NavAction {
     MoveRight,
     /// Activate the focused option (Space / A / Cross).
     Select,
-    /// Trigger the current view's primary "advance" action (Enter / Start).
+    /// Focus the view's main action-bar button, or trigger it when it is
+    /// already focused (Enter / Start).
     Primary,
 }
 
