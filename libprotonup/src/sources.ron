@@ -5,7 +5,9 @@
         repository_account: "GloriousEggroll",
         repository_name: "proton-ge-custom",
         tool_type: WineBased,
-        release_asset_filter: Some(r"^(GE-Proton|Proton-)[0-9]+(-[0-9]+)?(\.\d+(\.\d+)?)?(-GE-\d+)?\.(tar\.gz|tar\.zst)$"),
+        // Historical naming eras: `GE-Proton<major>-<minor>` and the older
+        // `Proton-<ver>-GE-<rev>`. Version segments are intentionally opaque.
+        release_asset_filter: Some(Prefixes(["GE-Proton", "Proton-"])),
         compatible_applications: [Steam, Lutris],
     ),
     (
@@ -53,7 +55,10 @@
         repository_name: "dxvk",
         tool_type: Runtime,
         compatible_applications: [Lutris],
-        release_asset_filter: Some(r"^dxvk-\d+\.\d+(?:\.\d+)?\.tar\.gz$"),
+        // TODO: support for the extra variants.
+        // EX: (`dxvk-3.1.1`) has sibling artefacts (`dxvk-native-*`,
+        // `dxvk-gplasync-*`).
+        release_asset_filter: Some(Prefix("dxvk-")),
         file_name_template: Some("DXVK-{version}")
     ),
     (
@@ -63,7 +68,7 @@
         repository_name: "Wine-Builds",
         tool_type: WineBased,
         compatible_applications: [Lutris],
-        release_asset_filter: Some(r"^wine-\d+\.\d+(?:\.\d+)?\.tar\.xz$"),
+        release_asset_filter: Some(Prefix("wine-")),
         file_name_template: Some("kron4ek-wine-{version}")
     ),
     (
@@ -72,7 +77,9 @@
         repository_account: "SpookySkeletons",
         repository_name: "proton-ge-rtsp",
         tool_type: WineBased,
-        release_asset_filter: Some(r"^(GE-Proton|Proton-)[0-9]+(-[0-9]+)?-(rtsp)-?(\d+(-\d+)?)?\.(tar\.gz|tar\.zst)$"),
+        // Two naming eras: `GE-Proton<maj>-<min>-rtsp<rev>-<n>` and the newer
+        // `proton-rtsp-<ver>-<date>-<n>`.
+        release_asset_filter: Some(Prefixes(["GE-Proton", "proton-rtsp-"])),
         compatible_applications: [Steam],
     ),
     (
@@ -81,7 +88,7 @@
         repository_account: "CachyOS",
         repository_name: "proton-cachyos",
         tool_type: WineBased,
-        release_asset_filter: Some(r"^proton-cachyos-[0-9]+\.[0-9]+-[0-9]+-[a-z0-9]+\.(tar\.gz|tar\.xz|tar\.zst)$"),
+        release_asset_filter: Some(Prefix("proton-cachyos-")),
         has_multiple_asset_variations: true,
         compatible_applications: [Steam, Lutris],
     ),
@@ -91,7 +98,7 @@
         repository_account: "nanomatters",
         repository_name: "proton-salkim",
         tool_type: WineBased,
-        release_asset_filter: Some(r"^proton-wineland-[0-9]+\.[0-9]+-[a-z0-9]+\.(tar\.gz|tar\.xz|tar\.zst)$"),
+        release_asset_filter: Some(Prefix("proton-wineland-")),
         has_multiple_asset_variations: true,
         compatible_applications: [Steam, Lutris],
     ),
