@@ -2,8 +2,8 @@ use iced::Task;
 use std::collections::HashSet;
 
 use libprotonup::apps::{App, AppInstallations, list_installed_apps};
-use libprotonup::architecture_variants::MicroArchVariants;
 use libprotonup::sources::CompatTool;
+use libprotonup::tool_variants;
 
 use crate::download::{self, DownloadPhase};
 use crate::download_task::{self, DownloadError, DownloadUpdate};
@@ -130,12 +130,12 @@ pub(crate) fn handle(state: &mut ProtonupGui, message: Message) -> Task<Message>
                         .is_some_and(|t| t.has_multiple_asset_variations)
                 });
 
-                if state.has_variant_tools {
-                    state.selection_step = SelectionStep::SelectingArchitecture;
-                    state.selected_arch_variant = Some(MicroArchVariants::X86_64V2);
-                } else {
-                    state.selection_step = SelectionStep::SelectingVersions;
-                }
+                // Version selection always comes first. Variant selection (when
+                // the tool ships several asset variations) happens after the
+                // user confirms their version choice, in `StartSelectedDownloads`.
+                state.available_variants.clear();
+                state.selected_variant_index = None;
+                state.selection_step = SelectionStep::SelectingVersions;
             }
             Task::none()
         }
@@ -161,12 +161,24 @@ pub(crate) fn handle(state: &mut ProtonupGui, message: Message) -> Task<Message>
             Task::none()
         }
 
-        Message::ArchitectureChosen(variant) => {
-            state.selected_arch_variant = Some(variant);
+        Message::VariantChosen(index) => {
+            state.selected_variant_index = Some(index);
             start_selected_downloads(state)
         }
 
-        Message::StartSelectedDownloads => start_selected_downloads(state),
+        Message::StartSelectedDownloads => {
+            // Variant tools get a variant screen between version selection and
+            // downloading. Non-variant tools proceed straight to the download.
+            if state.selection_step == SelectionStep::SelectingVersions && state.has_variant_tools {
+                state.selection_step = SelectionStep::SelectingArchitecture;
+                state.available_variants = discover_variants(state);
+                state.selected_variant_index = (!state.available_variants.is_empty()).then_some(0);
+                state.global_status = "Select a variant".to_string();
+                Task::none()
+            } else {
+                start_selected_downloads(state)
+            }
+        }
 
         Message::AlreadyInstalledChecked(already_installed) => {
             state.already_installed_tools = already_installed;
@@ -625,6 +637,39 @@ fn show_changelog_for_selected_version(state: &mut ProtonupGui) {
     ) {
         state.show_changelog = Some((release, tool));
     }
+}
+
+/// Collects the variants offered by the current selection.
+fn discover_variants(state: &ProtonupGui) -> Vec<tool_variants::ToolVariantDetails> {
+    let Some(app_inst) = state.app_installation.as_ref() else {
+        return Vec::new();
+    };
+
+    let target_arch = libprotonup::architecture::detect_system_arch();
+
+    let Some(&version_index) = state.selected_version_indices.first() else {
+        return Vec::new();
+    };
+    let Some(release) = state.available_versions.get(version_index) else {
+        return Vec::new();
+    };
+
+    for &tool_idx in &state.selected_tool_indices {
+        let Some(tool) = state.available_tools.get(tool_idx) else {
+            continue;
+        };
+        if !tool.has_multiple_asset_variations {
+            continue;
+        }
+
+        let downloads = release.get_all_download_variants(app_inst, tool, target_arch);
+        let variants = tool_variants::extract_tool_variants(&downloads);
+        if !variants.is_empty() {
+            return variants;
+        }
+    }
+
+    Vec::new()
 }
 
 /// Advances the selection flow into the download step for the current selection.

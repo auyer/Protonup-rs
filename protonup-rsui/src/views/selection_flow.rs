@@ -6,8 +6,8 @@ use crate::state::ProtonupGui;
 
 use super::action_bar::Action;
 use super::{
-    architecture_selection, confirm_reinstall, custom_location, download_progress,
-    manage_installations, quick_update, tool_selection, version_selection,
+    confirm_reinstall, custom_location, download_progress, manage_installations, quick_update,
+    tool_selection, tool_variant_selection, version_selection,
 };
 
 /// The action bar for the current state.
@@ -83,7 +83,7 @@ fn view_selection_actions(state: &ProtonupGui) -> Vec<Action> {
     match &state.selection_step {
         SelectionStep::SelectingTools => tool_selection::actions(state),
         SelectionStep::SelectingVersions => version_selection::actions(state),
-        SelectionStep::SelectingArchitecture => architecture_selection::actions(state),
+        SelectionStep::SelectingArchitecture => tool_variant_selection::actions(state),
         SelectionStep::ConfirmReinstall => confirm_reinstall::actions(state),
         SelectionStep::Initial | SelectionStep::Downloading => Vec::new(),
     }
@@ -98,7 +98,7 @@ fn view_selection_flow(state: &ProtonupGui) -> Element<'_, Message> {
         SelectionStep::Initial => text("Initializing...").size(14).into(),
         SelectionStep::SelectingTools => tool_selection::view(state),
         SelectionStep::SelectingVersions => version_selection::view(state),
-        SelectionStep::SelectingArchitecture => architecture_selection::view(state),
+        SelectionStep::SelectingArchitecture => tool_variant_selection::view(state),
         SelectionStep::ConfirmReinstall => confirm_reinstall::view(state),
         SelectionStep::Downloading => text("Preparing downloads...").size(14).into(),
     }

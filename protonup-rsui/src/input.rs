@@ -11,9 +11,8 @@ use iced::widget::Id;
 use crate::message::{Focusable, Message, NavAction, Pane};
 use crate::state::ProtonupGui;
 use crate::views::{
-    architecture_selection, confirm_reinstall, custom_location, download_progress,
-    manage_installations, quick_update, scroll_id, selection_flow, sidebar, tool_selection,
-    version_selection,
+    confirm_reinstall, custom_location, download_progress, manage_installations, quick_update,
+    scroll_id, selection_flow, sidebar, tool_selection, tool_variant_selection, version_selection,
 };
 
 const STICK_DEADZONE: f32 = 0.5;
@@ -229,7 +228,7 @@ fn main_selection_grid(state: &ProtonupGui) -> Option<Vec<Vec<Focusable>>> {
             Some(version_selection::main_focusable_options(state))
         }
         crate::message::SelectionStep::SelectingArchitecture => {
-            Some(architecture_selection::main_focusable_options(state))
+            Some(tool_variant_selection::main_focusable_options(state))
         }
         crate::message::SelectionStep::ConfirmReinstall => {
             Some(confirm_reinstall::main_focusable_options(state))

@@ -5,9 +5,9 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 
 use libprotonup::apps::{App, AppInstallations};
-use libprotonup::architecture_variants::MicroArchVariants;
 use libprotonup::files;
 use libprotonup::sources::CompatTool;
+use libprotonup::tool_variants::ToolVariantDetails;
 
 use crate::download::DownloadPhase;
 use crate::download_task;
@@ -33,9 +33,12 @@ pub(crate) struct ProtonupGui {
     pub available_versions: Vec<libprotonup::downloads::Release>,
     pub selected_version_indices: Vec<usize>,
 
-    pub selected_arch_variant: Option<MicroArchVariants>,
+    /// Variants discovered from the selected release's assets, in display order.
+    /// Empty unless the selected tool offers multiple asset variations.
+    pub available_variants: Vec<ToolVariantDetails>,
+    /// Index into [`Self::available_variants`] chosen by the user.
+    pub selected_variant_index: Option<usize>,
     pub has_variant_tools: bool,
-
     pub app_installation: Option<AppInstallations>,
 
     pub already_installed_tools: Vec<ToolDownload>,
@@ -140,7 +143,8 @@ impl Default for ProtonupGui {
             selected_tool: None,
             available_versions: Vec::new(),
             selected_version_indices: Vec::new(),
-            selected_arch_variant: None,
+            available_variants: Vec::new(),
+            selected_variant_index: None,
             has_variant_tools: false,
             app_installation: None,
             already_installed_tools: Vec::new(),
@@ -236,6 +240,9 @@ impl ProtonupGui {
         self.selected_tool = None;
         self.available_versions.clear();
         self.selected_version_indices.clear();
+        self.available_variants.clear();
+        self.selected_variant_index = None;
+        self.has_variant_tools = false;
         self.show_changelog = None;
         self.app_installation = None;
         self.download_started = false;
@@ -284,11 +291,18 @@ impl ProtonupGui {
 
         let app_inst = self.app_installation.clone().unwrap();
 
+        // The variant choice is a concrete asset file name, resolved from the
+        // variants discovered for this selection.
+        let selected_asset = self
+            .selected_variant_index
+            .and_then(|index| self.available_variants.get(index))
+            .map(|details| details.download.file_name.clone());
+
         let (task, handle) = download_task::download_selected_tools(
             app_inst,
             tools_and_versions,
             force_reinstall_names,
-            self.selected_arch_variant,
+            selected_asset,
         );
         self.download_handle = Some(handle);
 

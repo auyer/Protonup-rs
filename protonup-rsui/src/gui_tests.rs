@@ -9,7 +9,6 @@ mod tests {
     use iced::{Settings, Size};
     use iced_test::selector::Candidate;
     use iced_test::{Error, Simulator, simulator};
-    use libprotonup::architecture_variants::MicroArchVariants;
     use libprotonup::downloads::Release;
     use libprotonup::sources::{CompatTool, Forge, ToolType};
     use std::path::PathBuf;
@@ -51,7 +50,8 @@ mod tests {
             selected_tool: None,
             available_versions: vec![],
             selected_version_indices: vec![],
-            selected_arch_variant: None,
+            available_variants: vec![],
+            selected_variant_index: None,
             has_variant_tools: false,
             app_installation: None,
             already_installed_tools: vec![],
@@ -195,7 +195,8 @@ mod tests {
             selected_tool: None,
             available_versions: vec![],
             selected_version_indices: vec![],
-            selected_arch_variant: None,
+            available_variants: vec![],
+            selected_variant_index: None,
             has_variant_tools: false,
             app_installation: None,
             already_installed_tools: vec![],
@@ -881,20 +882,14 @@ mod tests {
     //
 
     #[test]
-    fn select_architecture_variant_updates_state() {
+    fn select_variant_updates_state() {
         let mut model = ready_model();
-        model.selected_arch_variant = Some(MicroArchVariants::X86_64V2); // Default
+        model.selected_variant_index = Some(0); // Default
 
-        // Click the v3 variant button (selects and attempts to start download)
-        let _ = crate::update::handle(
-            &mut model,
-            Message::ArchitectureChosen(MicroArchVariants::X86_64V3),
-        );
+        // Click the second variant button (selects and attempts to start download)
+        let _ = crate::update::handle(&mut model, Message::VariantChosen(1));
 
-        assert_eq!(
-            model.selected_arch_variant,
-            Some(MicroArchVariants::X86_64V3)
-        );
+        assert_eq!(model.selected_variant_index, Some(1));
     }
 
     #[test]
@@ -1634,22 +1629,103 @@ mod tests {
     }
 
     #[test]
-    fn architecture_chosen_selects_and_starts_download() {
+    fn versions_fetched_goes_to_version_selection_for_variant_tool() {
+        use libprotonup::sources::{CompatTool, Forge, ToolType};
+
+        let mut model = ready_model();
+        model.mode = GuiMode::DownloadForSteam;
+        model.app_mode = AppMode::DownloadForSteam;
+        model.app_installation = Some(AppInstallations::Steam);
+        model.selection_step = SelectionStep::SelectingTools;
+
+        let mut tool = CompatTool::new_custom(
+            "Proton Wineland".to_string(),
+            Forge::GitHub,
+            "nanomatters".to_string(),
+            "proton-salkim".to_string(),
+            ToolType::WineBased,
+            None,
+            None,
+            None,
+        );
+        tool.has_multiple_asset_variations = true;
+        model.available_tools = vec![tool];
+        model.selected_tool_indices = vec![0];
+
+        let _ = crate::update::handle(
+            &mut model,
+            Message::VersionsFetched(vec![make_test_release("wineland-11.0")]),
+        );
+
+        // Version selection must come first, never the variant screen.
+        assert_eq!(model.selection_step, SelectionStep::SelectingVersions);
+        assert!(model.available_variants.is_empty());
+        assert!(model.has_variant_tools);
+    }
+
+    #[test]
+    fn start_selected_downloads_shows_variant_screen_before_downloading() {
+        use libprotonup::sources::{CompatTool, Forge, ToolType};
+
+        let mut model = ready_model();
+        model.mode = GuiMode::DownloadForSteam;
+        model.app_mode = AppMode::DownloadForSteam;
+        model.app_installation = Some(AppInstallations::Steam);
+        model.selection_step = SelectionStep::SelectingVersions;
+        model.has_variant_tools = true;
+        model.available_tools = vec![CompatTool::new_custom(
+            "Proton CachyOS".to_string(),
+            Forge::GitHub,
+            "CachyOS".to_string(),
+            "proton-cachyos".to_string(),
+            ToolType::WineBased,
+            None,
+            None,
+            None,
+        )];
+        model.selected_tool_indices = vec![0];
+        model.available_versions = vec![make_test_release("cachyos-11.0")];
+        model.selected_version_indices = vec![0];
+
+        let _ = crate::update::handle(&mut model, Message::StartSelectedDownloads);
+
+        // The variant screen is shown instead of starting the download.
+        assert_eq!(model.selection_step, SelectionStep::SelectingArchitecture);
+        assert!(!model.download_started);
+    }
+
+    #[test]
+    fn start_selected_downloads_downloads_directly_for_non_variant_tool() {
+        let mut model = ready_model();
+        model.mode = GuiMode::DownloadForSteam;
+        model.app_mode = AppMode::DownloadForSteam;
+        model.app_installation = Some(AppInstallations::Steam);
+        model.selection_step = SelectionStep::SelectingVersions;
+        model.has_variant_tools = false;
+        model.available_tools = vec![make_test_tool()];
+        model.selected_tool_indices = vec![0];
+        model.available_versions = vec![make_test_release("GE-Proton11-1")];
+        model.selected_version_indices = vec![0];
+
+        let _ = crate::update::handle(&mut model, Message::StartSelectedDownloads);
+
+        // No variant screen for non-variant tools: it moves on to the
+        // already-installed check instead.
+        assert_ne!(model.selection_step, SelectionStep::SelectingArchitecture);
+        assert!(model.available_variants.is_empty());
+    }
+
+    #[test]
+    fn variant_chosen_selects_and_starts_download() {
         let mut model = ready_model();
         model.mode = GuiMode::DownloadForSteam;
         model.app_mode = AppMode::DownloadForSteam;
         model.selection_step = SelectionStep::SelectingArchitecture;
-        model.selected_arch_variant = Some(MicroArchVariants::X86_64V2);
+        model.selected_variant_index = Some(0);
 
-        let _ = crate::update::handle(
-            &mut model,
-            Message::ArchitectureChosen(MicroArchVariants::X86_64V3),
-        );
+        let _ = crate::update::handle(&mut model, Message::VariantChosen(1));
 
-        assert_eq!(
-            model.selected_arch_variant,
-            Some(MicroArchVariants::X86_64V3)
-        );
+        assert_eq!(model.selected_variant_index, Some(1));
         // Without a full selection the download step reports a status instead of panicking.
         assert!(model.global_status.contains("select"));
     }
@@ -1668,11 +1744,31 @@ mod tests {
     }
 
     #[test]
-    fn architecture_selection_renders_buttons_without_continue() -> Result<(), Error> {
+    fn variant_selection_renders_label_and_asset_name_on_separate_lines() -> Result<(), Error> {
         let mut model = ready_model();
         model.mode = GuiMode::DownloadForSteam;
         model.app_mode = AppMode::DownloadForSteam;
         model.selection_step = SelectionStep::SelectingArchitecture;
+        model.available_variants = vec![
+            libprotonup::tool_variants::ToolVariantDetails {
+                choice: libprotonup::tool_variants::ToolVariantChoice::Known(
+                    libprotonup::tool_variants::ToolVariant::X86_64V3,
+                ),
+                download: libprotonup::downloads::Download {
+                    file_name: "proton-wineland-11.0-20261106-x86_64_v3.tar.xz".to_string(),
+                    ..Default::default()
+                },
+            },
+            libprotonup::tool_variants::ToolVariantDetails {
+                choice: libprotonup::tool_variants::ToolVariantChoice::Known(
+                    libprotonup::tool_variants::ToolVariant::Wow64,
+                ),
+                download: libprotonup::downloads::Download {
+                    file_name: "proton-wineland-11.0-20261106-x86_64_wow64.tar.xz".to_string(),
+                    ..Default::default()
+                },
+            },
+        ];
 
         let mut ui = simulator(crate::views::app_view(&model));
 
@@ -1681,6 +1777,33 @@ mod tests {
             "Continue should be gone; clicking a variant starts the download"
         );
         assert!(ui.find("Back").is_ok(), "Back should be visible");
+
+        // The variant label and the asset file name are rendered as separate
+        // text widgets (label on one line, file name on the line below), so both
+        // must be independently findable — never combined with parentheses.
+        assert!(
+            ui.find("x86_64_v3 - Modern CPUs - optimized for AVX2")
+                .is_ok(),
+            "known variant label should be shown"
+        );
+        assert!(
+            ui.find("proton-wineland-11.0-20261106-x86_64_v3.tar.xz")
+                .is_ok(),
+            "asset file name should be shown on its own line"
+        );
+        assert!(
+            ui.find("WoW64 - 64-bit only").is_ok(),
+            "wow64 label should be shown"
+        );
+        assert!(
+            ui.find("proton-wineland-11.0-20261106-x86_64_wow64.tar.xz")
+                .is_ok(),
+            "wow64 asset file name should be shown"
+        );
+        assert!(
+            ui.find("WoW64 - 64-bit only (proton-wineland").is_err(),
+            "asset name must not be parenthesised onto the label line"
+        );
 
         Ok(())
     }

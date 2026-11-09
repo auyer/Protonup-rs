@@ -3,7 +3,6 @@ use std::path::PathBuf;
 use crate::download::DownloadPhase;
 use crate::download_task::{DownloadUpdate, ToolProgress};
 use libprotonup::apps::AppInstallations;
-use libprotonup::architecture_variants::MicroArchVariants;
 use libprotonup::downloads::Release;
 use libprotonup::sources::CompatTool;
 
@@ -28,8 +27,9 @@ pub(crate) enum Message {
     VersionChosen(usize),
     StartSelectedDownloads,
 
-    /// Selects an architecture and immediately starts downloading (list-button click).
-    ArchitectureChosen(MicroArchVariants),
+    /// Selects a variant (index into the discovered variants) and immediately
+    /// starts downloading (list-button click).
+    VariantChosen(usize),
 
     AlreadyInstalledChecked(Vec<ToolDownload>),
     ToggleReinstall(usize),

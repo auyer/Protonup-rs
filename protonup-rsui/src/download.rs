@@ -7,10 +7,10 @@ use anyhow::{Context, Result};
 use libprotonup::{
     apps::{self, AppInstallations},
     architecture,
-    architecture_variants::{self, MicroArchVariants},
     downloads::{self, Download, Release, ReleaseList, group_and_dedup_releases},
     files, hashing,
     sources::CompatTool,
+    tool_variants,
 };
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -699,7 +699,7 @@ pub async fn download_selected_tools<F>(
     tools_and_versions: Vec<(CompatTool, Vec<Release>)>,
     send_progress: F,
     force_reinstall_names: HashSet<String>,
-    arch_variant: Option<MicroArchVariants>,
+    selected_asset: Option<String>,
 ) -> Result<Vec<(Release, CompatTool)>>
 where
     F: Fn(SipProgress) + Send + Sync + Clone + Unpin + 'static,
@@ -724,17 +724,17 @@ where
                 let variants =
                     release.get_all_download_variants(&app_installation, compat_tool, target_arch);
 
-                // Select variant based on arch_variant parameter
-                if let Some(variant) = arch_variant {
+                // Select the requested variant by its exact asset file name.
+                if let Some(ref asset_name) = selected_asset {
                     variants
                         .into_iter()
-                        .find(|d| d.file_name.contains(variant.name()))
+                        .find(|d| &d.file_name == asset_name)
                         .unwrap_or_else(|| {
                             release.get_download_info(&app_installation, compat_tool, target_arch)
                         })
                 } else {
                     // Default to v2 or first available
-                    architecture_variants::select_default_variant(&variants).unwrap_or_else(|| {
+                    tool_variants::select_default_variant(&variants).unwrap_or_else(|| {
                         release.get_download_info(&app_installation, compat_tool, target_arch)
                     })
                 }

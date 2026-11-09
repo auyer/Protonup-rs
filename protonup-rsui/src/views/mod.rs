@@ -8,7 +8,6 @@ use crate::state::ProtonupGui;
 pub(crate) const HEADER_HEIGHT: f32 = 44.0;
 
 pub mod action_bar;
-pub mod architecture_selection;
 pub mod changelog;
 pub mod confirm_reinstall;
 pub mod custom_location;
@@ -23,6 +22,7 @@ pub mod selection_flow;
 pub mod shortcuts;
 pub mod sidebar;
 pub mod tool_selection;
+pub mod tool_variant_selection;
 pub mod version_selection;
 
 /// The actions of the bottom action pane for the current state.
