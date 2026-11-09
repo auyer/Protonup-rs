@@ -10,6 +10,7 @@ DXVK\t''
 Kron4ek_Wine\t''
 GEProton_RTSP\t''
 Proton_CachyOS\t''
+Proton_Wineland\t''
 WineGE_Deprecated\t''"
 complete -c protonup-rs -s q -l quick-download -d 'Skip Menu, auto detect apps and download using default parameters'
 complete -c protonup-rs -s f -l force -d 'Force install for existing apps during quick downloads'
