@@ -26,6 +26,7 @@ These are the tools that are currently supported by this project.
 | Kron4ek Wine      | [kron4ek/Wine-Builds](https://github.com/kron4ek/Wine-Builds) |
 | GEProton-rtsp     | [SpookySkeletons/proton-ge-rtsp](https://github.com/SpookySkeletons/proton-ge-rtsp) |
 | Proton-CachyOS    | [CachyOS/proton-cachyos](https://github.com/CachyOS/proton-cachyos) |
+| Proton-Wineland    | [nanomatters/proton-salkim](https://github.com/nanomatters/proton-salkim) |
 
 Adding new tools should be a simple process, check the docs section below!
 

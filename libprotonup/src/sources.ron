@@ -86,6 +86,16 @@
         compatible_applications: [Steam, Lutris],
     ),
     (
+        name: "Proton Wineland",
+        forge: GitHub,
+        repository_account: "nanomatters",
+        repository_name: "proton-salkim",
+        tool_type: WineBased,
+        release_asset_filter: Some(r"^proton-wineland-[0-9]+\.[0-9]+-[a-z0-9]+\.(tar\.gz|tar\.xz|tar\.zst)$"),
+        has_multiple_asset_variations: true,
+        compatible_applications: [Steam, Lutris],
+    ),
+    (
         name: "WineGE (Deprecated)",
         forge: GitHub,
         repository_account: "GloriousEggroll",
@@ -93,5 +103,6 @@
         tool_type: WineBased,
         compatible_applications: [Steam, Lutris],
         file_name_replacement: Some(("Proton","Wine")),
+        file_name_template: Some("proton-wineland-{version}")
     ),
 ]
