@@ -29,8 +29,13 @@ pub struct CompatTool {
     /// ToolType can be used to change how it is installed
     pub tool_type: ToolType,
 
-    /// release asset filter is a regex to filter out uwanted release assets
-    pub release_asset_filter: Option<String>,
+    /// release asset filter drops unwanted release assets (checksums, source
+    /// archives, unrelated build artefacts). It matches on the *stable* part of
+    /// the asset name only; the version segment is treated as opaque so that
+    /// tools are free to renumber their releases without breaking installs.
+    /// Archive extension validation is NOT part of the filter; it is handled by
+    /// `files::check_supported_extension`.
+    pub release_asset_filter: Option<AssetFilter>,
 
     // Templates in order:
     /// file_name_replacement does a replace_all to the text version
@@ -73,6 +78,38 @@ impl Forge {
     }
 }
 
+/// Matches release asset names on their stable prefix (and optionally suffix).
+///
+/// The version portion of an asset name is deliberately not described here: any
+/// upstream renumbering (e.g. `3.1.1` -> `3.0b` -> `4-rc1`) still matches.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+pub enum AssetFilter {
+    /// Asset name must start with this literal.
+    Prefix(String),
+    /// Asset name must start with any of these literals. Used by tools that
+    /// changed their naming scheme over time (e.g. `GE-Proton` vs `Proton-`).
+    Prefixes(Vec<String>),
+    /// Asset name must start with the prefix AND end with the suffix.
+    /// The suffix must not include the archive extension, which is validated
+    /// separately by `files::check_supported_extension`.
+    PrefixSuffix(String, String),
+}
+
+impl AssetFilter {
+    /// Returns true when `path` satisfies the filter.
+    pub fn matches(&self, path: &str) -> bool {
+        match self {
+            AssetFilter::Prefix(prefix) => path.starts_with(prefix.as_str()),
+            AssetFilter::Prefixes(prefixes) => {
+                prefixes.iter().any(|p| path.starts_with(p.as_str()))
+            }
+            AssetFilter::PrefixSuffix(prefix, suffix) => {
+                path.starts_with(prefix.as_str()) && path.ends_with(suffix.as_str())
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 /// ToolTypes
 pub enum ToolType {
@@ -89,7 +126,7 @@ impl CompatTool {
         repository_account: String,
         repository_name: String,
         tool_type: ToolType,
-        release_asset_filter: Option<String>,
+        release_asset_filter: Option<AssetFilter>,
         file_name_replacement: Option<(String, String)>,
         file_name_template: Option<String>,
     ) -> CompatTool {
@@ -130,14 +167,14 @@ impl CompatTool {
             .collect()
     }
 
-    /// filter_asset executes a regex on the file name to determine if the asset found matches
-    /// returns true if No filter defined, and false if the filter does not compile
+    /// filter_asset checks the file name against the tool's [`AssetFilter`].
+    /// Returns true when no filter is defined.
+    ///
+    /// The filter only inspects the stable name prefix/suffix; see
+    /// [`AssetFilter`]. Archive extensions are validated elsewhere.
     pub fn filter_asset(&self, path: &str) -> bool {
-        match self.release_asset_filter.clone() {
-            Some(asset_filter) => match regex::Regex::new(&asset_filter) {
-                Ok(re) => re.is_match(path),
-                Err(_) => false,
-            },
+        match &self.release_asset_filter {
+            Some(asset_filter) => asset_filter.matches(path),
             None => true,
         }
     }
@@ -220,237 +257,213 @@ mod tests {
         assert!(CompatTool::from_str("does-not-exist").is_err());
     }
 
-    const TEST_CASES: &[(&str, bool)] = &[
-        // --- Valid Cases ---
-        ("dxvk-2.6.1.tar.gz", true),    // Standard 3-part version
-        ("dxvk-2.6.tar.gz", true),      // Standard 2-part version
-        ("dxvk-10.20.30.tar.gz", true), // Multi-digit 3-part version
-        ("dxvk-10.20.tar.gz", true),    // Multi-digit 2-part version
-        ("dxvk-0.0.0.tar.gz", true),    // Zeroes are valid digits
-        ("dxvk-0.1.tar.gz", true),      // Zeroes are valid digits
-        // --- Invalid Cases ---
-        ("dxvk-invalid.zip", false),       // Wrong suffix
-        ("dxvk-2.tar.gz", false), // Requires Major.Minor minimum (fails regex \d+\.\d+ and manual split len check)
-        ("dxvk-2.6.1.beta.tar.gz", false), // Extra text in version part
-        ("dxvk-.tar.gz", false),  // Missing version part
-        ("dxvk-2.6..tar.gz", false), // Double dot in version part
-        ("prefix-dxvk-2.6.tar.gz", false), // Incorrect prefix
-        ("dxvk-2.6.tar.gz-suffix", false), // Incorrect suffix
-        ("", false),              // Empty string
-        ("dxvk-a.b.tar.gz", false), // Non-digits in version part
-        ("dxvk-1.2.3.4.tar.gz", false), // Too many version parts
-        ("dxvk-1.2 .tar.gz", false), // Space in version part
-        ("dxvk-1..tar.gz", false), // Double dot variant
-        ("dxvk-1.2.", false),     // Wrong suffix / incomplete
-        (".tar.gz", false),       // Missing prefix and version
-        ("dxvk-", false),         // Missing version and suffix
+    // ---------------------------------------------------------------------
+    // Asset filter test corpus
+    //
+    // Asset names are frozen from live GitHub releases (collected 2026-11) so
+    // that regressions against real-world naming are caught. Each case is a
+    // (tool, asset_name, expected_filter_match) triple evaluated through the
+    // *real* `sources.ron` definitions via `CompatTool::from_str`.
+    //
+    // Note: this table exercises `filter_asset` only. Extension validation is
+    // the responsibility of `files::check_supported_extension` and is covered
+    // in `files::tests`.
+    // ---------------------------------------------------------------------
+    const ASSET_FILTER_CASES: &[(&str, &str, bool)] = &[
+        // --- GEProton: two historical prefix eras ---
+        ("GEProton", "GE-Proton11-12-x86_64.tar.gz", true),
+        ("GEProton", "GE-Proton11-12-aarch64.tar.gz", true),
+        ("GEProton", "GE-Proton9-24.tar.gz", true),
+        ("GEProton", "Proton-6.1-GE-2.tar.gz", true), // older `Proton-` era
+        ("GEProton", "GE-Proton-1.2.3.4.tar.gz", true), // arbitrary tail: opaque version
+        ("GEProton", "GE-Proton11-12-x86_64.sha512sum", true), // prefix matches; extension filters it in downloads.rs
+        // --- DXVK: trailing dash is load bearing ---
+        ("DXVK", "dxvk-3.1.1.tar.gz", true),
+        ("DXVK", "dxvk-3.1.tar.gz", true),
+        ("DXVK", "dxvk-1.tar.gz", true), // renumbering still matches
+        ("DXVK", "dxvk-2.6.1.beta.tar.gz", true), // pre-release tail
+        ("DXVK", "dxvk-native-3.1.1-steamrt-sniper.tar.gz", true),
+        ("DXVK", "dxvk-gplasync-3.1.1.tar.gz", true),
+        ("DXVK", "notdxvk-1.0.tar.gz", false),
+        // --- Kron4ek Wine ---
+        ("Kron4ek Wine", "wine-11.21-amd64.tar.xz", true),
+        ("Kron4ek Wine", "wine-11.21-amd64-wow64.tar.xz", true),
+        ("Kron4ek Wine", "wine-11.21-staging-amd64.tar.xz", true),
+        ("Kron4ek Wine", "wine-11.21-staging-tkg-x86.tar.xz", true),
+        ("Kron4ek Wine", "sha256sums.txt", false),
+        // --- GEProton RTSP: old and new eras ---
+        ("GEProton RTSP", "GE-Proton10-33-rtsp24-1.tar.gz", true),
+        ("GEProton RTSP", "proton-rtsp-11.0-20260609-4.tar.gz", true), // new era
+        (
+            "GEProton RTSP",
+            "proton-rtsp-11.0-20260609-4.tar.gz.sha512sum",
+            true,
+        ), // prefix matches; extension filters it
+        // --- Proton CachyOS ---
+        (
+            "Proton CachyOS",
+            "proton-cachyos-11.0-20261015-slr-x86_64.tar.xz",
+            true,
+        ),
+        (
+            "Proton CachyOS",
+            "proton-cachyos-11.0-20261015-slr-x86_64_v3.tar.xz",
+            true,
+        ),
+        (
+            "Proton CachyOS",
+            "proton-cachyos-11.0-20261015-slr-arm64.tar.xz",
+            true,
+        ),
+        (
+            "Proton CachyOS",
+            "proton-cachyos-11.0-20261015-slr-x86_64_v3.sha512sum",
+            true,
+        ), // prefix matches; excluded by extension in downloads.rs
+        // --- Proton Wineland (incl. non-arch `wow64` token) ---
+        (
+            "Proton Wineland",
+            "proton-wineland-11.0-20261106-x86_64.tar.xz",
+            true,
+        ),
+        (
+            "Proton Wineland",
+            "proton-wineland-11.0-20261106-x86_64_v3.tar.xz",
+            true,
+        ),
+        (
+            "Proton Wineland",
+            "proton-wineland-11.0-20261106-x86_64_wow64.tar.xz",
+            true,
+        ),
+        (
+            "Proton Wineland",
+            "proton-wineland-11.0-20261106-x86_64_v3.sha512sum",
+            true,
+        ), // prefix matches; excluded by extension in downloads.rs
+        // --- Tools without a filter: everything passes `filter_asset` ---
+        ("Luxtorpeda", "luxtorpeda-v76.3.0.tar.xz", true),
+        ("Boxtron", "boxtron.tar.xz", true),
+        ("VKD3D-Proton", "vkd3d-proton-3.0b.tar.zst", true), // letter-suffix version
+        ("Lutris-VKD3D", "vkd3d-2.14.tar.xz", true),
+        (
+            "WineGE (Deprecated)",
+            "wine-lutris-GE-Proton8-26-x86_64.tar.xz",
+            true,
+        ),
+        (
+            "WineGE (Deprecated)",
+            "wine-lutris-GE-Proton8-27-LoL-x86_64.tar.xz",
+            true,
+        ),
     ];
 
     #[test]
-    fn test_is_dxvk_archive_name_regex_table() {
-        let empty = "".to_owned();
-        // example regex for dxvk
-        let dxvk_regex = r"^dxvk-\d+\.\d+(?:\.\d+)?\.tar\.gz$";
-
-        for (input, expected) in TEST_CASES {
-            let s = CompatTool::new_custom(
-                empty.clone(),
-                Forge::GitHub,
-                empty.clone(),
-                empty.clone(),
-                ToolType::Runtime,
-                Some(dxvk_regex.to_owned()),
-                None,
-                None,
-            );
-            let actual = s.filter_asset(input.to_owned());
+    fn test_filter_asset_real_world_corpus() {
+        for (tool, asset, expected) in ASSET_FILTER_CASES {
+            // Every tool referenced here must exist in sources.ron.
+            let ct = CompatTool::from_str(tool)
+                .unwrap_or_else(|_| panic!("tool '{tool}' not found in sources.ron"));
+            let actual = ct.filter_asset(asset);
             assert_eq!(
                 actual, *expected,
-                "Regex test failed for input: '{input}'. Expected {expected}, got {actual}"
+                "filter_asset('{asset}') for tool '{tool}': expected {expected}, got {actual}"
             );
         }
     }
 
-    const TEST_CASES_PROTONGE: &[(&str, bool)] = &[
-        // --- Valid Cases ---
-        ("GE-Proton10-8.tar.gz", true),
-        ("GE-Proton10-8.tar.zst", true),
-        ("GE-Proton9-24.tar.gz", true),
-        ("GE-Proton-2.tar.gz", false), // not a real version, but should be flexible
-        ("Proton-4.20-GE-1.tar.gz", true),
-        ("Proton-6.1-GE-2.tar.gz", true),
-        // --- Invalid Cases ---
-        ("", false),                         // Empty string
-        ("GE-Proton-1.2.3.4.tar.gz", false), // Too many version parts
-        ("GE-Proton-1.2 .tar.gz", false),    // Space in version part
-        ("GE-Proton-1..tar.gz", false),      // Double dot variant
-        ("GE-Proton-1.2.", false),           // Wrong suffix / incomplete
-        (".tar.gz", false),                  // Missing prefix and version
-        ("GE-Proton-", false),               // Missing version and suffix
-        ("GE-Proton9-24.sha512sum", false),  // checksum file
-    ];
-
+    /// `filter_asset_with_arch` must compose the arch-suffix strip with the
+    /// prefix filter, and must not strip non-arch tokens such as `wow64`.
     #[test]
-    fn test_is_protonge_archive_name_regex_table() {
-        let empty = "".to_owned();
-        // example regex for GE-Proton
-        let regex =
-            r"^(GE-Proton|Proton-)[0-9]+(-[0-9]+)?(\.\d+(\.\d+)?)?(-GE-\d+)?\.(tar\.gz|tar\.zst)$";
+    fn test_filter_asset_with_arch_composition() {
+        let cases: &[(&str, &str, bool, Option<crate::architecture::CpuArch>)] = &[
+            (
+                "Proton CachyOS",
+                "proton-cachyos-11.0-20261015-slr-x86_64_v3.tar.xz",
+                true,
+                Some(crate::architecture::CpuArch::X86),
+            ),
+            (
+                "Proton CachyOS",
+                "proton-cachyos-11.0-20261015-slr-arm64.tar.xz",
+                true,
+                Some(crate::architecture::CpuArch::Arm),
+            ),
+            (
+                "Proton Wineland",
+                "proton-wineland-11.0-20261106-x86_64_wow64.tar.xz",
+                true,
+                Some(crate::architecture::CpuArch::X86),
+            ),
+            (
+                "GEProton",
+                "GE-Proton16-6-x86.tar.gz",
+                true,
+                Some(crate::architecture::CpuArch::X86),
+            ),
+            (
+                "GEProton",
+                "GE-Proton26-9-aarch64_v8.tar.gz",
+                true,
+                Some(crate::architecture::CpuArch::Arm),
+            ),
+            ("Luxtorpeda", "luxtorpeda-v76.3.0.tar.xz", true, None),
+        ];
 
-        for (input, expected) in TEST_CASES_PROTONGE {
-            let s = CompatTool::new_custom(
-                empty.clone(),
-                Forge::GitHub,
-                empty.clone(),
-                empty.clone(),
-                ToolType::Runtime,
-                Some(regex.to_owned()),
-                None,
-                None,
-            );
-            let actual = s.filter_asset(input.to_owned());
+        for (tool, asset, expected, expected_arch) in cases {
+            let ct = CompatTool::from_str(tool).unwrap();
+            let (matched, arch) = ct.filter_asset_with_arch(asset);
             assert_eq!(
-                actual, *expected,
-                "Regex test failed for input: '{input}'. Expected {expected}, got {actual}"
+                matched, *expected,
+                "filter_asset_with_arch('{asset}') for '{tool}': expected {expected}, got {matched}"
+            );
+            assert_eq!(
+                arch, *expected_arch,
+                "arch detection for '{asset}' ('{tool}')"
             );
         }
     }
 
-    /// Multi-architecture asset matching: each entry is (tool, file name, matches, detected arch).
-    const TEST_CASES_MULTI_ARCH: &[(&str, &str, bool, Option<crate::architecture::CpuArch>)] = &[
-        // GE-Proton 11-4: both architectures carry an explicit suffix
-        (
-            "GEProton",
-            "GE-Proton11-4-x86_64.tar.gz",
-            true,
-            Some(crate::architecture::CpuArch::X86),
-        ),
-        (
-            "GEProton",
-            "GE-Proton11-4-aarch64.tar.gz",
-            true,
-            Some(crate::architecture::CpuArch::Arm),
-        ),
-        (
-            "GEProton",
-            "GE-Proton11-5-aarch64.tar.gz",
-            true,
-            Some(crate::architecture::CpuArch::Arm),
-        ),
-        (
-            "GEProton",
-            "GE-Proton11-5-x86_64.tar.gz",
-            true,
-            Some(crate::architecture::CpuArch::X86),
-        ),
-        (
-            "GEProton",
-            "GE-Proton16-6-x86.tar.gz",
-            true,
-            Some(crate::architecture::CpuArch::X86),
-        ),
-        (
-            "GEProton",
-            "GE-Proton26-9-x86_64_v7.tar.gz", // can you imagine?
-            true,
-            Some(crate::architecture::CpuArch::X86),
-        ),
-        (
-            "GEProton",
-            "GE-Proton26-9-aarch64_v8.tar.gz", // can you imagine?
-            true,
-            Some(crate::architecture::CpuArch::Arm),
-        ),
-        // GE-Proton 11-3: default (no suffix) x86 + aarch64
-        ("GEProton", "GE-Proton11-3.tar.gz", true, None),
-        (
-            "GEProton",
-            "GE-Proton11-3-aarch64.tar.gz",
-            true,
-            Some(crate::architecture::CpuArch::Arm),
-        ),
-        // GE-Proton 11-2: x86 only, no suffix
-        ("GEProton", "GE-Proton11-2.tar.gz", true, None),
-        // Other projects
-        (
-            "Kron4ek Wine",
-            "wine-9.0-amd64.tar.xz",
-            true,
-            Some(crate::architecture::CpuArch::X86),
-        ),
-        (
-            "Proton CachyOS",
-            "proton-cachyos-9.0-20250101-abc123-x86_64_v3.tar.gz",
-            true,
-            Some(crate::architecture::CpuArch::X86),
-        ),
-        (
-            "Proton CachyOS",
-            "proton-cachyos-11.0-20260703-slr-x86_64_v3.tar.xz",
-            true,
-            Some(crate::architecture::CpuArch::X86),
-        ),
-        (
-            "Proton CachyOS",
-            "proton-cachyos-11.0-20260703-slr-x86_64.tar.xz",
-            true,
-            Some(crate::architecture::CpuArch::X86),
-        ),
-        (
-            "Proton CachyOS",
-            "proton-cachyos-11.0-20260703-slr-arm64.tar.xz",
-            true,
-            Some(crate::architecture::CpuArch::Arm),
-        ),
-        ("Luxtorpeda", "Luxtorpeda-v76.2.0.tar.xz", true, None),
-        ("GEProton RTSP", "GE-Proton9-10-rtsp12.tar.gz", true, None),
-        ("DXVK", "dxvk-2.6.1.tar.gz", true, None),
-    ];
-
+    /// The `AssetFilter` variants behave as documented.
     #[test]
-    fn test_is_multi_arch_archive_name_regex_table() {
-        let empty = "".to_owned();
+    fn test_asset_filter_matches() {
+        let prefix = AssetFilter::Prefix("dxvk-".into());
+        assert!(prefix.matches("dxvk-3.1.1.tar.gz"));
+        assert!(!prefix.matches("notdxvk-3.1.1.tar.gz"));
+        assert!(!prefix.matches(""));
+        assert!(prefix.matches("dxvk-native-3.1.1.tar.gz"));
+        assert!(prefix.matches("dxvk-3.1.1.tar.gz"));
+        assert!(prefix.matches("dxvk-3.1.tar.gz"));
+        assert!(prefix.matches("dxvk-1.tar.gz"));
+        assert!(prefix.matches("dxvk-2.6.1.beta.tar.gz"));
+        assert!(prefix.matches("dxvk-native-3.1.1.tar.gz"));
+        assert!(prefix.matches("dxvk-gplasync-3.1.1.tar.gz"));
+        assert!(prefix.matches("dxvk-.tar.gz"));
+        assert!(prefix.matches("dxvk-"));
+        assert!(!prefix.matches("notdxvk-3.1.1.tar.gz"));
 
-        let regex_for = |tool: &str| -> Option<String> {
-            match tool {
-                "GEProton" => Some(
-                    r"^(GE-Proton|Proton-)[0-9]+(-[0-9]+)?(\.\d+(\.\d+)?)?(-GE-\d+)?\.(tar\.gz|tar\.zst)$".to_owned(),
-                ),
-                "Kron4ek Wine" => {
-                    Some(r"^wine-\d+\.\d+(?:\.\d+)?\.tar\.xz$".to_owned())
-                }
-                "Proton CachyOS" => Some(
-                    r"^proton-cachyos-[0-9]+\.[0-9]+-[0-9]+-[a-z0-9]+\.(tar\.gz|tar\.xz|tar\.zst)$".to_owned(),
-                ),
-                "Luxtorpeda" => None,
-                "GEProton RTSP" => Some(
-                    r"^(GE-Proton|Proton-)[0-9]+(-[0-9]+)?-(rtsp)-?(\d+(-\d+)?)?\.(tar\.gz|tar\.zst)$".to_owned(),
-                ),
-                "DXVK" => Some(r"^dxvk-\d+\.\d+(?:\.\d+)?\.tar\.gz$".to_owned()),
-                _ => None,
-            }
-        };
+        let prefixes = AssetFilter::Prefixes(vec!["GE-Proton".into(), "Proton-".into()]);
+        assert!(prefixes.matches("GE-Proton11-12.tar.gz"));
+        assert!(prefixes.matches("Proton-6.1-GE-2.tar.gz"));
+        assert!(!prefixes.matches("proton-rtsp-11.0.tar.gz"));
 
-        for (tool, input, expected, expected_arch) in TEST_CASES_MULTI_ARCH {
-            let s = CompatTool::new_custom(
-                empty.clone(),
-                Forge::GitHub,
-                empty.clone(),
-                empty.clone(),
-                ToolType::Runtime,
-                regex_for(tool),
-                None,
-                None,
-            );
-            let (actual, actual_arch) = s.filter_asset_with_arch(input);
-            assert_eq!(
-                actual, *expected,
-                "Regex test failed for input: '{input}'. Expected {expected}, got {actual}"
-            );
-            assert_eq!(
-                actual_arch, *expected_arch,
-                "Arch detection failed for input: '{input}'. Expected {expected_arch:?}, got {actual_arch:?}"
-            );
+        let both = AssetFilter::PrefixSuffix("wine-".into(), "-amd64.tar.xz".into());
+        assert!(both.matches("wine-11.21-amd64.tar.xz"));
+        assert!(!both.matches("wine-11.21-x86.tar.xz"));
+        assert!(!both.matches("wine-11.21-amd64.tar.xz.bak"));
+
+        // No filter -> everything matches.
+        let ct = CompatTool::from_str("Luxtorpeda").unwrap();
+        assert!(ct.filter_asset("anything-at-all.tgz"));
+        assert!(ct.filter_asset(""));
+    }
+
+    /// Every tool in sources.ron must parse with the new `AssetFilter` type.
+    #[test]
+    fn test_all_tools_parse() {
+        assert!(!CompatTools.is_empty(), "sources.ron yielded no tools");
+        for tool in CompatTools.iter() {
+            assert!(!tool.name.is_empty(), "tool with empty name in sources.ron");
         }
     }
 }

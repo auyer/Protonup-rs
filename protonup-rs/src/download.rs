@@ -17,7 +17,7 @@ use libprotonup::{
     sources::{CompatTool, CompatTools},
 };
 
-use crate::{architecture_variants, file_path, helper_menus};
+use crate::{file_path, helper_menus, tool_variants};
 
 static PROGRESS_BAR_STYLE: OnceCell<ProgressStyle> = OnceCell::const_new();
 static MESSAGE_BAR_STYLE: OnceCell<ProgressStyle> = OnceCell::const_new();
@@ -195,7 +195,7 @@ pub async fn run_quick_downloads(
         // Handle tools with multiple architecture variants
         let download = if compat_tool.has_multiple_asset_variations {
             let variants = release.get_all_download_variants(&app_inst, &compat_tool, target_arch);
-            architecture_variants::select_micro_arch_variant(&release.tag_name, variants, true)?
+            tool_variants::select_tool_variant(&release.tag_name, variants, true)?
         } else {
             release.get_download_info(&app_inst, &compat_tool, target_arch)
         };
@@ -548,7 +548,7 @@ pub async fn download_to_selected_app(
                 let variants =
                     release.get_all_download_variants(&app_inst, &selected_tool, target_arch);
 
-                architecture_variants::select_micro_arch_variant(&release.tag_name, variants, false)
+                tool_variants::select_tool_variant(&release.tag_name, variants, false)
                     .unwrap_or_else(|_| std::process::exit(1))
             })
             .collect::<Vec<Download>>()

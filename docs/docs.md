@@ -124,11 +124,34 @@ pub struct CompatTool {
 
 - **Key Methods**:
   - `installation_name()`: Processes version strings (e.g., "v1.5" → "dxvk-1.5")
-  - `filter_asset()`: Matches release assets using regex
+  - `filter_asset()`: Matches release assets against the tool's `AssetFilter`
 
 **Preconfigured Tools**:
 
 - GEProton, Luxtorpeda, Boxtron, DXVK, etc.
+
+### Asset filters
+
+Each tool may define a `release_asset_filter` that selects the archive to
+install. Filters match the *stable* part of an asset name only; the version
+segment is treated as opaque, so a tool may renumber its releases without
+breaking installs. Archive extensions (`tar.gz`, `tar.xz`, `tar.zst`, ...) are
+**not** part of a filter — they are validated separately by
+`files::check_supported_extension`.
+
+```rust
+pub enum AssetFilter {
+    /// Asset name starts with this literal.
+    Prefix(String),
+    /// Asset name starts with any of these literals (tools that renamed over time).
+    Prefixes(Vec<String>),
+    /// Asset name starts with the prefix and ends with the suffix.
+    PrefixSuffix(String, String),
+}
+```
+
+When no filter is defined every asset is accepted by `filter_asset`; the
+extension check still applies downstream.
 
 Adding new tools should be a simple process. All data related to them are stored in the [sources.ron](libprotonup/src/sources.ron) file.
 Functionality like templating is optional, and not necessary for all tools.

@@ -616,8 +616,11 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        let regex =
-            r"^(GE-Proton|Proton-)[0-9]+(-[0-9]+)?-(rtsp)-?(\d+(-\d+)?)?\.(tar\.gz|tar\.zst)$";
+        // `proton-rtsp-*` era plus the older `GE-Proton...-rtspN` era.
+        let filter = sources::AssetFilter::Prefixes(vec![
+            "GE-Proton".to_string(),
+            "proton-rtsp-".to_string(),
+        ]);
 
         // TEST CASE ONE: tool has an asset with expected filename
         let tool = CompatTool::new_custom(
@@ -626,7 +629,7 @@ mod tests {
             owner.to_string(),
             repo_valid.to_string(),
             sources::ToolType::WineBased,
-            Some(regex.to_owned()),
+            Some(filter),
             None,
             None,
         );
@@ -716,15 +719,17 @@ mod tests {
             }]).to_string(),
         };
 
-        let regex =
-            r"^(GE-Proton|Proton-)[0-9]+(-[0-9]+)?-(rtsp)-?(\d+(-\d+)?)?\.(tar\.gz|tar\.zst)$";
+        let filter = sources::AssetFilter::Prefixes(vec![
+            "GE-Proton".to_string(),
+            "proton-rtsp-".to_string(),
+        ]);
         let tool = CompatTool::new_custom(
             "TestTool".to_string(),
             sources::Forge::Custom("https://example.com".to_string()),
             "test-owner".to_string(),
             "test-repo".to_string(),
             sources::ToolType::WineBased,
-            Some(regex.to_owned()),
+            Some(filter),
             None,
             None,
         );

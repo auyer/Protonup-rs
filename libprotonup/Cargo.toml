@@ -34,7 +34,6 @@ lazy_static = "1.5"
 astral-tokio-tar = "0.7"
 async-compression = { version = "0.4", features = ['gzip', 'xz', 'zstd', 'tokio'] }
 tempfile = "3.27"
-regex = "1.13"
 fs4 = { version = "1.1", features = ["sync"] }
 
 [dev-dependencies]

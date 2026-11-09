@@ -2694,7 +2694,6 @@ dependencies = [
  "http",
  "lazy_static",
  "pin-project",
- "regex",
  "reqwest",
  "ron",
  "serde",
