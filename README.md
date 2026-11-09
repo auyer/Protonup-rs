@@ -1,6 +1,8 @@
 # Protonup-rs
 
-Lib, CLI and GUI(wip) program to automate the installation and update of Linux Gaming Compatibility tools, like ProtonGE, Luxtorpeda, Boxtron and others.
+Lib, CLI and GUI (wip*, [#113](https://github.com/auyer/Protonup-rs/issues/113)) program to automate the installation and update of Linux Gaming Compatibility tools, like ProtonGE, Luxtorpeda, Boxtron and others.
+
+> * The GUI is open for testing. Check [github.com/auyer/Protonup-rs/issues/113](https://github.com/auyer/Protonup-rs/issues/113)
 
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/10372/badge)](https://www.bestpractices.dev/projects/10372)
 
