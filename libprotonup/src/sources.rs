@@ -283,7 +283,7 @@ mod tests {
         ("DXVK", "dxvk-1.tar.gz", true), // renumbering still matches
         ("DXVK", "dxvk-2.6.1.beta.tar.gz", true), // pre-release tail
         ("DXVK", "dxvk-native-3.1.1-steamrt-sniper.tar.gz", true),
-        ("DXVK", "dxvk-gplasync-3.1.1.tar.gz",true),
+        ("DXVK", "dxvk-gplasync-3.1.1.tar.gz", true),
         ("DXVK", "notdxvk-1.0.tar.gz", false),
         // --- Kron4ek Wine ---
         ("Kron4ek Wine", "wine-11.21-amd64.tar.xz", true),

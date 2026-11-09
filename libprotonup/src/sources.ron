@@ -55,10 +55,8 @@
         repository_name: "dxvk",
         tool_type: Runtime,
         compatible_applications: [Lutris],
-        // TODO: support for the extra variants.
-        // EX: (`dxvk-3.1.1`) has sibling artefacts (`dxvk-native-*`,
-        // `dxvk-gplasync-*`).
         release_asset_filter: Some(Prefix("dxvk-")),
+        has_multiple_asset_variations: true,
         file_name_template: Some("DXVK-{version}")
     ),
     (
