@@ -42,7 +42,7 @@ _protonup__rs() {
                     return 0
                     ;;
                 --tool)
-                    COMPREPLY=($(compgen -W "GEProton Luxtorpeda Boxtron VKD3D-Proton Lutris-VKD3D DXVK Kron4ek_Wine GEProton_RTSP Proton_CachyOS WineGE_Deprecated" -- "${cur}"))
+                    COMPREPLY=($(compgen -W "GEProton Luxtorpeda Boxtron VKD3D-Proton Lutris-VKD3D DXVK Kron4ek_Wine GEProton_RTSP Proton_CachyOS Proton_Wineland WineGE_Deprecated" -- "${cur}"))
                     return 0
                     ;;
                 *)
