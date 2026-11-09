@@ -6,8 +6,8 @@ use libprotonup::utils::match_version;
 use tokio::fs::File;
 use tokio::io::BufReader;
 
-use crate::architecture_variants;
 use crate::download;
+use crate::tool_variants;
 
 /// Determines the target application based on the provided `--for` argument and the selected tool.
 ///
@@ -231,7 +231,7 @@ pub async fn run_cli_mode(
             .map(|release| {
                 let variants =
                     release.get_all_download_variants(&app_inst, &compat_tool, target_arch);
-                architecture_variants::select_micro_arch_variant(&release.tag_name, variants, false)
+                tool_variants::select_tool_variant(&release.tag_name, variants, false)
                     .unwrap_or_else(|e| {
                         eprintln!("Error selecting architecture variant: {}", e);
                         std::process::exit(1);

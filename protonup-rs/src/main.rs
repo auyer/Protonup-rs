@@ -6,13 +6,13 @@ use std::{fmt, process::exit};
 
 use libprotonup::apps::App;
 
-mod architecture_variants;
 mod cli;
 mod cli_mode;
 mod download;
 mod file_path;
 mod helper_menus;
 mod manage_apps;
+mod tool_variants;
 
 use cli::Opt;
 use manage_apps::manage_apps_routine;
