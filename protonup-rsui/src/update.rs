@@ -536,9 +536,15 @@ fn handle_nav(state: &mut ProtonupGui, action: NavAction) -> Task<Message> {
         return Task::none();
     }
 
-    // First navigation input engages focus highlighting.
+    // The first navigation input only turns on focus highlighting at the
+    // current cursor (the first sidebar button) without applying the action,
+    // so the user sees where they are before anything moves or activates.
     if !state.focus.engaged {
         state.focus.engage();
+        return match crate::input::reveal_focused_scroll(state) {
+            Some(reveal) => reveal,
+            None => Task::none(),
+        };
     }
 
     if action == NavAction::Select

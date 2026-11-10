@@ -2482,7 +2482,33 @@ mod tests {
         let _ = crate::update::handle(&mut model, Message::Nav(crate::NavAction::MoveDown));
 
         assert!(model.focus.engaged, "first navigation engages highlighting");
-        assert_eq!(model.focus.row, 1, "MoveDown advanced from the start");
+        assert_eq!(model.focus.row, 0, "first input stays on the first button");
+
+        let _ = crate::update::handle(&mut model, Message::Nav(crate::NavAction::MoveDown));
+        assert_eq!(
+            model.focus.row, 1,
+            "second MoveDown advances to the next option"
+        );
+    }
+
+    #[test]
+    fn first_navigation_input_only_engages_focus() {
+        let mut model = model_in_tool_selection();
+        assert!(!model.focus.engaged);
+
+        // The first move must reveal the current cursor (the first sidebar
+        // button) instead of advancing past it.
+        let _ = crate::update::handle(&mut model, Message::Nav(crate::NavAction::MoveDown));
+        assert!(model.focus.engaged);
+        assert_eq!(model.focus.pane, crate::Pane::Sidebar);
+        assert_eq!((model.focus.row, model.focus.col), (0, 0));
+
+        // Tab must not jump into the main pane on that same first press.
+        let mut model = model_in_tool_selection();
+        let _ = crate::update::handle(&mut model, Message::Nav(crate::NavAction::FocusNextPane));
+        assert!(model.focus.engaged);
+        assert_eq!(model.focus.pane, crate::Pane::Sidebar);
+        assert_eq!((model.focus.row, model.focus.col), (0, 0));
     }
 
     #[test]
