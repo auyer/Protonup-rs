@@ -46,6 +46,10 @@ impl App {
         views::app_view(&self.0)
     }
 
+    fn title(&self) -> String {
+        self.0.window_title()
+    }
+
     fn subscription(&self) -> Subscription<message::Message> {
         self.0.subscription()
     }
@@ -54,7 +58,7 @@ impl App {
 pub fn main() -> iced::Result {
     iced::application(App::default, App::update, App::view)
         .subscription(App::subscription)
-        .title("ProtonUp-RS")
+        .title(App::title)
         .window(iced::window::Settings {
             // Start at the Steam Deck resolution (1280x800).
             size: iced::Size::new(1280.0, 800.0),

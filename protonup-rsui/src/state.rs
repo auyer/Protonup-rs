@@ -232,6 +232,53 @@ pub(crate) fn warning_button_style()
 }
 
 impl ProtonupGui {
+    /// The window title for the screen currently on display derived from existing state
+    pub fn window_title(&self) -> String {
+        const PREFIX: &str = "Protonup-rs";
+
+        // The shortcut panels replace the whole window content.
+        if self.show_keyboard_shortcuts {
+            return format!("{PREFIX} - Keyboard Shortcuts");
+        }
+        if self.show_controller_shortcuts {
+            return format!("{PREFIX} - Controller Shortcuts");
+        }
+
+        let section = match &self.app_mode {
+            AppMode::None => return PREFIX.to_string(),
+            AppMode::QuickUpdate => "Quick Update",
+            AppMode::DownloadForSteam => "Download for Steam",
+            AppMode::DownloadForLutris => "Download for Lutris",
+            AppMode::DownloadForCustom => "Download for Custom Location",
+            AppMode::CheckWhatsNew => "Check What's New",
+            AppMode::ManageInstallations => "Manage Existing Installations",
+        };
+
+        // A finished download is terminal for the selecting flow.
+        if let Some(result) = &self.download_complete {
+            return match result {
+                Ok(_) => format!("{PREFIX} - {section} done!"),
+                Err(_) => format!("{PREFIX} - {section} - Error"),
+            };
+        }
+
+        match &self.app_mode {
+            AppMode::QuickUpdate => match self.quick_update_status {
+                QuickUpdateStatus::Checking => format!("{PREFIX} - {section} - Checking"),
+                QuickUpdateStatus::InProgress => format!("{PREFIX} - {section} - Downloading"),
+                _ => format!("{PREFIX} - {section}"),
+            },
+            AppMode::DownloadForSteam | AppMode::DownloadForLutris | AppMode::DownloadForCustom => {
+                if self.download_started && self.selection_step == SelectionStep::Downloading {
+                    format!("{PREFIX} - {section} - Downloading")
+                } else {
+                    format!("{PREFIX} - {section}")
+                }
+            }
+            _ => format!("{PREFIX} - {section}"),
+        }
+    }
+
     pub fn reset_to_initial(&mut self) {
         self.mode = GuiMode::Initial;
         self.selection_step = SelectionStep::Initial;

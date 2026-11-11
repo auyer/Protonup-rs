@@ -2953,4 +2953,183 @@ mod tests {
             model.focus.row
         );
     }
+
+    //
+    // Reactive window title tests
+    //
+
+    /// The title prefix shared by every screen.
+    const TITLE: &str = "Protonup-rs";
+
+    #[test]
+    fn window_title_is_main_menu_by_default() {
+        assert_eq!(ProtonupGui::default().window_title(), TITLE);
+        assert_eq!(ready_model().window_title(), TITLE);
+    }
+
+    #[test]
+    fn window_title_names_each_section() {
+        let cases = [
+            (AppMode::QuickUpdate, "Quick Update"),
+            (AppMode::DownloadForSteam, "Download for Steam"),
+            (AppMode::DownloadForLutris, "Download for Lutris"),
+            (AppMode::DownloadForCustom, "Download for Custom Location"),
+            (AppMode::CheckWhatsNew, "Check What's New"),
+            (
+                AppMode::ManageInstallations,
+                "Manage Existing Installations",
+            ),
+        ];
+
+        for (app_mode, section) in cases {
+            let model = ProtonupGui {
+                app_mode,
+                ..Default::default()
+            };
+            assert_eq!(
+                model.window_title(),
+                format!("{TITLE} - {section}"),
+                "unexpected title for {section:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn window_title_names_shortcut_panels() {
+        let model = ProtonupGui {
+            show_keyboard_shortcuts: true,
+            ..Default::default()
+        };
+        assert_eq!(
+            model.window_title(),
+            format!("{TITLE} - Keyboard Shortcuts")
+        );
+
+        let model = ProtonupGui {
+            show_controller_shortcuts: true,
+            ..Default::default()
+        };
+        assert_eq!(
+            model.window_title(),
+            format!("{TITLE} - Controller Shortcuts")
+        );
+    }
+
+    #[test]
+    fn window_title_tracks_quick_update_status() {
+        let mut model = ProtonupGui {
+            app_mode: AppMode::QuickUpdate,
+            ..Default::default()
+        };
+        assert_eq!(model.window_title(), format!("{TITLE} - Quick Update"));
+
+        model.quick_update_status = QuickUpdateStatus::Checking;
+        assert_eq!(
+            model.window_title(),
+            format!("{TITLE} - Quick Update - Checking")
+        );
+
+        model.quick_update_status = QuickUpdateStatus::InProgress;
+        assert_eq!(
+            model.window_title(),
+            format!("{TITLE} - Quick Update - Downloading")
+        );
+
+        // No download ran to completion, so this is not a "done!" screen.
+        model.quick_update_status = QuickUpdateStatus::AllUpToDate(vec![InstalledTool {
+            app: AppInstallations::Steam,
+            tool: "GEProton".to_string(),
+            latest: Some("GE-Proton11-11".to_string()),
+            versions: vec!["GE-Proton11-11".to_string()],
+        }]);
+        assert_eq!(model.window_title(), format!("{TITLE} - Quick Update"));
+    }
+
+    #[test]
+    fn window_title_tracks_download_flow() {
+        let mut model = ready_model();
+
+        // Entering a download section names the section while selecting.
+        model.app_mode = AppMode::DownloadForSteam;
+        model.mode = GuiMode::DownloadForSteam;
+        model.selection_step = SelectionStep::SelectingTools;
+        assert_eq!(
+            model.window_title(),
+            format!("{TITLE} - Download for Steam")
+        );
+
+        // The download step adds the status suffix.
+        model.download_started = true;
+        model.selection_step = SelectionStep::Downloading;
+        assert_eq!(
+            model.window_title(),
+            format!("{TITLE} - Download for Steam - Downloading")
+        );
+
+        // Every download section follows the same rule.
+        for (app_mode, section) in [
+            (AppMode::DownloadForLutris, "Download for Lutris"),
+            (AppMode::DownloadForCustom, "Download for Custom Location"),
+        ] {
+            model.app_mode = app_mode;
+            assert_eq!(
+                model.window_title(),
+                format!("{TITLE} - {section} - Downloading")
+            );
+        }
+    }
+
+    #[test]
+    fn window_title_marks_completion_and_errors() {
+        let mut model = ready_model();
+        model.app_mode = AppMode::DownloadForSteam;
+        model.mode = GuiMode::DownloadForSteam;
+        model.download_started = true;
+        model.selection_step = SelectionStep::Downloading;
+
+        let _ = crate::update::handle(
+            &mut model,
+            Message::DownloadUpdate(DownloadUpdate::Finished(Ok(vec![(
+                make_test_release("GE-Proton9-27"),
+                make_test_tool(),
+            )]))),
+        );
+        assert_eq!(
+            model.window_title(),
+            format!("{TITLE} - Download for Steam done!")
+        );
+
+        let _ = crate::update::handle(
+            &mut model,
+            Message::DownloadUpdate(DownloadUpdate::Finished(Err(DownloadError::IoError(
+                "test error".to_string(),
+            )))),
+        );
+        assert_eq!(
+            model.window_title(),
+            format!("{TITLE} - Download for Steam - Error")
+        );
+    }
+
+    #[test]
+    fn window_title_follows_update_messages() {
+        let mut model = ready_model();
+
+        // Selecting a section renames the window synchronously.
+        let _ = crate::update::handle(&mut model, Message::SelectQuickUpdate);
+        assert_eq!(
+            model.window_title(),
+            format!("{TITLE} - Quick Update - Checking")
+        );
+
+        let _ = crate::update::handle(&mut model, Message::SelectDownloadForLutris);
+        assert_eq!(
+            model.window_title(),
+            format!("{TITLE} - Download for Lutris")
+        );
+
+        // Returning to the main menu restores the bare title.
+        let _ = crate::update::handle(&mut model, Message::BackToInitial);
+        assert_eq!(model.window_title(), TITLE);
+    }
 }
