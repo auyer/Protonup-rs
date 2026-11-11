@@ -16,5 +16,11 @@ RUN apt update && \
     go-md2man \
     libudev-dev
 
-RUN rustup toolchain install stable
-RUN rustup component add clippy rust-analyzer
+ENV RUSTUP_HOME=/opt/rust
+ENV CARGO_HOME=/opt/rust
+
+RUN rustup toolchain install stable && \
+    rustup default stable && \
+    rustup component add clippy rust-analyzer
+
+RUN chmod 777 /opt/rust
