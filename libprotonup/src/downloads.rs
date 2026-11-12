@@ -58,6 +58,9 @@ impl Release {
         let mut candidates: Vec<(&Asset, Option<CpuArch>)> = Vec::new();
 
         for asset in &self.assets {
+            if asset.browser_download_url.is_empty() {
+                continue;
+            }
             if asset.name.contains("sha512") || asset.name.contains("sha256") {
                 continue;
             }
@@ -119,6 +122,9 @@ impl Release {
         // Collect all matching asset variants for the target architecture,
         // along with their corresponding hash
         for asset in &self.assets {
+            if asset.browser_download_url.is_empty() {
+                continue;
+            }
             let (matched, arch) =
                 compat_tool.filter_asset_with_arch(asset.download_file_name().as_str());
             if !(matched && files::check_supported_extension(&asset.name).is_ok()) {
@@ -329,9 +335,10 @@ pub(crate) async fn list_releases_with_sender<S: http_client::HttpSend>(
             !rel.assets.is_empty()
                 // same logic used when creating the Release object
                 && (rel.assets.iter().any(|asset| {
-                    compat_tool
-                        .filter_asset_with_arch(asset.download_file_name().as_str())
-                        .0
+                    !asset.browser_download_url.is_empty()
+                        && compat_tool
+                            .filter_asset_with_arch(asset.download_file_name().as_str())
+                            .0
                         && files::check_supported_extension(&asset.name).is_ok()
                 }))
         })
@@ -1170,6 +1177,48 @@ mod tests {
             "https://example.com/GE-Proton11-2.sha512sum"
         );
         assert_eq!(hash_sum.sum_type, hashing::HashSumType::Sha512);
+    }
+
+    #[test]
+    fn test_selection_skips_assets_with_empty_browser_url() {
+        let release: Release = serde_json::from_value(json!({
+            "url": null,
+            "tag_name": "v1.0",
+            "name": "v1.0",
+            "body": null,
+            "assets": [
+                {
+                    "url": "https://api.github.com/asset-empty",
+                    "id": 1,
+                    "name": "luxtorpeda-v1.0-broken.tar.xz",
+                    "size": 1024,
+                    "updated_at": "2026-01-01T00:00:00Z",
+                    "browser_download_url": ""
+                },
+                {
+                    "url": "https://api.github.com/asset-valid",
+                    "id": 2,
+                    "name": "luxtorpeda-v1.0.tar.xz",
+                    "size": 2048,
+                    "updated_at": "2026-01-01T00:00:00Z",
+                    "browser_download_url": "https://example.com/luxtorpeda-v1.0.tar.xz"
+                }
+            ]
+        }))
+        .unwrap();
+        let tool = CompatTool::from_str("Luxtorpeda").unwrap();
+        let app = AppInstallations::new_custom_app_install("/tmp/x".into());
+
+        let selected = release.get_download_info(&app, &tool, CpuArch::X86);
+        assert_eq!(selected.file_name, "luxtorpeda-v1.0.tar.xz");
+        assert_eq!(
+            selected.download_url,
+            "https://example.com/luxtorpeda-v1.0.tar.xz"
+        );
+
+        let variants = release.get_all_download_variants(&app, &tool, CpuArch::X86);
+        assert_eq!(variants.len(), 1);
+        assert_eq!(variants[0].file_name, "luxtorpeda-v1.0.tar.xz");
     }
 
     fn make_compat_tool() -> CompatTool {
