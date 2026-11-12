@@ -10,6 +10,7 @@ cargo-fuzz = true
 [dependencies]
 hex = "0.4"
 libfuzzer-sys = "0.4"
+serde_json = "1.0"
 sha2 = "0.11"
 tokio = { version = "1.54", features = ["rt-multi-thread"] }
 
@@ -47,3 +48,18 @@ path = "fuzz_targets/match_version.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "tool_lookup"
+path = "fuzz_targets/tool_lookup.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "app_target"
+path = "fuzz_targets/app_target.rs"
+test = false
+doc = false
+bench = false
+
