@@ -2511,6 +2511,81 @@ mod tests {
         assert_eq!((model.focus.row, model.focus.col), (0, 0));
     }
 
+    /// Replays the exact key sequence sent by `scripts/gui_e2e_interactive.sh`.
+    ///
+    /// The script parks focus on the sidebar, smoke-tests navigation and the
+    /// help panel, then presses Space to activate the first sidebar entry
+    /// ("Quick Update"). If the focus model or the default focus position
+    /// changes, this fails immediately instead of after a slow, network-bound
+    /// e2e run.
+    #[test]
+    fn e2e_script_key_sequence_activates_quick_update() {
+        let mut model = ready_model();
+        assert!(!model.focus.engaged, "focus starts disengaged");
+
+        // The first keypress only engages the highlight.
+        let msg = keyboard_to_message(&key_pressed(Named::Tab, Modifiers::default()))
+            .expect("Tab maps to a navigation message");
+        let _ = crate::update::handle(&mut model, msg);
+        assert!(model.focus.engaged);
+
+        // Pane cycling must leave the cursor on the sidebar's first entry:
+        // Initial mode has no focusable Main/Actions options, so Tab and
+        // Shift+Tab wrap straight back to the sidebar.
+        for message in [
+            keyboard_to_message(&key_pressed(Named::Tab, Modifiers::default())),
+            keyboard_to_message(&key_pressed(Named::Tab, Modifiers::SHIFT)),
+        ] {
+            let message = message.expect("pane cycling key must map");
+            let _ = crate::update::handle(&mut model, message);
+            assert_eq!(model.focus.pane, crate::Pane::Sidebar);
+            assert_eq!((model.focus.row, model.focus.col), (0, 0));
+        }
+
+        // Vertical movement still works and comes back to the first entry.
+        let down = keyboard_to_message(&key_pressed(Named::ArrowDown, Modifiers::default()))
+            .expect("Down maps to MoveDown");
+        let _ = crate::update::handle(&mut model, down);
+        assert_eq!(
+            (model.focus.pane, model.focus.row),
+            (crate::Pane::Sidebar, 1),
+            "Down moves to the second sidebar entry"
+        );
+
+        let up = keyboard_to_message(&key_pressed(Named::ArrowUp, Modifiers::default()))
+            .expect("Up maps to MoveUp");
+        let _ = crate::update::handle(&mut model, up);
+        assert_eq!(
+            (model.focus.pane, model.focus.row, model.focus.col),
+            (crate::Pane::Sidebar, 0, 0),
+            "Up returns to the first sidebar entry"
+        );
+
+        // "?" opens the shortcut help panel, Escape closes it again.
+        let _ = crate::update::handle(&mut model, Message::ToggleKeyboardShortcuts);
+        assert!(model.show_keyboard_shortcuts);
+        let _ = crate::update::handle(&mut model, Message::CloseShortcuts);
+        assert!(!model.show_keyboard_shortcuts);
+
+        // Space activates the focused sidebar entry, which must be Quick Update.
+        match keyboard_to_message(&key_pressed(Named::Space, Modifiers::default()))
+            .expect("Space maps to Select")
+        {
+            Message::Nav(action) => {
+                let dispatched = apply_nav_action(&mut model, action)
+                    .expect("Space must activate the focused sidebar entry");
+                assert!(
+                    matches!(dispatched, Message::SelectQuickUpdate),
+                    "sidebar row 0 must be Quick Update"
+                );
+            }
+            other => panic!(
+                "Space should map to a Nav message, got {}",
+                msg_name(&other)
+            ),
+        }
+    }
+
     #[test]
     fn shortcut_panels_toggle_exclusively() {
         let mut model = ready_model();

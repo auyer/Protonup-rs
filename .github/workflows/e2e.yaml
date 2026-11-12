@@ -56,11 +56,9 @@ jobs:
       - name: Check folder
         run: |
           ls download/ # first line for debug only
-          if [ -d "download/${{ steps.ge_version.outputs.ge_version }}" ]; then
-            echo true
-          else
-            echo false
-          fi
+          # The install directory is named after the tool's install name, which
+          # is not identical to the release tag (e.g. GE-Proton11-12).
+          compgen -G "download/GE-Proton*" > /dev/null
 
       - name: Skip an already installed version without downloading
         env:
@@ -86,7 +84,44 @@ jobs:
         run: |
           sudo apt-get update -y
           sudo apt-get install -y bats shellcheck
-      - name: Lint installer script
-        run: shellcheck scripts/install.sh
+      - name: Lint shell scripts
+        run: shellcheck scripts/install.sh scripts/gui_e2e_interactive.sh
       - name: Test installer script
         run: bats scripts/tests/
+
+  gui_e2e:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest      # x64
+          - os: ubuntu-24.04-arm   # ARM64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          # Nothing in this job pushes; don't leave the token in .git/config.
+          persist-credentials: false
+
+      - name: Update local toolchain
+        run: |
+          rustup update
+          rustup install stable
+
+      - name: Install build and GUI test dependencies
+        run: |
+          # libudev is needed to link the GUI crate (gilrs). xvfb/xdotool drive
+          # the real window with synthetic key events; the rest is the X11 stack
+          # winit loads at runtime through dlopen (invisible to `ldd`).
+          sudo apt-get update -y
+          sudo apt-get install -y \
+            libudev-dev pkg-config \
+            xvfb xdotool \
+            libxcursor1 libxi6 libxkbcommon-x11-0 libxcb-xkb1 libxfixes3
+
+      - name: Build GUI
+        run: cargo build --release -p protonup-rsui
+
+      # Drives the window with real X11 key events (Enter, Enter) and follows the
+      # state through the window title until "Quick Update done!".
+      - name: Drive the GUI with keyboard events and install a tool
+        run: bash scripts/gui_e2e_interactive.sh ./target/release/protonup-rsui

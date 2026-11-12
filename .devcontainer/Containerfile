@@ -4,7 +4,6 @@ RUN apt update && \
     apt upgrade -y && \
     apt install -y rustup \
     python3 \
-    libwayland-dev \
     pkg-config \
     gcc \
     mold \
@@ -14,7 +13,11 @@ RUN apt update && \
     bats \
     shellcheck \
     go-md2man \
-    libudev-dev
+    # building the UI
+    libudev-dev \
+    libwayland-dev \
+    # testing the UI
+    xdotool xvfb libxcursor1 libxi6 libxfixes3 libxcb-xkb1 libxkbcommon-x11-0
 
 ENV RUSTUP_HOME=/opt/rust
 ENV CARGO_HOME=/opt/rust
