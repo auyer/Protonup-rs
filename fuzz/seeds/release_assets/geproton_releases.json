@@ -1,0 +1,58 @@
+[
+  {
+    "url": "https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases/1",
+    "tag_name": "GE-Proton11-4",
+    "name": "GE-Proton11-4",
+    "body": null,
+    "assets": [
+      {
+        "url": "https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases/assets/1",
+        "id": 1,
+        "name": "GE-Proton11-4-x86_64.tar.gz",
+        "size": 500000000,
+        "updated_at": "2026-01-01T00:00:00Z",
+        "browser_download_url": "https://github.com/GloriousEggroll/proton-ge-custom/releases/download/GE-Proton11-4/GE-Proton11-4-x86_64.tar.gz"
+      },
+      {
+        "url": "https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases/assets/2",
+        "id": 2,
+        "name": "GE-Proton11-4-aarch64.tar.gz",
+        "size": 500000000,
+        "updated_at": "2026-01-01T00:00:00Z",
+        "browser_download_url": "https://github.com/GloriousEggroll/proton-ge-custom/releases/download/GE-Proton11-4/GE-Proton11-4-aarch64.tar.gz"
+      },
+      {
+        "url": "https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases/assets/3",
+        "id": 3,
+        "name": "GE-Proton11-4-x86_64.sha512sum",
+        "size": 128,
+        "updated_at": "2026-01-01T00:00:00Z",
+        "browser_download_url": "https://github.com/GloriousEggroll/proton-ge-custom/releases/download/GE-Proton11-4/GE-Proton11-4-x86_64.sha512sum"
+      }
+    ]
+  },
+  {
+    "url": "https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases/2",
+    "tag_name": "GE-Proton11-3",
+    "name": "GE-Proton11-3",
+    "body": "Legacy single-arch release",
+    "assets": [
+      {
+        "url": "https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases/assets/4",
+        "id": 4,
+        "name": "GE-Proton11-3.tar.gz",
+        "size": 500000000,
+        "updated_at": "2026-01-01T00:00:00Z",
+        "browser_download_url": "https://github.com/GloriousEggroll/proton-ge-custom/releases/download/GE-Proton11-3/GE-Proton11-3.tar.gz"
+      },
+      {
+        "url": "https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases/assets/5",
+        "id": 5,
+        "name": "GE-Proton11-3.sha512sum",
+        "size": 128,
+        "updated_at": "2026-01-01T00:00:00Z",
+        "browser_download_url": "https://github.com/GloriousEggroll/proton-ge-custom/releases/download/GE-Proton11-3/GE-Proton11-3.sha512sum"
+      }
+    ]
+  }
+]

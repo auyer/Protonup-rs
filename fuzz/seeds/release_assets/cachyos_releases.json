@@ -1,0 +1,58 @@
+[
+  {
+    "url": null,
+    "tag_name": "cachyos-11.0-20261015",
+    "name": "Proton-CachyOS 11.0",
+    "body": null,
+    "assets": [
+      {
+        "url": "https://api.github.com/repos/CachyOS/proton-cachyos/releases/assets/1",
+        "id": 1,
+        "name": "proton-cachyos-11.0-20261015-slr-x86_64.tar.xz",
+        "size": 400000000,
+        "updated_at": "2026-10-15T00:00:00Z",
+        "browser_download_url": "https://github.com/CachyOS/proton-cachyos/releases/download/cachyos-11.0-20261015/proton-cachyos-11.0-20261015-slr-x86_64.tar.xz"
+      },
+      {
+        "url": "https://api.github.com/repos/CachyOS/proton-cachyos/releases/assets/2",
+        "id": 2,
+        "name": "proton-cachyos-11.0-20261015-slr-x86_64_v2.tar.xz",
+        "size": 400000000,
+        "updated_at": "2026-10-15T00:00:00Z",
+        "browser_download_url": "https://github.com/CachyOS/proton-cachyos/releases/download/cachyos-11.0-20261015/proton-cachyos-11.0-20261015-slr-x86_64_v2.tar.xz"
+      },
+      {
+        "url": "https://api.github.com/repos/CachyOS/proton-cachyos/releases/assets/3",
+        "id": 3,
+        "name": "proton-cachyos-11.0-20261015-slr-x86_64_v3.tar.xz",
+        "size": 400000000,
+        "updated_at": "2026-10-15T00:00:00Z",
+        "browser_download_url": "https://github.com/CachyOS/proton-cachyos/releases/download/cachyos-11.0-20261015/proton-cachyos-11.0-20261015-slr-x86_64_v3.tar.xz"
+      },
+      {
+        "url": "https://api.github.com/repos/CachyOS/proton-cachyos/releases/assets/4",
+        "id": 4,
+        "name": "proton-cachyos-11.0-20261015-slr-x86_64_wow64.tar.xz",
+        "size": 400000000,
+        "updated_at": "2026-10-15T00:00:00Z",
+        "browser_download_url": "https://github.com/CachyOS/proton-cachyos/releases/download/cachyos-11.0-20261015/proton-cachyos-11.0-20261015-slr-x86_64_wow64.tar.xz"
+      },
+      {
+        "url": "https://api.github.com/repos/CachyOS/proton-cachyos/releases/assets/5",
+        "id": 5,
+        "name": "proton-cachyos-11.0-20261015-slr-arm64.tar.xz",
+        "size": 400000000,
+        "updated_at": "2026-10-15T00:00:00Z",
+        "browser_download_url": "https://github.com/CachyOS/proton-cachyos/releases/download/cachyos-11.0-20261015/proton-cachyos-11.0-20261015-slr-arm64.tar.xz"
+      },
+      {
+        "url": "https://api.github.com/repos/CachyOS/proton-cachyos/releases/assets/6",
+        "id": 6,
+        "name": "proton-cachyos-11.0-20261015-slr-x86_64_v3.sha512sum",
+        "size": 128,
+        "updated_at": "2026-10-15T00:00:00Z",
+        "browser_download_url": "https://github.com/CachyOS/proton-cachyos/releases/download/cachyos-11.0-20261015/proton-cachyos-11.0-20261015-slr-x86_64_v3.sha512sum"
+      }
+    ]
+  }
+]

@@ -1,0 +1,41 @@
+[
+  {
+    "url": null,
+    "tag_name": "",
+    "name": "",
+    "body": null,
+    "assets": []
+  },
+  {
+    "url": null,
+    "tag_name": "wéïrd-リリース",
+    "name": "non-ascii",
+    "body": null,
+    "assets": [
+      {
+        "url": "",
+        "id": -1,
+        "name": "wéïrd-アーキ-x86_64.tar.gz",
+        "size": 0,
+        "updated_at": "",
+        "browser_download_url": "nourl-no-slash"
+      },
+      {
+        "url": "",
+        "id": -2,
+        "name": "proton-cachyos-11.0-ünïcode-x86_64_v3.tar.xz",
+        "size": 0,
+        "updated_at": "",
+        "browser_download_url": "no-slash-arm64"
+      },
+      {
+        "url": "",
+        "id": -3,
+        "name": "GE-Proton11-4-aarch64.tar.gz",
+        "size": 0,
+        "updated_at": "",
+        "browser_download_url": "nourl"
+      }
+    ]
+  }
+]

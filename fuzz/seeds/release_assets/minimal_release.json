@@ -1,0 +1,15 @@
+{
+  "tag_name": "v1.0",
+  "name": "v1.0",
+  "body": null,
+  "assets": [
+    {
+      "url": "https://api.github.com/repos/luxtorpeda-dev/luxtorpeda/releases/assets/1",
+      "id": 1,
+      "name": "luxtorpeda-v1.0.tar.xz",
+      "size": 123,
+      "updated_at": "2026-01-01T00:00:00Z",
+      "browser_download_url": "https://github.com/luxtorpeda-dev/luxtorpeda/releases/download/v1.0/luxtorpeda-v1.0.tar.xz"
+    }
+  ]
+}

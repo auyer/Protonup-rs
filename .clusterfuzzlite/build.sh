@@ -14,3 +14,8 @@ do
     cp $FUZZ_TARGET_OUTPUT_DIR/$FUZZ_TARGET_NAME $OUT/
 done
 
+for d in fuzz/seeds/*/; do
+    name=$(basename "$d")
+    (cd "$d" && zip -q -r "$OUT/${name}_seed_corpus.zip" .)
+done
+
