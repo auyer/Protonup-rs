@@ -78,6 +78,13 @@ doc = false
 bench = false
 
 [[bin]]
+name = "release_assets"
+path = "fuzz_targets/release_assets.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
 name = "hash_sums"
 path = "fuzz_targets/hash_sums.rs"
 test = false
