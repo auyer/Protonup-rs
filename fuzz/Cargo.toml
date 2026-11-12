@@ -63,3 +63,10 @@ test = false
 doc = false
 bench = false
 
+[[bin]]
+name = "arch_parse"
+path = "fuzz_targets/arch_parse.rs"
+test = false
+doc = false
+bench = false
+
