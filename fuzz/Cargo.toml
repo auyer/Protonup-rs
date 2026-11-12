@@ -70,3 +70,9 @@ test = false
 doc = false
 bench = false
 
+[[bin]]
+name = "asset_filter"
+path = "fuzz_targets/asset_filter.rs"
+test = false
+doc = false
+bench = false
