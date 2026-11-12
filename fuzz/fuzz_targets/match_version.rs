@@ -14,9 +14,17 @@ fuzz_target!(|data: &[u8]| {
         if let Some(delimiter_pos) = input.find("|||") {
             let version_str = &input[..delimiter_pos];
             let tag_name = &input[delimiter_pos + 3..];
-            
+
             // Run match_version - we're mainly testing for panics
             let _result = match_version(version_str, tag_name);
+
+            // An empty version never matches anything.
+            assert!(!match_version("", tag_name));
+
+            // A release tag always matches itself.
+            if !tag_name.is_empty() {
+                assert!(match_version(tag_name, tag_name));
+            }
         }
     }
 });

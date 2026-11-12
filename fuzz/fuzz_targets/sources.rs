@@ -26,5 +26,13 @@ fuzz_target!(|data: &[u8]| {
         assert!(format!("{s}") == utf8);
         assert!(s.installation_name("v1").contains("v1"));
         assert!(s.filter_asset("v1"));
+
+        // Fuzz the version argument too: with a no-op replacement the
+        // "{prefix}-{version}" template must always contain the version.
+        let installation_name = s.installation_name(&utf8);
+        assert!(
+            installation_name.contains(&utf8),
+            "installation_name({utf8:?}) = {installation_name:?} lost the version"
+        );
     }
 });
