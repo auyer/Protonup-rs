@@ -49,12 +49,14 @@ protonup-rs --tool GEProton --for steam --force
 | `--quick-download` | Auto-detect apps and install default tools |
 
 **`--for` argument behavior:**
+
 - `steam` / `Steam` (case-insensitive) - Install to Steam (Native or Flatpak)
 - `lutris` / `Lutris` (case-insensitive) - Install to Lutris (Native or Flatpak)
 - `<path>` - Any other value is treated as a custom installation path (relative or absolute)
 - Omitted - Auto-detects based on the tool's `compatible_applications` and what's installed
 
 **Auto-detection logic:**
+
 1. When `--tool` is specified, the tool's `compatible_applications` list is checked
 2. Compatible apps are checked in order (Steam first, then Lutris, based on the tool's configuration)
 3. First installed compatible app is selected
@@ -271,3 +273,71 @@ pub const USER_AGENT: &str = "protoup-rs/vX.Y.Z";
    ```rust
    unpack_file(reader, install_path).await?;
    ```
+
+### End-to-end CLI test
+
+The `cargo_test` job of the `e2e` workflow installs a real tool with the CLI on
+x64 and arm64 runners. It targets a local `./download` folder through `--for`, so
+the runner's own Steam/Lutris is never involved:
+
+```bash
+cargo build --release
+
+# Latest GEProton tag, stripped to its bare version (GE-Proton11-12 -> 11-12).
+# The CLI matches that against the release tags with `match_version`.
+# (scripts/check_latest_release.sh needs curl and jq.)
+VERSION=$(bash ./scripts/check_latest_release.sh)
+
+mkdir ./download
+./target/release/protonup-rs --tool GEProton --force --for ./download --version "$VERSION"
+
+# The install folder is named after the release tag, not the --version argument.
+ls download/    # download/GE-Proton11-12
+```
+
+A second step checks the "already installed" short-circuit. Metadata requests are
+allowed while every archive download is routed to a dead proxy, so a regression
+fails the job instead of silently re-downloading:
+
+```bash
+HTTPS_PROXY=http://127.0.0.1:9 NO_PROXY=api.github.com \
+  ./target/release/protonup-rs --tool GEProton --for ./download --version "$VERSION"
+# prints "<tag> already installed at ..., skipping." and no "Installed <tag>"
+```
+
+Both steps call the GitHub API, so they need network access; the archive itself is
+a few hundred MB and is only fetched by the first step.
+
+### End-to-end GUI test
+
+`scripts/gui_e2e_interactive.sh` runs the real GUI window, starts a Quick Update with
+synthetic X11 key events (`xdotool`) and waits for the window title to report the
+finished download. It uses a throwaway `HOME`, so your own Steam/Lutris installs are
+never touched, and it starts its own `Xvfb` when no display is available.
+
+```bash
+cargo build --release -p protonup-rsui
+bash scripts/gui_e2e_interactive.sh ./target/release/protonup-rsui
+```
+
+On Debian/Ubuntu the requirements are:
+
+```bash
+sudo apt-get install xvfb xdotool libxcursor1 libxi6 libxkbcommon-x11-0 libxcb-xkb1 libxfixes3
+```
+
+The script checks for these up front and prints the exact `apt-get` line for whatever
+is missing. Since it downloads a real GEProton release, expect a few hundred MB;
+`WAIT_SECONDS`, `E2E_HOME` and `E2E_KEEP` are documented at the top of the script.
+
+If your desktop environment cannot deliver synthetic key events (or you would rather
+not install the X11 stack), run the same test inside a container built from
+`.devcontainer/Containerfile`:
+
+```bash
+bash scripts/gui_e2e_container.sh           # podman or docker, auto-detected
+bash scripts/gui_e2e_container.sh --rebuild # rebuild the image first
+```
+
+The container mounts the repository read-only and keeps build artifacts and the cargo
+cache in named volumes, so your working tree is untouched and the second run is fast.

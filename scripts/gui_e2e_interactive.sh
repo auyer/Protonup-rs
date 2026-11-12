@@ -23,6 +23,9 @@
 #   * desktop session  -> reuses your existing DISPLAY (X11 or XWayland)
 #   * headless / CI    -> starts its own Xvfb server
 #
+# If synthetic key events do not reach the app on your desktop, run the same
+# test inside a container instead: scripts/gui_e2e_container.sh
+#
 # Requirements (Debian/Ubuntu):
 #   sudo apt-get install xvfb xdotool libxcursor1 libxi6 libxfixes3 \
 #       libxcb-xkb1 libxkbcommon-x11-0
