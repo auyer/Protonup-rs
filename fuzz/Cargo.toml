@@ -76,3 +76,10 @@ path = "fuzz_targets/asset_filter.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "hash_sums"
+path = "fuzz_targets/hash_sums.rs"
+test = false
+doc = false
+bench = false
